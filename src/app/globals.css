@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #fbf8f3;          /* very light cream — barely tinted, easy on eyes */
+  --color-surface: #ffffff;     /* pure white cards */
+  --color-surface-2: #f4eee5;   /* subtle warm sand — inputs, filled buttons */
+  --color-surface-dark: #2b1810;/* dark chocolate — only for hero / elevated panels */
+  --color-border: #e6ddd0;      /* soft warm border */
+  --color-text: #1f1410;        /* near-black with warm undertone — body text */
+  --color-text-on-dark: #faf6ee;/* cream for text on chocolate */
+  --color-muted: #7a6957;       /* warm grey-brown — secondary text, readable on white */
+  --color-accent: #b58a5a;      /* mustard / olive — primary accent */
+  --color-accent-2: #8a9678;    /* deeper sage — secondary accent */
+  --color-accent-3: #b8857a;    /* dusty rose — tertiary accent */
+}
+
+html,
+body {
+  background:
+    radial-gradient(circle at top left, #fdfaf5 0%, #fbf8f3 40%, #f7f1e8 100%);
+  background-attachment: fixed;
+  color: var(--color-text);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  min-height: 100vh;
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+::selection {
+  background: var(--color-accent);
+  color: var(--color-text-on-dark);
+}
