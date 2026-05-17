@@ -337,62 +337,100 @@ export function Composer({
             />
           </div>
 
-          {/* Attached-media list: thumbnail for images, "video" pill for clips.
-              First item gets a "PRIMARY" badge (used by hook-on-image + as the
-              feed thumbnail on platforms that can't carousel). Reorder by
-              clicking "Make primary" on any non-first card. Remove with X. */}
-          {mediaUrls.length > 0 && (
-            <ul className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-              {mediaUrls.map((u, idx) => (
+          {/* Carousel slot grid — always shows all 10 slots so the user can
+              see at a glance how many images they can attach and where in
+              the carousel order each one lives. Filled slots have the image
+              + Primary badge + hover controls; empty slots are dashed boxes
+              labeled with their position. The first slot is highlighted
+              with the accent color even when empty to make the "Primary"
+              concept obvious. */}
+          <ul className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+            {Array.from({ length: 10 }).map((_, idx) => {
+              const u = mediaUrls[idx];
+              const filled = !!u;
+              const isPrimary = idx === 0;
+              return (
                 <li
-                  key={`${u}-${idx}`}
+                  key={idx}
                   className={
-                    "relative aspect-square rounded-lg overflow-hidden bg-[var(--color-surface-2)] border group " +
-                    (idx === 0 ? "border-[var(--color-accent)]" : "")
+                    "relative aspect-square rounded-lg overflow-hidden border-2 group transition " +
+                    (filled
+                      ? isPrimary
+                        ? "border-[var(--color-accent)] bg-[var(--color-surface-2)]"
+                        : "border-[var(--color-border)] bg-[var(--color-surface-2)]"
+                      : isPrimary
+                        ? "border-dashed border-[var(--color-accent)]/40 bg-[var(--color-surface)]"
+                        : "border-dashed border-[var(--color-border)] bg-[var(--color-surface)]")
                   }
                 >
-                  {isImageUrl(u) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={u}
-                      alt=""
-                      loading="lazy"
-                      decoding="async"
-                      className="w-full h-full object-cover"
-                    />
+                  {filled ? (
+                    <>
+                      {isImageUrl(u) ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={u}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full grid place-items-center text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                          video
+                        </div>
+                      )}
+                      {isPrimary && (
+                        <span className="absolute top-1 left-1 text-[9px] uppercase tracking-wider bg-[var(--color-accent)] text-[var(--color-text-on-dark)] rounded px-1.5 py-0.5 font-medium">
+                          Primary
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => removeMedia(idx)}
+                        className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition"
+                        aria-label="Remove"
+                        title="Remove"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                      {!isPrimary && (
+                        <button
+                          type="button"
+                          onClick={() => moveMediaToPrimary(idx)}
+                          className="absolute bottom-1 left-1 right-1 text-[10px] py-1 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-black/80 transition font-medium"
+                          title="Move to first position"
+                        >
+                          Make primary
+                        </button>
+                      )}
+                    </>
                   ) : (
-                    <div className="w-full h-full grid place-items-center text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
-                      video
-                    </div>
-                  )}
-                  {idx === 0 && (
-                    <span className="absolute top-1 left-1 text-[9px] uppercase tracking-wider bg-[var(--color-accent)] text-[var(--color-text-on-dark)] rounded px-1.5 py-0.5 font-medium">
-                      Primary
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => removeMedia(idx)}
-                    className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition"
-                    aria-label="Remove"
-                    title="Remove"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                  {idx !== 0 && (
-                    <button
-                      type="button"
-                      onClick={() => moveMediaToPrimary(idx)}
-                      className="absolute bottom-1 left-1 right-1 text-[10px] py-1 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-black/80 transition font-medium"
-                      title="Move to first position"
-                    >
-                      Make primary
-                    </button>
+                    // Empty slot — labeled "1" / "2" / … so the carousel
+                    // ordering is visible. Clicking it triggers the file
+                    // picker just like the "Add image" button does.
+                    <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface-2)] transition">
+                      <Plus className="w-5 h-5 mb-1 opacity-60" />
+                      <span className="text-[10px] uppercase tracking-wider">
+                        Slot {idx + 1}
+                        {isPrimary ? " (Primary)" : ""}
+                      </span>
+                      <input
+                        type="file"
+                        hidden
+                        multiple
+                        accept="image/*,video/*"
+                        onChange={handleUpload}
+                      />
+                    </label>
                   )}
                 </li>
-              ))}
-            </ul>
-          )}
+              );
+            })}
+          </ul>
+          <p className="mt-2 text-[10px] text-[var(--color-muted)]">
+            Up to 10 images per post · Instagram publishes the full set as a
+            carousel · TikTok &amp; YouTube only post the Primary slot.
+          </p>
 
           {/* Opens the canvas editor on the PRIMARY image. The text inside is
               fully editable — the user can put the hook, the caption, both,
@@ -568,12 +606,13 @@ export function Composer({
         imageUrl={primaryMediaUrl}
         // Seed with hook + caption when both are present, separated by a
         // blank line so the canvas wrap renders them as two visual blocks.
-        // The textarea inside the editor is fully editable, so the user can
-        // delete one or both, or type something entirely different.
+        // The textarea inside the editor is fully editable + tall, so the
+        // user can see all of it and trim/rewrite as needed. No char cap
+        // here — past complaint was the seed truncated the caption.
         initialHookText={
           selectedHook?.trim() && caption.trim()
-            ? `${selectedHook}\n\n${caption}`.slice(0, 300)
-            : (selectedHook ?? caption).slice(0, 300)
+            ? `${selectedHook}\n\n${caption}`
+            : selectedHook ?? caption
         }
         onApply={(newUrl) => {
           setMediaUrls((cur) => [newUrl, ...cur.slice(1)]);

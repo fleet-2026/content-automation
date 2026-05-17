@@ -67,10 +67,43 @@ export async function POST(req: Request) {
     const url = await uploadToR2(key, buf, sniffed.mime);
     return NextResponse.json({ url, type: sniffed.ext, mime: sniffed.mime });
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error("[/api/upload] failed:", msg);
+    // Enhanced diagnostic: log the full stack + cause + name on Vercel
+    // logs so we can root-cause the "Invalid character in header content
+    // [authorization]" issue. The error itself comes from Node's HTTP
+    // layer, not from R2 — the SDK builds the request, then Node refuses
+    // to send it. The stack trace points back at S3Client.send() but the
+    // cause chain has the actual char + position. We log everything; the
+    // response body still returns just the message so we don't echo the
+    // stack to the client.
+    const err = e as Error & { cause?: unknown; code?: string };
+    console.error(
+      "[/api/upload] failed:",
+      JSON.stringify(
+        {
+          name: err?.name,
+          message: err?.message,
+          code: err?.code,
+          stack: err?.stack?.split("\n").slice(0, 8).join("\n"),
+          cause: err?.cause
+            ? {
+                name: (err.cause as Error)?.name,
+                message: (err.cause as Error)?.message,
+              }
+            : undefined,
+        },
+        null,
+        2,
+      ),
+    );
     return NextResponse.json(
-      { error: "upload_failed", message: msg },
+      {
+        error: "upload_failed",
+        message: err?.message ?? String(e),
+        // Include a short error code in the response so the editor can
+        // show something more helpful than the raw Node message. The full
+        // stack stays server-side.
+        code: err?.code ?? err?.name ?? "unknown",
+      },
       { status: 500 },
     );
   }
