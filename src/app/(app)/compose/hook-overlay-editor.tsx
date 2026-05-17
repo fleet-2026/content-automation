@@ -16,6 +16,7 @@ import { X, Loader2, Download } from "lucide-react";
 
 type Position = "top" | "middle" | "bottom";
 type ColorOption = "white" | "black" | "yellow";
+type FontOption = "system" | "playfair";
 
 const COLOR_HEX: Record<ColorOption, string> = {
   white: "#ffffff",
@@ -29,6 +30,26 @@ const STROKE_HEX: Record<ColorOption, string> = {
   white: "#000000",
   black: "#ffffff",
   yellow: "#000000",
+};
+
+// Font specs used both for the live canvas and the `document.fonts.load()`
+// pre-load. The canvas string must exactly match the @font-face family
+// names registered by next/font, or the browser silently substitutes
+// system sans.
+const FONT_SPEC: Record<FontOption, { canvas: string; label: string; preload?: string }> = {
+  system: {
+    canvas: '-apple-system, "SF Pro Display", "Segoe UI", system-ui, sans-serif',
+    label: "Sans-serif",
+  },
+  playfair: {
+    // next/font/google's variable is wired up in src/app/layout.tsx — the
+    // value of `var(--font-playfair)` resolves to the unique CSS class name
+    // next generated for the family, but for canvas we want the literal
+    // family name. "Playfair Display" is what Google ships it as.
+    canvas: 'italic 700 "Playfair Display", Georgia, serif',
+    label: "Playfair Italic",
+    preload: 'italic bold 80px "Playfair Display"',
+  },
 };
 
 export function HookOverlayEditor({
@@ -48,10 +69,39 @@ export function HookOverlayEditor({
   const [text, setText] = useState(initialHookText);
   const [position, setPosition] = useState<Position>("top");
   const [color, setColor] = useState<ColorOption>("white");
+  const [font, setFont] = useState<FontOption>("system");
+  const [fontReady, setFontReady] = useState(true); // system is always ready
   const [fontScale, setFontScale] = useState(8); // % of image width
   const [loading, setLoading] = useState(true);
   const [applying, setApplying] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  // Preload custom fonts before painting them on canvas. Without this,
+  // toBlob() may capture the system fallback during the moment the woff2
+  // is still in flight, and the user sees the wrong typeface in their
+  // saved image. We re-render once the load resolves.
+  useEffect(() => {
+    const spec = FONT_SPEC[font];
+    if (!spec.preload || typeof document === "undefined") {
+      setFontReady(true);
+      return;
+    }
+    setFontReady(false);
+    let cancelled = false;
+    document.fonts
+      .load(spec.preload)
+      .then(() => {
+        if (!cancelled) setFontReady(true);
+      })
+      .catch(() => {
+        // If the font fails to load (offline, blocked), still allow rendering
+        // — the canvas will fall back to the family's system fallback.
+        if (!cancelled) setFontReady(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [font]);
 
   // ─── Load the image once ──────────────────────────────────────────────
   // We attempt the direct URL first with `crossOrigin = "anonymous"`. If the
@@ -125,7 +175,15 @@ export function HookOverlayEditor({
 
     const fontPx = Math.max(24, Math.round((canvas.width * fontScale) / 100));
     const lineHeight = Math.round(fontPx * 1.15);
-    ctx.font = `bold ${fontPx}px -apple-system, "SF Pro Display", "Segoe UI", system-ui, sans-serif`;
+    // Build the canvas font string from the picker. Playfair already
+    // carries its own weight + style in the spec (italic 700), so we
+    // only inject the size + family here; otherwise we use system sans
+    // bold like before.
+    if (font === "playfair") {
+      ctx.font = `italic 700 ${fontPx}px "Playfair Display", Georgia, serif`;
+    } else {
+      ctx.font = `bold ${fontPx}px ${FONT_SPEC.system.canvas}`;
+    }
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
     ctx.fillStyle = COLOR_HEX[color];
@@ -163,11 +221,11 @@ export function HookOverlayEditor({
     for (let i = 0; i < lines.length; i++) {
       ctx.fillText(lines[i], x, y + i * lineHeight);
     }
-  }, [text, position, color, fontScale]);
+  }, [text, position, color, fontScale, font]);
 
   useEffect(() => {
-    if (!loading) render();
-  }, [loading, render]);
+    if (!loading && fontReady) render();
+  }, [loading, fontReady, render]);
 
   async function apply() {
     const canvas = canvasRef.current;
@@ -269,6 +327,31 @@ export function HookOverlayEditor({
                   </button>
                 ))}
               </div>
+            </Field>
+
+            <Field label="Font">
+              <div className="flex gap-2">
+                {(["system", "playfair"] as FontOption[]).map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setFont(f)}
+                    style={f === "playfair" ? { fontFamily: '"Playfair Display", Georgia, serif', fontStyle: "italic", fontWeight: 700 } : undefined}
+                    className={
+                      "flex-1 px-3 py-2 rounded-lg text-sm " +
+                      (font === f
+                        ? "bg-[var(--color-accent)] text-[var(--color-text-on-dark)]"
+                        : "bg-[var(--color-surface-2)] hover:bg-[var(--color-border)]")
+                    }
+                  >
+                    {FONT_SPEC[f].label}
+                  </button>
+                ))}
+              </div>
+              {!fontReady && (
+                <p className="mt-1 text-[10px] text-[var(--color-muted)]">
+                  Loading font…
+                </p>
+              )}
             </Field>
 
             <Field label="Color">

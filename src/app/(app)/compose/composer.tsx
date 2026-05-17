@@ -305,8 +305,10 @@ export function Composer({
               </div>
             </div>
           )}
-          {/* "Write hook on image" — only meaningful when we have both an
-              image to draw on AND text to draw. Opens the canvas editor. */}
+          {/* Opens the canvas editor. The text inside is fully editable — the
+              user can put the hook, the caption, both, or anything custom on
+              the image. Only meaningful when we have something to write
+              (hook OR caption) and something to write on (an image). */}
           {mediaUrl && IS_IMAGE_RE.test(mediaUrl) && (
             <button
               type="button"
@@ -315,12 +317,12 @@ export function Composer({
               title={
                 !selectedHook?.trim() && !caption.trim()
                   ? "Pick a hook or type a caption first"
-                  : "Bake the hook text onto the image"
+                  : "Bake hook or caption text onto the image"
               }
               className="mt-3 flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Type className="w-3.5 h-3.5" />
-              Write hook on image
+              Add text on image (hook / caption)
             </button>
           )}
         </Field>
@@ -475,7 +477,15 @@ export function Composer({
     {overlayOpen && mediaUrl && (selectedHook?.trim() || caption.trim()) && (
       <HookOverlayEditor
         imageUrl={mediaUrl}
-        initialHookText={(selectedHook ?? caption).slice(0, 200)}
+        // Seed with hook + caption when both are present, separated by a
+        // blank line so the canvas wrap renders them as two visual blocks.
+        // The textarea inside the editor is fully editable, so the user can
+        // delete one or both, or type something entirely different.
+        initialHookText={
+          selectedHook?.trim() && caption.trim()
+            ? `${selectedHook}\n\n${caption}`.slice(0, 300)
+            : (selectedHook ?? caption).slice(0, 300)
+        }
         onApply={(newUrl) => {
           setMediaUrl(newUrl);
           setOverlayOpen(false);

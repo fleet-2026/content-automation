@@ -411,8 +411,27 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
         </div>
       </div>
 
-      {/* Action row — only for real drafts. Demo cards skip this entirely so
-          the user can't click Edit and land on /compose?draft=s1 (404). */}
+      {/* Demo cards get a "Use as template" link so the user isn't stuck —
+          a click prefills /compose with the demo's hook + caption text and
+          lets them start a real draft from it. No /compose?draft=s1 (which
+          would 404 since demo IDs aren't real Draft rows). */}
+      {!item.isReal && (
+        <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-[var(--color-border)]">
+          <Link
+            href={`/compose?prefill=${encodeURIComponent(
+              item.hookText ? `${item.hookText}\n\n${item.caption}` : item.caption,
+            )}`}
+            className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium"
+          >
+            <Edit className="w-3 h-3" /> Use as template
+          </Link>
+          <span className="text-[10px] text-[var(--color-muted)] ml-2">
+            Demo post — make it real to edit
+          </span>
+        </div>
+      )}
+
+      {/* Real-draft action row. */}
       {item.isReal && (
         <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-[var(--color-border)]">
           <Link
