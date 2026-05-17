@@ -2,9 +2,15 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Upload, Send, CalendarClock, CheckCircle2 } from "lucide-react";
+import { Sparkles, Upload, Send, CalendarClock, CheckCircle2, Type } from "lucide-react";
 import { generateHookVariants, saveDraft, publishDraftNow, scheduleDraft } from "./actions";
 import type { Platform } from "@prisma/client";
+import { HookOverlayEditor } from "./hook-overlay-editor";
+import { PostPreview } from "./post-preview";
+
+// Match the loose extension check we use on the drafts page / preview so R2
+// signed URLs with query strings are correctly classified as images.
+const IS_IMAGE_RE = /\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i;
 
 type Hook = {
   text: string;
@@ -74,6 +80,7 @@ export function Composer({
   const [scheduledFor, setScheduledFor] = useState<string>(initialDraft?.scheduledFor ?? "");
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [overlayOpen, setOverlayOpen] = useState(false);
 
   const [generating, startGen] = useTransition();
   const [saving, startSave] = useTransition();
@@ -207,6 +214,7 @@ export function Composer({
   }
 
   return (
+    <>
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6">
       {/* Left: editor */}
       <div className="space-y-4">
@@ -278,7 +286,42 @@ export function Composer({
             />
           </div>
           {mediaUrl && (
-            <div className="mt-2 text-xs text-[var(--color-muted)] truncate">{mediaUrl}</div>
+            <div className="mt-2 flex items-start gap-3">
+              {/* Thumbnail preview of the current media so the user can see
+                  what they've attached. Falls through to a "media" pill for
+                  videos / unknown extensions. */}
+              {IS_IMAGE_RE.test(mediaUrl) ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={mediaUrl}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="w-16 h-16 object-cover rounded-md bg-[var(--color-surface-2)] shrink-0"
+                />
+              ) : null}
+              <div className="text-xs text-[var(--color-muted)] truncate flex-1">
+                {mediaUrl}
+              </div>
+            </div>
+          )}
+          {/* "Write hook on image" — only meaningful when we have both an
+              image to draw on AND text to draw. Opens the canvas editor. */}
+          {mediaUrl && IS_IMAGE_RE.test(mediaUrl) && (
+            <button
+              type="button"
+              onClick={() => setOverlayOpen(true)}
+              disabled={!selectedHook?.trim() && !caption.trim()}
+              title={
+                !selectedHook?.trim() && !caption.trim()
+                  ? "Pick a hook or type a caption first"
+                  : "Bake the hook text onto the image"
+              }
+              className="mt-3 flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <Type className="w-3.5 h-3.5" />
+              Write hook on image
+            </button>
           )}
         </Field>
 
@@ -413,6 +456,34 @@ export function Composer({
         )}
       </aside>
     </div>
+
+    {/* Full-width preview — "see the post all together". Updates live as
+        the user edits any field. Spans both columns on desktop so the
+        image gets enough room to be legible. */}
+    <div className="mt-6">
+      <PostPreview
+        hook={selectedHook}
+        caption={caption}
+        hashtags={hashtags}
+        mediaUrl={mediaUrl}
+        platforms={platforms}
+      />
+    </div>
+
+    {/* Hook-on-image canvas modal. Rendered at the root so it can overlay
+        the whole page rather than getting clipped by the grid. */}
+    {overlayOpen && mediaUrl && (selectedHook?.trim() || caption.trim()) && (
+      <HookOverlayEditor
+        imageUrl={mediaUrl}
+        initialHookText={(selectedHook ?? caption).slice(0, 200)}
+        onApply={(newUrl) => {
+          setMediaUrl(newUrl);
+          setOverlayOpen(false);
+        }}
+        onClose={() => setOverlayOpen(false)}
+      />
+    )}
+    </>
   );
 }
 
