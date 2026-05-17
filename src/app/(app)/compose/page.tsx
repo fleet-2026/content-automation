@@ -9,10 +9,17 @@ export const dynamic = "force-dynamic";
 export default async function ComposePage({
   searchParams,
 }: {
-  searchParams: Promise<{ draft?: string; prefill?: string }>;
+  searchParams: Promise<{ draft?: string; prefill?: string; mediaUrl?: string }>;
 }) {
   const sp = await searchParams;
   const userId = (await tryGetUser()) ?? undefined;
+
+  // Allowlist mediaUrl: only http(s) URLs are accepted. This is reflected
+  // into form state on the client, so untrusted upstream content (e.g. a
+  // crafted link in a phishing email) can't smuggle a `javascript:` URL
+  // or other non-http scheme into the composer.
+  const initialMediaUrl =
+    sp.mediaUrl && /^https?:\/\//i.test(sp.mediaUrl) ? sp.mediaUrl : null;
 
   const accounts = userId
     ? await safe(
@@ -75,6 +82,7 @@ export default async function ComposePage({
         connectedPlatforms={connected}
         initialDraft={initialDraft}
         initialCaptionPrefill={sp.prefill ?? null}
+        initialMediaUrl={initialMediaUrl}
       />
     </div>
   );

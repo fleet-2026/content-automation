@@ -2,39 +2,126 @@ import { prisma } from "@/lib/db";
 import { safe } from "@/lib/safe";
 import { tryGetUser } from "@/lib/auth-helpers";
 import Link from "next/link";
+import { DraftCard, type DraftCardData } from "./draft-card";
 
 export const dynamic = "force-dynamic";
 
 export default async function DraftsPage() {
   const userId = (await tryGetUser()) ?? undefined;
 
-  const drafts = userId
-    ? await safe(
-        () =>
-          prisma.draft.findMany({
-            where: { userId },
-            orderBy: { updatedAt: "desc" },
-            take: 50,
-          }),
-        [],
-      )
-    : [];
+  // Fetch drafts AND recent generated media in parallel — the agent that
+  // produces drafts may write to the MediaAsset table independently (i.e.
+  // image gen creates a MediaAsset even when no Draft is attached), so the
+  // user wants to see "what was generated yesterday" regardless of whether
+  // a Draft is wrapped around it yet.
+  const [drafts, recentMedia] = userId
+    ? await Promise.all([
+        safe(
+          () =>
+            prisma.draft.findMany({
+              where: { userId },
+              orderBy: { updatedAt: "desc" },
+              take: 50,
+            }),
+          [],
+        ),
+        safe(
+          () =>
+            prisma.mediaAsset.findMany({
+              where: { userId, status: "READY" },
+              orderBy: { createdAt: "desc" },
+              take: 12,
+              select: {
+                id: true,
+                type: true,
+                url: true,
+                thumbnailUrl: true,
+                prompt: true,
+                width: true,
+                height: true,
+                createdAt: true,
+              },
+            }),
+          [],
+        ),
+      ])
+    : [[], []];
 
   return (
     <div className="px-8 py-10 max-w-5xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-semibold tracking-tight">Drafts & queue</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">Drafts &amp; queue</h1>
         <Link
           href="/compose"
-          className="text-sm px-4 py-2 rounded-lg bg-[var(--color-accent)] text-black font-medium"
+          className="text-sm px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium"
         >
           New post
         </Link>
       </div>
 
+      {/* ─── Recent generations ─────────────────────────────────
+          Agent-created images live in MediaAsset, not on Draft. We surface
+          them here so the user can see what was generated and one-click into
+          /compose to wrap a draft around any of them. */}
+      {recentMedia.length > 0 && (
+        <section className="mb-10">
+          <div className="flex items-baseline justify-between mb-3">
+            <h2 className="text-lg font-semibold">Recent generations</h2>
+            <p className="text-xs text-[var(--color-muted)]">
+              Click any to start a new draft with it attached.
+            </p>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {recentMedia.map((m) => (
+              <Link
+                key={m.id}
+                href={`/compose?mediaUrl=${encodeURIComponent(m.url)}`}
+                className="group relative aspect-square rounded-lg overflow-hidden bg-[var(--color-surface-2)] border hover:border-[var(--color-accent)] transition-colors"
+                title={m.prompt.slice(0, 200)}
+              >
+                {m.type === "IMAGE" ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={m.thumbnailUrl ?? m.url}
+                    alt={m.prompt.slice(0, 80)}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-cover"
+                  />
+                ) : m.thumbnailUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={m.thumbnailUrl}
+                    alt={m.prompt.slice(0, 80)}
+                    loading="lazy"
+                    decoding="async"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full grid place-items-center text-xs text-[var(--color-muted)]">
+                    video
+                  </div>
+                )}
+                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <p className="text-[10px] text-white/90 line-clamp-2">
+                    {m.prompt.slice(0, 80)}
+                  </p>
+                </div>
+                <span className="absolute top-2 right-2 text-[9px] uppercase tracking-wider bg-black/60 text-white/90 rounded px-1.5 py-0.5">
+                  {m.type.toLowerCase()}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ─── Drafts list ─────────────────────────────────────── */}
+      <h2 className="text-lg font-semibold mb-3">Drafts</h2>
+
       {drafts.length === 0 ? (
         <div className="border rounded-xl bg-[var(--color-surface)] p-10 text-center">
-          <h2 className="text-lg font-semibold mb-2">No drafts yet</h2>
+          <h3 className="text-base font-semibold mb-2">No drafts yet</h3>
           <p className="text-sm text-[var(--color-muted)] mb-5 max-w-md mx-auto">
             Drafts you save or schedule will live here. Generate hooks,
             attach media from Studio, and queue posts across IG / TikTok /
@@ -57,61 +144,27 @@ export default async function DraftsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {drafts.map((d) => (
-            <article key={d.id} className="border rounded-xl bg-[var(--color-surface)] p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0 flex-1">
-                  {d.selectedHook && (
-                    <p className="font-medium leading-snug">&ldquo;{d.selectedHook}&rdquo;</p>
-                  )}
-                  <p className="text-sm text-[var(--color-muted)] mt-1 line-clamp-2">{d.caption}</p>
-                  <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-[var(--color-muted)]">
-                    <StatusBadge status={d.status} />
-                    {d.platforms.map((p) => (
-                      <span key={p}>{p.toLowerCase()}</span>
-                    ))}
-                    {d.scheduledFor && (
-                      <span>scheduled for {new Date(d.scheduledFor).toLocaleString()}</span>
-                    )}
-                  </div>
-                </div>
-                {d.mediaUrl && /\.(jpg|jpeg|png|webp)$/i.test(d.mediaUrl) ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={d.mediaUrl}
-                    alt=""
-                    loading="lazy"
-                    decoding="async"
-                    width={96}
-                    height={96}
-                    className="w-24 h-24 object-cover rounded-lg shrink-0 bg-[var(--color-surface-2)]"
-                  />
-                ) : d.mediaUrl ? (
-                  <div className="w-24 h-24 grid place-items-center text-xs text-[var(--color-muted)] rounded-lg bg-[var(--color-surface-2)] shrink-0">
-                    video
-                  </div>
-                ) : null}
-              </div>
-            </article>
-          ))}
+          {drafts.map((d) => {
+            // Cast the JSON column to our typed shape. Prisma stores publishResults
+            // as `Json?` so the runtime type is `unknown` — narrow it once here so
+            // the client component gets clean typed data.
+            const cardData: DraftCardData = {
+              id: d.id,
+              caption: d.caption,
+              selectedHook: d.selectedHook,
+              mediaUrl: d.mediaUrl,
+              platforms: d.platforms,
+              status: d.status,
+              scheduledFor: d.scheduledFor,
+              updatedAt: d.updatedAt,
+              publishResults: Array.isArray(d.publishResults)
+                ? (d.publishResults as DraftCardData["publishResults"])
+                : null,
+            };
+            return <DraftCard key={d.id} draft={cardData} />;
+          })}
         </div>
       )}
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    DRAFT: "bg-[var(--color-surface-2)] text-[var(--color-muted)]",
-    APPROVED: "bg-blue-100 text-blue-800",
-    SCHEDULED: "bg-amber-100 text-amber-800",
-    PUBLISHING: "bg-purple-100 text-purple-800",
-    PUBLISHED: "bg-emerald-100 text-emerald-800",
-    FAILED: "bg-red-100 text-red-800",
-  };
-  return (
-    <span className={"text-[10px] px-2 py-0.5 rounded uppercase tracking-wider " + (colors[status] ?? "")}>
-      {status.toLowerCase()}
-    </span>
   );
 }

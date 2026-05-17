@@ -31,10 +31,16 @@ export function Composer({
   connectedPlatforms,
   initialDraft,
   initialCaptionPrefill,
+  initialMediaUrl,
 }: {
   connectedPlatforms: Platform[];
   initialDraft?: InitialDraft;
   initialCaptionPrefill?: string | null;
+  /** Pre-attach a media URL when starting a fresh draft (e.g. from
+   * /compose?mediaUrl=… on the Drafts page "Use in new draft" link). Only
+   * applied when no initialDraft is provided so we don't clobber an existing
+   * draft's media. */
+  initialMediaUrl?: string | null;
 }) {
   const router = useRouter();
   // If we're hydrating from a draft, strip the selected hook off the front
@@ -59,7 +65,9 @@ export function Composer({
   const [selectedHook, setSelectedHook] = useState<string | null>(
     initialDraft?.selectedHook ?? null,
   );
-  const [mediaUrl, setMediaUrl] = useState<string | null>(initialDraft?.mediaUrl ?? null);
+  const [mediaUrl, setMediaUrl] = useState<string | null>(
+    initialDraft?.mediaUrl ?? initialMediaUrl ?? null,
+  );
   const [platforms, setPlatforms] = useState<Platform[]>(
     initialDraft?.platforms.length ? initialDraft.platforms : connectedPlatforms,
   );
