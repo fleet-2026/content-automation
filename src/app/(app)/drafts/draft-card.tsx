@@ -3,9 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Edit, Trash2, ExternalLink } from "lucide-react";
+import { Send, Edit, Trash2, ExternalLink, Images } from "lucide-react";
 import type { Platform, DraftStatus } from "@prisma/client";
 import { publishDraftNow, deleteDraft } from "../compose/actions";
+import { parseMediaUrls } from "@/lib/media-urls";
 
 // `publishResults` is stored as `Json?` in Prisma. Each entry came from
 // publishDraft() in src/lib/publish.ts and matches PublishResult.
@@ -50,8 +51,14 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
   const [deleting, startDel] = useTransition();
   const [err, setErr] = useState<string | null>(null);
 
-  const isImage = draft.mediaUrl ? IMG_RE.test(draft.mediaUrl) : false;
-  const isVideo = draft.mediaUrl ? VIDEO_RE.test(draft.mediaUrl) : false;
+  // mediaUrl may contain a newline-packed list of URLs when the draft is a
+  // carousel. Pull out the primary for the thumbnail and keep the count so
+  // we can badge multi-image drafts.
+  const allMediaUrls = parseMediaUrls(draft.mediaUrl);
+  const primary = allMediaUrls[0] ?? null;
+  const isImage = primary ? IMG_RE.test(primary) : false;
+  const isVideo = primary ? VIDEO_RE.test(primary) : false;
+  const isCarousel = allMediaUrls.length > 1;
 
   // Publish is only meaningful for editable states. PUBLISHING is mid-flight
   // (don't double-fire). PUBLISHED would be a republish, which we deliberately
@@ -164,23 +171,32 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
         </div>
 
         {/* Media thumbnail. Strict regex was hiding agent-generated R2 images
-            because their signed URLs end with `?token=...` rather than `.png`. */}
-        {draft.mediaUrl && isImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={draft.mediaUrl}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            width={96}
-            height={96}
-            className="w-24 h-24 object-cover rounded-lg shrink-0 bg-[var(--color-surface-2)]"
-          />
-        ) : draft.mediaUrl && isVideo ? (
+            because their signed URLs end with `?token=...` rather than `.png`.
+            Multi-image drafts get a small "+N" badge in the corner so the
+            carousel intent is visible without expanding the card. */}
+        {primary && isImage ? (
+          <div className="relative w-24 h-24 shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={primary}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              width={96}
+              height={96}
+              className="w-24 h-24 object-cover rounded-lg bg-[var(--color-surface-2)]"
+            />
+            {isCarousel && (
+              <span className="absolute top-1 right-1 inline-flex items-center gap-0.5 text-[10px] bg-black/70 text-white rounded px-1.5 py-0.5 font-medium">
+                <Images className="w-3 h-3" />+{allMediaUrls.length - 1}
+              </span>
+            )}
+          </div>
+        ) : primary && isVideo ? (
           <div className="w-24 h-24 grid place-items-center text-xs text-[var(--color-muted)] rounded-lg bg-[var(--color-surface-2)] shrink-0">
             video
           </div>
-        ) : draft.mediaUrl ? (
+        ) : primary ? (
           // Unknown extension — still indicate media is attached.
           <div className="w-24 h-24 grid place-items-center text-xs text-[var(--color-muted)] rounded-lg bg-[var(--color-surface-2)] shrink-0">
             media

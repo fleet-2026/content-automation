@@ -4,6 +4,7 @@ import { decrypt } from "@/lib/crypto";
 import { igPublish } from "@/lib/platforms/instagram-publish";
 import { ytPublish } from "@/lib/platforms/youtube-publish";
 import { ttPublishToInbox } from "@/lib/platforms/tiktok-publish";
+import { primaryMediaUrl } from "@/lib/media-urls";
 
 export type PublishResult = {
   platform: Platform;
@@ -19,6 +20,12 @@ export type PublishResult = {
  */
 export async function publishDraft(draftId: string): Promise<PublishResult[]> {
   const draft = await prisma.draft.findUniqueOrThrow({ where: { id: draftId } });
+  // Draft.mediaUrl may be newline-packed (carousel). The publishing layer is
+  // currently single-media per platform — pull the primary URL and use that
+  // for all three. Carousel publishing (IG only) is a future enhancement;
+  // until then a multi-image draft publishes its primary image and the rest
+  // are still saved on the draft so the user doesn't lose them.
+  const primaryUrl = primaryMediaUrl(draft.mediaUrl);
   const accounts = await prisma.socialAccount.findMany({
     where: {
       userId: draft.userId,
@@ -38,33 +45,33 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
         const refreshToken = account.refreshToken ? decrypt(account.refreshToken) : null;
 
         if (platform === Platform.INSTAGRAM) {
-          const isVideo = draft.mediaUrl?.match(/\.(mp4|mov|m4v)$/i);
+          const isVideo = primaryUrl?.match(/\.(mp4|mov|m4v)(\?|$)/i);
           const out = await igPublish(account.platformUserId, accessToken, {
             caption: combineCaption(draft),
-            videoUrl: isVideo ? draft.mediaUrl ?? undefined : undefined,
-            imageUrl: !isVideo ? draft.mediaUrl ?? undefined : undefined,
+            videoUrl: isVideo ? primaryUrl ?? undefined : undefined,
+            imageUrl: !isVideo ? primaryUrl ?? undefined : undefined,
             isReel: !!isVideo,
           });
           return { platform, ok: true, postId: out.platformPostId, url: out.permalink };
         }
 
         if (platform === Platform.YOUTUBE) {
-          if (!draft.mediaUrl) return { platform, ok: false, error: "missing_video" };
+          if (!primaryUrl) return { platform, ok: false, error: "missing_video" };
           const out = await ytPublish(
             { accessToken, refreshToken, expiresAt: account.tokenExpiry },
             {
               title: extractTitle(draft.caption),
               description: draft.caption,
               tags: draft.hashtags,
-              videoUrl: draft.mediaUrl,
+              videoUrl: primaryUrl,
             },
           );
           return { platform, ok: true, postId: out.platformPostId, url: out.url };
         }
 
         if (platform === Platform.TIKTOK) {
-          if (!draft.mediaUrl) return { platform, ok: false, error: "missing_video" };
-          const out = await ttPublishToInbox(accessToken, { videoUrl: draft.mediaUrl });
+          if (!primaryUrl) return { platform, ok: false, error: "missing_video" };
+          const out = await ttPublishToInbox(accessToken, { videoUrl: primaryUrl });
           return {
             platform,
             ok: true,
@@ -91,6 +98,9 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
   });
 
   // Insert as first-class Posts so they show up in /posts immediately.
+  // Store the PRIMARY URL on Post.mediaUrl so single-URL renderers (analytics,
+  // post grids) keep working; the rest of the carousel lives only on the
+  // originating Draft until we have a proper schema for multi-media Posts.
   for (const r of results) {
     if (!r.ok || !r.postId) continue;
     const account = accounts.find((a) => a.platform === r.platform);
@@ -105,8 +115,8 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
         url: r.url ?? null,
         caption: draft.caption,
         hashtags: draft.hashtags,
-        mediaType: inferMediaType(draft),
-        mediaUrl: draft.mediaUrl ?? null,
+        mediaType: inferMediaType({ mediaUrl: primaryUrl }),
+        mediaUrl: primaryUrl,
         thumbnailUrl: null,
         publishedAt: new Date(),
         status: PostStatus.PUBLISHED,

@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Clock,
   Edit,
+  Images,
   Pause,
   Play,
   Plus,
@@ -17,6 +18,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
+import { parseMediaUrls } from "@/lib/media-urls";
 import {
   type DemoAutomation,
   type DemoRecurringSlot,
@@ -307,7 +309,11 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
   const [deleting, startDel] = useTransition();
   const [err, setErr] = useState<string | null>(null);
 
-  const isImage = item.mediaUrl ? IMG_RE.test(item.mediaUrl) : false;
+  // mediaUrl may be a newline-packed carousel — pull primary + count.
+  const allMediaUrls = parseMediaUrls(item.mediaUrl);
+  const primary = allMediaUrls[0] ?? null;
+  const isImage = primary ? IMG_RE.test(primary) : false;
+  const isCarousel = allMediaUrls.length > 1;
   const canPublish =
     item.isReal &&
     (item.status === "SCHEDULED" ||
@@ -355,17 +361,26 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
     <div className="border rounded-lg bg-[var(--color-surface-2)] p-3">
       <div className="flex items-start gap-3">
         {/* Image thumbnail — same robust regex used elsewhere so signed
-            URLs render correctly. Falls back to a media pill for videos. */}
-        {item.mediaUrl && isImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.mediaUrl}
-            alt=""
-            loading="lazy"
-            decoding="async"
-            className="w-16 h-16 object-cover rounded-md shrink-0 bg-[var(--color-surface)]"
-          />
-        ) : item.mediaUrl ? (
+            URLs render correctly. Falls back to a media pill for videos.
+            Multi-image carousels get a small "+N" badge so the intent is
+            visible without expanding the card. */}
+        {primary && isImage ? (
+          <div className="relative w-16 h-16 shrink-0">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={primary}
+              alt=""
+              loading="lazy"
+              decoding="async"
+              className="w-16 h-16 object-cover rounded-md bg-[var(--color-surface)]"
+            />
+            {isCarousel && (
+              <span className="absolute top-0.5 right-0.5 inline-flex items-center gap-0.5 text-[9px] bg-black/70 text-white rounded px-1 py-0.5 font-medium">
+                <Images className="w-2.5 h-2.5" />+{allMediaUrls.length - 1}
+              </span>
+            )}
+          </div>
+        ) : primary ? (
           <div className="w-16 h-16 grid place-items-center text-[10px] uppercase tracking-wider text-[var(--color-muted)] rounded-md bg-[var(--color-surface)] shrink-0">
             {item.mediaType.toLowerCase()}
           </div>

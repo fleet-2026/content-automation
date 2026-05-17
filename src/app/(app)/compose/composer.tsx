@@ -2,15 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Upload, Send, CalendarClock, CheckCircle2, Type } from "lucide-react";
+import { Sparkles, Upload, Send, CalendarClock, CheckCircle2, Type, X, Plus } from "lucide-react";
 import { generateHookVariants, saveDraft, publishDraftNow, scheduleDraft } from "./actions";
 import type { Platform } from "@prisma/client";
 import { HookOverlayEditor } from "./hook-overlay-editor";
 import { PostPreview } from "./post-preview";
-
-// Match the loose extension check we use on the drafts page / preview so R2
-// signed URLs with query strings are correctly classified as images.
-const IS_IMAGE_RE = /\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i;
+import { parseMediaUrls, packMediaUrls, isImageUrl } from "@/lib/media-urls";
 
 type Hook = {
   text: string;
@@ -71,9 +68,17 @@ export function Composer({
   const [selectedHook, setSelectedHook] = useState<string | null>(
     initialDraft?.selectedHook ?? null,
   );
-  const [mediaUrl, setMediaUrl] = useState<string | null>(
-    initialDraft?.mediaUrl ?? initialMediaUrl ?? null,
-  );
+  // Multi-image state. Backed by a packed string on the Draft.mediaUrl field
+  // (newline-separated URLs) until a proper schema migration lands. The first
+  // entry is the "primary" — used for the hook-on-image overlay, the cards,
+  // and single-platform publishing fallback (TikTok/YouTube can only post
+  // one media; Instagram supports up to 10 in a carousel).
+  const [mediaUrls, setMediaUrls] = useState<string[]>(() => {
+    if (initialDraft) return parseMediaUrls(initialDraft.mediaUrl);
+    if (initialMediaUrl) return [initialMediaUrl];
+    return [];
+  });
+  const primaryMediaUrl = mediaUrls[0] ?? null;
   const [platforms, setPlatforms] = useState<Platform[]>(
     initialDraft?.platforms.length ? initialDraft.platforms : connectedPlatforms,
   );
@@ -112,21 +117,32 @@ export function Composer({
   }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    // Allow picking multiple files at once — we upload them sequentially
+    // (the API only accepts one file per request) and append each new URL
+    // to the carousel list. Cap at 10 since Instagram's carousel API has
+    // that hard limit; the other platforms only consume the first item.
+    const files = Array.from(e.target.files ?? []);
+    if (files.length === 0) return;
     setErr(null);
     setUploading(true);
+    const newUrls: string[] = [];
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        const msg = body?.message || body?.error || `HTTP ${res.status}`;
-        throw new Error(`Upload failed: ${msg}`);
+      for (const file of files) {
+        if (mediaUrls.length + newUrls.length >= 10) {
+          throw new Error("Max 10 images per post (Instagram carousel limit).");
+        }
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch("/api/upload", { method: "POST", body: fd });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          const msg = body?.message || body?.error || `HTTP ${res.status}`;
+          throw new Error(`Upload failed: ${msg}`);
+        }
+        const { url } = (await res.json()) as { url: string };
+        newUrls.push(url);
       }
-      const { url } = (await res.json()) as { url: string };
-      setMediaUrl(url);
+      setMediaUrls((cur) => [...cur, ...newUrls]);
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : String(e2));
     } finally {
@@ -134,6 +150,20 @@ export function Composer({
       // reset input so picking the same file again still triggers onChange
       e.target.value = "";
     }
+  }
+
+  function removeMedia(idx: number) {
+    setMediaUrls((cur) => cur.filter((_, i) => i !== idx));
+  }
+
+  function moveMediaToPrimary(idx: number) {
+    setMediaUrls((cur) => {
+      if (idx === 0 || idx >= cur.length) return cur;
+      const next = [...cur];
+      const [picked] = next.splice(idx, 1);
+      next.unshift(picked);
+      return next;
+    });
   }
 
   function save() {
@@ -146,7 +176,7 @@ export function Composer({
           hashtags,
           hookOptions: hooks,
           selectedHook,
-          mediaUrl,
+          mediaUrl: packMediaUrls(mediaUrls),
           platforms,
           scheduledFor: scheduledFor || null,
         });
@@ -169,7 +199,7 @@ export function Composer({
             hashtags,
             hookOptions: hooks,
             selectedHook,
-            mediaUrl,
+            mediaUrl: packMediaUrls(mediaUrls),
             platforms,
           });
           id = d.id;
@@ -196,7 +226,7 @@ export function Composer({
             hashtags,
             hookOptions: hooks,
             selectedHook,
-            mediaUrl,
+            mediaUrl: packMediaUrls(mediaUrls),
             platforms,
             scheduledFor,
           });
@@ -266,50 +296,108 @@ export function Composer({
           )}
         </Field>
 
-        <Field label="Media (image or video URL)">
-          <div className="flex items-center gap-3">
+        <Field
+          label={
+            mediaUrls.length > 1
+              ? `Media (${mediaUrls.length} attached — Instagram will post as carousel)`
+              : "Media (single image, video, or carousel up to 10)"
+          }
+        >
+          <div className="flex items-center gap-3 flex-wrap">
             <label className="cursor-pointer flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] text-sm">
-              <Upload className="w-4 h-4" />
-              {uploading ? "Uploading…" : "Upload"}
+              {mediaUrls.length === 0 ? <Upload className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+              {uploading
+                ? "Uploading…"
+                : mediaUrls.length === 0
+                  ? "Upload"
+                  : "Add image"}
               <input
                 type="file"
                 hidden
+                multiple
                 accept="image/*,video/*"
                 onChange={handleUpload}
+                disabled={mediaUrls.length >= 10}
               />
             </label>
             <input
-              value={mediaUrl ?? ""}
-              onChange={(e) => setMediaUrl(e.target.value || null)}
-              placeholder="or paste a public URL"
-              className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)] text-sm"
+              type="url"
+              placeholder="or paste a public URL and press Enter"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  const v = e.currentTarget.value.trim();
+                  if (/^https?:\/\//i.test(v) && mediaUrls.length < 10) {
+                    setMediaUrls((cur) => [...cur, v]);
+                    e.currentTarget.value = "";
+                  }
+                }
+              }}
+              className="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)] text-sm"
             />
           </div>
-          {mediaUrl && (
-            <div className="mt-2 flex items-start gap-3">
-              {/* Thumbnail preview of the current media so the user can see
-                  what they've attached. Falls through to a "media" pill for
-                  videos / unknown extensions. */}
-              {IS_IMAGE_RE.test(mediaUrl) ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={mediaUrl}
-                  alt=""
-                  loading="lazy"
-                  decoding="async"
-                  className="w-16 h-16 object-cover rounded-md bg-[var(--color-surface-2)] shrink-0"
-                />
-              ) : null}
-              <div className="text-xs text-[var(--color-muted)] truncate flex-1">
-                {mediaUrl}
-              </div>
-            </div>
+
+          {/* Attached-media list: thumbnail for images, "video" pill for clips.
+              First item gets a "PRIMARY" badge (used by hook-on-image + as the
+              feed thumbnail on platforms that can't carousel). Reorder by
+              clicking "Make primary" on any non-first card. Remove with X. */}
+          {mediaUrls.length > 0 && (
+            <ul className="mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {mediaUrls.map((u, idx) => (
+                <li
+                  key={`${u}-${idx}`}
+                  className={
+                    "relative aspect-square rounded-lg overflow-hidden bg-[var(--color-surface-2)] border group " +
+                    (idx === 0 ? "border-[var(--color-accent)]" : "")
+                  }
+                >
+                  {isImageUrl(u) ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={u}
+                      alt=""
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full grid place-items-center text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                      video
+                    </div>
+                  )}
+                  {idx === 0 && (
+                    <span className="absolute top-1 left-1 text-[9px] uppercase tracking-wider bg-[var(--color-accent)] text-[var(--color-text-on-dark)] rounded px-1.5 py-0.5 font-medium">
+                      Primary
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => removeMedia(idx)}
+                    className="absolute top-1 right-1 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-red-600 transition"
+                    aria-label="Remove"
+                    title="Remove"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                  {idx !== 0 && (
+                    <button
+                      type="button"
+                      onClick={() => moveMediaToPrimary(idx)}
+                      className="absolute bottom-1 left-1 right-1 text-[10px] py-1 rounded bg-black/60 text-white opacity-0 group-hover:opacity-100 hover:bg-black/80 transition font-medium"
+                      title="Move to first position"
+                    >
+                      Make primary
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
           )}
-          {/* Opens the canvas editor. The text inside is fully editable — the
-              user can put the hook, the caption, both, or anything custom on
-              the image. Only meaningful when we have something to write
-              (hook OR caption) and something to write on (an image). */}
-          {mediaUrl && IS_IMAGE_RE.test(mediaUrl) && (
+
+          {/* Opens the canvas editor on the PRIMARY image. The text inside is
+              fully editable — the user can put the hook, the caption, both,
+              or anything custom on the image. */}
+          {primaryMediaUrl && isImageUrl(primaryMediaUrl) && (
             <button
               type="button"
               onClick={() => setOverlayOpen(true)}
@@ -317,7 +405,7 @@ export function Composer({
               title={
                 !selectedHook?.trim() && !caption.trim()
                   ? "Pick a hook or type a caption first"
-                  : "Bake hook or caption text onto the image"
+                  : "Bake hook or caption text onto the primary image"
               }
               className="mt-3 flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
@@ -467,16 +555,17 @@ export function Composer({
         hook={selectedHook}
         caption={caption}
         hashtags={hashtags}
-        mediaUrl={mediaUrl}
+        mediaUrls={mediaUrls}
         platforms={platforms}
       />
     </div>
 
-    {/* Hook-on-image canvas modal. Rendered at the root so it can overlay
-        the whole page rather than getting clipped by the grid. */}
-    {overlayOpen && mediaUrl && (selectedHook?.trim() || caption.trim()) && (
+    {/* Hook-on-image canvas modal. Operates on the PRIMARY image — the first
+        attachment. When the user clicks Apply we REPLACE the primary slot
+        with the new (text-baked) URL, preserving the rest of the carousel. */}
+    {overlayOpen && primaryMediaUrl && (selectedHook?.trim() || caption.trim()) && (
       <HookOverlayEditor
-        imageUrl={mediaUrl}
+        imageUrl={primaryMediaUrl}
         // Seed with hook + caption when both are present, separated by a
         // blank line so the canvas wrap renders them as two visual blocks.
         // The textarea inside the editor is fully editable, so the user can
@@ -487,7 +576,7 @@ export function Composer({
             : (selectedHook ?? caption).slice(0, 300)
         }
         onApply={(newUrl) => {
-          setMediaUrl(newUrl);
+          setMediaUrls((cur) => [newUrl, ...cur.slice(1)]);
           setOverlayOpen(false);
         }}
         onClose={() => setOverlayOpen(false)}
