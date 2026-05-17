@@ -7,9 +7,14 @@ import {
   generateWithOpenart,
   checkOpenartAvailability,
   isVideoModel,
+  isOpenartModel,
+  isOpenartAspect,
   type OpenartModel,
   type OpenartAspect,
 } from "@/lib/ai/openart";
+
+const MAX_PROMPT_CHARS = 4000;
+const SAFE_CHARACTER_ID = /^[A-Za-z0-9._-]{1,64}$/;
 
 /**
  * OpenArt generation route. Same async-poll pattern as /api/studio/video:
@@ -50,32 +55,77 @@ export async function POST(req: Request) {
   }
 
   const body = (await req.json().catch(() => null)) as {
-    prompt?: string;
-    model?: OpenartModel;
-    aspect?: OpenartAspect;
-    durationSec?: number;
-    imageUrl?: string;
-    characterId?: string;
+    prompt?: unknown;
+    model?: unknown;
+    aspect?: unknown;
+    durationSec?: unknown;
+    imageUrl?: unknown;
+    characterId?: unknown;
   } | null;
-  if (!body?.prompt?.trim()) {
+
+  // ─── Input validation ────────────────────────────────────────────
+  // Types are erased at runtime; the lib hardens too, but failing fast
+  // here avoids creating a placeholder MediaAsset for garbage input.
+  const promptRaw = typeof body?.prompt === "string" ? body.prompt.trim() : "";
+  if (!promptRaw) {
     return NextResponse.json({ error: "prompt required" }, { status: 400 });
   }
-  if (!body.model) {
-    return NextResponse.json({ error: "model required" }, { status: 400 });
+  if (promptRaw.length > MAX_PROMPT_CHARS) {
+    return NextResponse.json(
+      { error: "prompt_too_long", message: `Max ${MAX_PROMPT_CHARS} characters.` },
+      { status: 400 },
+    );
+  }
+  if (!isOpenartModel(body?.model)) {
+    return NextResponse.json({ error: "invalid_model" }, { status: 400 });
+  }
+  const model: OpenartModel = body.model;
+
+  let aspect: OpenartAspect | undefined;
+  if (body?.aspect !== undefined && body.aspect !== null) {
+    if (!isOpenartAspect(body.aspect)) {
+      return NextResponse.json({ error: "invalid_aspect" }, { status: 400 });
+    }
+    aspect = body.aspect;
   }
 
-  const kind = isVideoModel(body.model) ? "VIDEO" : "IMAGE";
-  const sizeStr = `${body.aspect ?? "9:16"}`;
+  let durationSec: number | undefined;
+  if (body?.durationSec !== undefined && body.durationSec !== null) {
+    const d = Number(body.durationSec);
+    if (!Number.isFinite(d) || d < 1 || d > 60) {
+      return NextResponse.json({ error: "invalid_duration" }, { status: 400 });
+    }
+    durationSec = Math.floor(d);
+  }
+
+  let imageUrl: string | undefined;
+  if (body?.imageUrl !== undefined && body.imageUrl !== null) {
+    if (typeof body.imageUrl !== "string" || body.imageUrl.length > 2048) {
+      return NextResponse.json({ error: "invalid_image_url" }, { status: 400 });
+    }
+    imageUrl = body.imageUrl;
+  }
+
+  let characterId: string | undefined;
+  if (body?.characterId !== undefined && body.characterId !== null && body.characterId !== "") {
+    if (typeof body.characterId !== "string" || !SAFE_CHARACTER_ID.test(body.characterId)) {
+      return NextResponse.json({ error: "invalid_character_id" }, { status: 400 });
+    }
+    characterId = body.characterId;
+  }
+
+  const kind = isVideoModel(model) ? "VIDEO" : "IMAGE";
+  const sizeStr = aspect ?? "9:16";
 
   const placeholder = await prisma.mediaAsset.create({
     data: {
       userId,
       type: kind,
-      prompt: body.prompt.trim(),
+      prompt: promptRaw,
       url: "",
-      model: `openart:${body.model}`,
+      model: `openart:${model}`,
       size: sizeStr,
-      durationSec: kind === "VIDEO" ? body.durationSec ?? 5 : null,
+      durationSec: kind === "VIDEO" ? durationSec ?? 5 : null,
       status: "GENERATING",
     },
   });
@@ -84,12 +134,12 @@ export async function POST(req: Request) {
     try {
       const out = await generateWithOpenart({
         userId,
-        prompt: body.prompt!.trim(),
-        model: body.model!,
-        aspect: body.aspect,
-        durationSec: body.durationSec,
-        imageUrl: body.imageUrl,
-        characterId: body.characterId,
+        prompt: promptRaw,
+        model,
+        aspect,
+        durationSec,
+        imageUrl,
+        characterId,
       });
       await prisma.mediaAsset.update({
         where: { id: placeholder.id },
