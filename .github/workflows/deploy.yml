@@ -1,0 +1,45 @@
+name: Deploy to Vercel (production)
+
+# Triggers on push to master OR manual run from the Actions tab.
+# We sidestep Vercel's native Git integration (which requires the Vercel
+# team's GitHub login to match the repo owner) by running `vercel deploy`
+# from CI using a personal access token. Functionally identical to native
+# auto-deploy with an extra ~30s of CI overhead.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch: # allow manual "Run workflow" trigger from GitHub UI
+
+# Serialize prod deploys — two near-simultaneous pushes shouldn't race.
+concurrency:
+  group: vercel-deploy-prod
+  cancel-in-progress: false
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Vercel CLI
+        run: npm install -g vercel@latest
+
+      - name: Pull Vercel env (production)
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build with Vercel
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy prebuilt to Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
