@@ -1,5 +1,19 @@
+import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, MODELS, assertAnthropicConfigured } from "./claude";
 import type { PostScore } from "@/lib/post-rating";
+
+/**
+ * Stable, user-safe error thrown by fixPost(). The original cause (raw Claude
+ * output, JSON parse error, SDK exception) is logged server-side via
+ * console.error and never surfaced to the UI — so a malformed model response
+ * can't leak through a server-action error message.
+ */
+export class PostFixerError extends Error {
+  constructor(message: string, public readonly cause?: unknown) {
+    super(message);
+    this.name = "PostFixerError";
+  }
+}
 
 /**
  * AI-powered post rewriter — "viralize" mode.
@@ -117,20 +131,30 @@ export async function fixPost(input: {
   // max_tokens lowered from 3500 → 1800: 3 variants × (hook + ~300char caption +
   // 5-10 tags + cta + rationale) ≈ 1500 tokens of JSON. Lower cap = lower P99
   // latency = doesn't hit Vercel's 60s function timeout on slow Claude responses.
-  const res = await anthropic.messages.create(
-    {
-      model: MODELS.default,
-      max_tokens: 1800,
-      system: SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: `${ctx}\n\nGenerate 3 viral-tuned rewrite variants. Output ONLY the JSON object.`,
-        },
-      ],
-    },
-    input.signal ? { signal: input.signal } : undefined,
-  );
+  let res;
+  try {
+    res = await anthropic.messages.create(
+      {
+        model: MODELS.default,
+        max_tokens: 1800,
+        system: SYSTEM,
+        messages: [
+          {
+            role: "user",
+            content: `${ctx}\n\nGenerate 3 viral-tuned rewrite variants. Output ONLY the JSON object.`,
+          },
+        ],
+      },
+      input.signal ? { signal: input.signal } : undefined,
+    );
+  } catch (e) {
+    // Preserve abort errors so the caller can detect a timeout vs an upstream
+    // failure. Everything else is logged server-side and re-thrown as a stable
+    // PostFixerError so raw SDK / network errors never leak to the UI.
+    if (e instanceof Anthropic.APIUserAbortError) throw e;
+    console.error("[post-fixer] anthropic call failed", e);
+    throw new PostFixerError("Couldn't reach the AI service. Try again in a moment.", e);
+  }
 
   const text = res.content
     .filter((b) => b.type === "text")
@@ -142,20 +166,25 @@ export async function fixPost(input: {
 
   const match = text.match(/\{[\s\S]*\}/);
   if (!match) {
-    throw new Error(`Post fixer: no JSON in response. First 200 chars: ${text.slice(0, 200)}`);
+    // Log the raw snippet for debugging, surface only a stable message.
+    console.error("[post-fixer] no JSON in Claude response; first 500 chars:", text.slice(0, 500));
+    throw new PostFixerError("AI returned an unparseable response. Try again.");
   }
   let parsed: { variants?: Partial<FixVariant>[] };
   try {
     parsed = JSON.parse(match[0]);
   } catch (e) {
-    throw new Error(
-      `Post fixer: failed to parse JSON: ${(e as Error).message}. Snippet: ${match[0].slice(0, 200)}`,
+    console.error(
+      "[post-fixer] JSON.parse failed:",
+      (e as Error).message,
+      "snippet:",
+      match[0].slice(0, 500),
     );
+    throw new PostFixerError("AI returned malformed JSON. Try again.", e);
   }
   if (!Array.isArray(parsed.variants) || parsed.variants.length === 0) {
-    throw new Error(
-      `Post fixer: response had no variants. Got: ${JSON.stringify(parsed).slice(0, 200)}`,
-    );
+    console.error("[post-fixer] response had no variants. Parsed:", JSON.stringify(parsed).slice(0, 500));
+    throw new PostFixerError("AI didn't return any variants. Try again.");
   }
 
   return parsed.variants.slice(0, 3).map((v) => ({

@@ -6,7 +6,7 @@ import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth-helpers";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import { rate } from "@/lib/post-rating";
-import { fixPost, type ViralSignals, type FixVariant } from "@/lib/ai/post-fixer";
+import { fixPost, PostFixerError, type ViralSignals, type FixVariant } from "@/lib/ai/post-fixer";
 import { embed, toPgVector } from "@/lib/ai/embed";
 import { getCompoundingMap } from "@/lib/compound";
 
@@ -121,8 +121,20 @@ async function predictER(hookText: string): Promise<{ predictedER: number | null
   }
 }
 
+// Prisma post IDs are CUIDs (default `cuid()` — `c` + 24 alphanumerics) or, for
+// older rows, plain alphanumeric. Allow up to 64 chars to be forward-compatible
+// with cuid2 / nanoid migrations. Validating BEFORE the rate-limit check stops
+// a malformed id from poisoning the per-post bucket key (e.g. "" collapsing to
+// `postfix:<userId>:`).
+const POST_ID_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+
 export async function fixLowRatedPost(postId: string): Promise<{ draftId: string }> {
   const userId = await requireUser();
+
+  // ─── Input validation ────────────────────────────────────
+  if (typeof postId !== "string" || !POST_ID_RE.test(postId)) {
+    throw new Error("Invalid post id.");
+  }
 
   // Two-layer rate limit:
   //   1. Hard cap on Viralize spend per user (~$0.06/call × 5/hr = $0.30/hr max).
@@ -177,9 +189,20 @@ export async function fixLowRatedPost(postId: string): Promise<{ draftId: string
   // queries above) and still need to do 3× kNN after Claude returns. Abort
   // the Claude call at 50s so the surrounding code has time to record a
   // FAILED state and surface a clean error instead of a 504.
+  //
+  // We track timeout via a dedicated `timedOut` flag rather than reading
+  // `ctrl.signal.aborted` from the catch block — that flag races with any
+  // unrelated error that happened to occur between the abort firing and the
+  // promise rejecting, and we don't want to misreport a network blip as a
+  // timeout.
   const ctrl = new AbortController();
-  const abortTimer = setTimeout(() => ctrl.abort(), 50_000);
+  let timedOut = false;
+  const abortTimer = setTimeout(() => {
+    timedOut = true;
+    ctrl.abort();
+  }, 50_000);
 
+  const startedAt = Date.now();
   let variants;
   try {
     variants = await fixPost({
@@ -192,18 +215,30 @@ export async function fixLowRatedPost(postId: string): Promise<{ draftId: string
       signal: ctrl.signal,
     });
   } catch (e) {
-    if (ctrl.signal.aborted) {
+    if (timedOut) {
+      console.error(`[fixLowRatedPost] timeout after ${Date.now() - startedAt}ms for user=${userId} post=${postId}`);
       throw new Error(
-        "Viralize timed out at ~50s (Vercel function limit). Try again — Claude is sometimes slow on cold starts.",
+        "Viralize timed out (~50s). Try again — Claude is sometimes slow on cold starts.",
       );
     }
-    throw e;
+    // PostFixerError is already user-safe (raw model output is logged, not
+    // surfaced). Anything else is an unexpected crash — log it and throw a
+    // stable message so we don't leak Prisma / SDK internals to the UI.
+    if (e instanceof PostFixerError) throw e;
+    console.error(`[fixLowRatedPost] unexpected failure for user=${userId} post=${postId}`, e);
+    throw new Error("Couldn't generate variants right now. Try again in a moment.");
   } finally {
     clearTimeout(abortTimer);
   }
   if (variants.length === 0) {
-    throw new Error("Post fixer returned no variants.");
+    console.error(`[fixLowRatedPost] empty variants for user=${userId} post=${postId}`);
+    throw new Error("AI didn't return any variants. Try again.");
   }
+  // Cost-per-call breadcrumb so we can audit Viralize spend in logs without
+  // wiring up a full telemetry pipeline. ~$0.06/call × variants generated.
+  console.log(
+    `[fixLowRatedPost] ok user=${userId} post=${postId} variants=${variants.length} ms=${Date.now() - startedAt}`,
+  );
 
   // ─── Score each variant via kNN over Hook DB ─────────────
   const scored = await Promise.all(
