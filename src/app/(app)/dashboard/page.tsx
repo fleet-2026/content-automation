@@ -9,6 +9,7 @@ import { Suspense } from "react";
 import { PostRatings, type RatedPostForUI } from "@/components/post-ratings";
 import { MyLinksSection, MyLinksSectionSkeleton } from "@/components/my-links-section";
 import { IntegrationStatus } from "@/components/integration-status";
+import { QuickPostCard } from "@/components/quick-post-card";
 import { getFollowerGrowth, getBestTimeToPost } from "@/lib/analytics";
 import { getCompoundingMap } from "@/lib/compound";
 import { ratePosts } from "@/lib/post-rating";
@@ -153,6 +154,16 @@ export default async function DashboardPage({
         <Stat label="Synced posts" value={formatNumber(postCount)} />
         <Stat label="Total views" value={formatNumber(totalViews)} />
         <Stat label="Total likes" value={formatNumber(totalLikes)} />
+      </div>
+
+      {/* Inline composer — write, attach up to 4 images, pick platforms,
+          publish/schedule/save without leaving the dashboard. For the heavy
+          features (hook A/B simulator, viralize, hook-on-image canvas, full
+          10-slot carousel) the card surfaces a link to /compose. */}
+      <div className="mb-8">
+        <QuickPostCard
+          connectedPlatforms={accounts.map((a) => a.platform)}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 mb-8">
