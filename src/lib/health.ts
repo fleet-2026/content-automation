@@ -108,11 +108,19 @@ async function checkNeon(): Promise<IntegrationCheck> {
       detail: "SELECT 1 succeeded",
     };
   } catch (e) {
+    // Don't echo the raw driver error — it contains the Neon hostname and
+    // sometimes the DSN. Map to a coarse class instead.
+    const raw = (e instanceof Error ? e.message : String(e)).toLowerCase();
+    let detail = "query failed";
+    if (raw.includes("timeout") || raw.includes("aborted")) detail = "probe timed out";
+    else if (raw.includes("auth") || raw.includes("password") || raw.includes("28p01")) detail = "auth rejected";
+    else if (raw.includes("connect") || raw.includes("econnrefused") || raw.includes("enotfound")) detail = "connect failed";
+    else if (raw.includes("ssl") || raw.includes("tls")) detail = "tls handshake failed";
     return {
       id,
       label,
       status: "error",
-      detail: e instanceof Error ? e.message : String(e),
+      detail,
       latencyMs: Date.now() - start,
     };
   }
@@ -387,29 +395,44 @@ async function checkFlipIt(): Promise<IntegrationCheck> {
 // otherwise-passing env-only checks.
 
 function auditBom(): IntegrationCheck[] {
+  // Count offenders without enumerating which env vars are even *present* in
+  // this environment. The response goes to authed users, but echoing the
+  // exact var names ("META_APP_SECRET has BOM") still telegraphs which
+  // integrations are configured + happens to be log-shipped in some setups.
   const offenders: string[] = [];
   for (const key of BOM_AUDIT_KEYS) {
     const raw = process.env[key];
     if (raw && raw.startsWith(BOM)) offenders.push(key);
   }
-  if (offenders.length === 0) return [];
-  return offenders.map((key) => ({
-    id: `bom:${key.toLowerCase()}`,
-    label: `BOM in ${key}`,
-    status: "error" as const,
-    detail: "BOM detected — env was saved as UTF-8-with-BOM; rotate it",
-  }));
+  const offenderCount = offenders.length;
+  if (offenderCount === 0) return [];
+  // Surface the specific keys server-side only so ops can still act on it.
+  console.error("[health.auditBom] BOM detected in env keys:", offenders.join(", "));
+  return [
+    {
+      id: "bom-audit",
+      label: "Env BOM audit",
+      status: "error" as const,
+      detail: `${offenderCount} env var${offenderCount === 1 ? "" : "s"} saved as UTF-8-with-BOM — check server logs and rotate`,
+    },
+  ];
 }
 
 // ─── Public API ────────────────────────────────────────────────
 
+// Critical integrations — an error here flips overall to "down". Everything
+// else only contributes to "degraded" at worst, so a flaky optional probe
+// (Tavily, FlipIt) can't make the whole platform look offline.
+const CRITICAL_IDS = new Set(["neon"]);
+
 export async function checkIntegrations(): Promise<HealthReport> {
   const checkedAt = new Date().toISOString();
 
-  // Run every probe in parallel. The sync ones return immediately; the
-  // async ones each get an outer timeout via timed().
-  const results = await Promise.all([
-    timed(() => checkNeon(), "neon", "Neon (Postgres)", 4000),
+  // Run every probe in parallel via allSettled — a thrown probe must not
+  // sink the whole report. Neon gets a tight 2s outer timeout so a suspended
+  // free-tier DB doesn't hang the dashboard or burn wake-up compute.
+  const settled = await Promise.allSettled([
+    timed(() => checkNeon(), "neon", "Neon (Postgres)", 2000),
     Promise.resolve(checkAnthropic()),
     Promise.resolve(checkOpenAI()),
     Promise.resolve(checkGroq()),
@@ -425,14 +448,32 @@ export async function checkIntegrations(): Promise<HealthReport> {
     timed(() => checkFlipIt(), "flipit", "FlipIt (external service)", 3000),
   ]);
 
+  const results: IntegrationCheck[] = settled.map((r, i) =>
+    r.status === "fulfilled"
+      ? r.value
+      : {
+          id: `probe-${i}`,
+          label: "probe",
+          status: "error" as const,
+          detail: "probe threw unexpectedly",
+        },
+  );
+
   // Append any BOM offenders as extra checks.
   const bomChecks = auditBom();
   const integrations = [...results, ...bomChecks];
 
-  // Rollup. Any error → "down". Else any missing_env → "degraded". Else "ok".
+  // Rollup. A critical-tier error → "down". Non-critical errors or any
+  // missing_env → "degraded". Otherwise "ok".
   let overall: HealthReport["overall"] = "ok";
-  if (integrations.some((c) => c.status === "error")) overall = "down";
-  else if (integrations.some((c) => c.status === "missing_env")) overall = "degraded";
+  const hasCriticalError = integrations.some(
+    (c) => c.status === "error" && CRITICAL_IDS.has(c.id),
+  );
+  const hasAnyDegradation = integrations.some(
+    (c) => c.status === "error" || c.status === "missing_env",
+  );
+  if (hasCriticalError) overall = "down";
+  else if (hasAnyDegradation) overall = "degraded";
 
   return { checkedAt, overall, integrations };
 }

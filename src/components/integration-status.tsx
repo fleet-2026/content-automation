@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -37,27 +37,50 @@ export function IntegrationStatus() {
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
 
+  // Track mounted state + the in-flight fetch so unmount cleanly aborts the
+  // request and we never setState on a torn-down component.
+  const mountedRef = useRef(true);
+  const inFlightRef = useRef<AbortController | null>(null);
+
   const fetchHealth = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    // Cancel any previous in-flight fetch — overlapping requests would race
+    // each other into setState and produce flicker on a slow connection.
+    inFlightRef.current?.abort();
+    const controller = new AbortController();
+    inFlightRef.current = controller;
+
+    if (mountedRef.current) {
+      setLoading(true);
+      setError(null);
+    }
     try {
-      const res = await fetch("/api/health", { cache: "no-store" });
+      const res = await fetch("/api/health", {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       if (!res.ok) {
         throw new Error(`HTTP ${res.status}`);
       }
       const data = (await res.json()) as HealthReport;
-      setReport(data);
+      if (mountedRef.current && !controller.signal.aborted) setReport(data);
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      // Aborts on unmount/refresh-overtake are expected; don't surface them.
+      if (controller.signal.aborted) return;
+      if (mountedRef.current) setError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLoading(false);
+      if (mountedRef.current && !controller.signal.aborted) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    mountedRef.current = true;
     fetchHealth();
     const t = setInterval(fetchHealth, AUTO_REFRESH_MS);
-    return () => clearInterval(t);
+    return () => {
+      mountedRef.current = false;
+      clearInterval(t);
+      inFlightRef.current?.abort();
+    };
   }, [fetchHealth]);
 
   // Bucketed counts so the collapsed view can show "X failures" inline.
