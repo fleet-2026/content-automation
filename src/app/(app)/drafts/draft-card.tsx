@@ -3,10 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Edit, Trash2, ExternalLink, Images, Check, AlertTriangle } from "lucide-react";
+import { Send, Edit, Trash2, ExternalLink, Images, Check, AlertTriangle, Eye } from "lucide-react";
 import type { Platform, DraftStatus } from "@prisma/client";
 import { publishDraftNow, deleteDraft } from "../compose/actions";
 import { parseMediaUrls } from "@/lib/media-urls";
+import { MediaPreviewModal } from "@/components/media-preview-modal";
 
 // `publishResults` is stored as `Json?` in Prisma. Each entry came from
 // publishDraft() in src/lib/publish.ts and matches PublishResult.
@@ -28,6 +29,10 @@ export type DraftCardData = {
   scheduledFor: Date | null;
   updatedAt: Date;
   publishResults: PublishResult[] | null;
+  // Hashtags live separately on the Draft schema; surface them so the
+  // preview modal can render the full assembled post (hook + caption +
+  // hashtags + platform list) rather than just hook + caption.
+  hashtags: string[];
 };
 
 // Loosened from the original `\.(jpg|jpeg|png|webp)$` — R2 / signed URLs often
@@ -56,6 +61,7 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
   // button as "broken" (click → nothing). Inline state is bulletproof.
   const [pubConfirm, setPubConfirm] = useState(false);
   const [delConfirm, setDelConfirm] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // mediaUrl may contain a newline-packed list of URLs when the draft is a
   // carousel. Pull out the primary for the thumbnail and keep the count so
@@ -186,7 +192,12 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
             Multi-image drafts get a small "+N" badge in the corner so the
             carousel intent is visible without expanding the card. */}
         {primary && isImage ? (
-          <div className="relative w-24 h-24 shrink-0">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="relative w-24 h-24 shrink-0 group cursor-pointer"
+            title="Click to preview full size"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={primary}
@@ -195,18 +206,27 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
               decoding="async"
               width={96}
               height={96}
-              className="w-24 h-24 object-cover rounded-lg bg-[var(--color-surface-2)]"
+              className="w-24 h-24 object-cover rounded-lg bg-[var(--color-surface-2)] group-hover:opacity-80 transition"
             />
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/30 rounded-lg transition">
+              <Eye className="w-5 h-5 text-white" />
+            </div>
             {isCarousel && (
               <span className="absolute top-1 right-1 inline-flex items-center gap-0.5 text-[10px] bg-black/70 text-white rounded px-1.5 py-0.5 font-medium">
                 <Images className="w-3 h-3" />+{allMediaUrls.length - 1}
               </span>
             )}
-          </div>
+          </button>
         ) : primary && isVideo ? (
-          <div className="w-24 h-24 grid place-items-center text-xs text-[var(--color-muted)] rounded-lg bg-[var(--color-surface-2)] shrink-0">
-            video
-          </div>
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="w-24 h-24 grid place-items-center text-xs text-[var(--color-muted)] rounded-lg bg-[var(--color-surface-2)] shrink-0 hover:bg-[var(--color-border)] transition"
+            title="Click to preview"
+          >
+            <Eye className="w-4 h-4 mb-1" />
+            <span className="text-[10px]">video</span>
+          </button>
         ) : primary ? (
           // Unknown extension — still indicate media is attached.
           <div className="w-24 h-24 grid place-items-center text-xs text-[var(--color-muted)] rounded-lg bg-[var(--color-surface-2)] shrink-0">
@@ -215,8 +235,34 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
         ) : null}
       </div>
 
+      {/* Preview modal — rendered conditionally inside the card. Closes on
+          Esc, on backdrop click, or via the X button. Carousel keyboard
+          arrows work while open. */}
+      {previewOpen && (
+        <MediaPreviewModal
+          mediaUrls={allMediaUrls}
+          hook={draft.selectedHook}
+          caption={draft.caption}
+          hashtags={draft.hashtags}
+          platforms={draft.platforms}
+          status={draft.status}
+          onClose={() => setPreviewOpen(false)}
+        />
+      )}
+
       {/* Action row */}
       <div className="flex items-center gap-2 mt-4 pt-3 border-t border-[var(--color-border)]">
+        {primary && (
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium"
+            title="See the post as it'll appear (full-size media + carousel + caption)"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Preview
+          </button>
+        )}
         <Link
           href={`/compose?draft=${draft.id}`}
           className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium"

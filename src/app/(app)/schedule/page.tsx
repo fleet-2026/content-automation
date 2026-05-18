@@ -46,6 +46,7 @@ export default async function SchedulePage() {
               platforms: true,
               status: true,
               scheduledFor: true,
+              hashtags: true,
             },
           }),
         [],
@@ -61,6 +62,7 @@ export default async function SchedulePage() {
       scheduledAt: d.scheduledFor,
       hookText: d.selectedHook ?? "",
       caption: d.caption,
+      hashtags: d.hashtags,
       mediaUrl: d.mediaUrl,
       platforms: d.platforms.filter(
         (p): p is "INSTAGRAM" | "TIKTOK" | "YOUTUBE" =>

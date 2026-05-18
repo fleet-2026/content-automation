@@ -157,6 +157,7 @@ export default async function DraftsPage() {
               status: d.status,
               scheduledFor: d.scheduledFor,
               updatedAt: d.updatedAt,
+              hashtags: d.hashtags,
               publishResults: Array.isArray(d.publishResults)
                 ? (d.publishResults as DraftCardData["publishResults"])
                 : null,

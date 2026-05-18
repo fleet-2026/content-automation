@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   Clock,
   Edit,
+  Eye,
   Images,
   Pause,
   Play,
@@ -21,6 +22,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { parseMediaUrls } from "@/lib/media-urls";
+import { MediaPreviewModal } from "@/components/media-preview-modal";
 import {
   type DemoAutomation,
   type DemoRecurringSlot,
@@ -49,6 +51,9 @@ export type ScheduledItem = {
   hookText: string;
   caption: string;
   mediaUrl: string | null;
+  // Optional — only real drafts have them populated from Prisma; demo data
+  // doesn't carry hashtags. Defaults to [] in the preview modal otherwise.
+  hashtags?: string[];
   platforms: ("INSTAGRAM" | "TIKTOK" | "YOUTUBE")[];
   status: "SCHEDULED" | "DRAFT" | "PUBLISHING" | "PUBLISHED" | "FAILED" | "APPROVED";
   mediaType: "VIDEO" | "REEL" | "SHORT" | "IMAGE" | "TEXT" | "CAROUSEL" | "STORY";
@@ -314,6 +319,7 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
   // prompts on Chrome, leaving the button looking dead).
   const [pubConfirm, setPubConfirm] = useState(false);
   const [delConfirm, setDelConfirm] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // mediaUrl may be a newline-packed carousel — pull primary + count.
   const allMediaUrls = parseMediaUrls(item.mediaUrl);
@@ -376,25 +382,39 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
             Multi-image carousels get a small "+N" badge so the intent is
             visible without expanding the card. */}
         {primary && isImage ? (
-          <div className="relative w-16 h-16 shrink-0">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="relative w-16 h-16 shrink-0 group cursor-pointer"
+            title="Click to preview full size"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={primary}
               alt=""
               loading="lazy"
               decoding="async"
-              className="w-16 h-16 object-cover rounded-md bg-[var(--color-surface)]"
+              className="w-16 h-16 object-cover rounded-md bg-[var(--color-surface)] group-hover:opacity-80 transition"
             />
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/30 rounded-md transition">
+              <Eye className="w-4 h-4 text-white" />
+            </div>
             {isCarousel && (
               <span className="absolute top-0.5 right-0.5 inline-flex items-center gap-0.5 text-[9px] bg-black/70 text-white rounded px-1 py-0.5 font-medium">
                 <Images className="w-2.5 h-2.5" />+{allMediaUrls.length - 1}
               </span>
             )}
-          </div>
+          </button>
         ) : primary ? (
-          <div className="w-16 h-16 grid place-items-center text-[10px] uppercase tracking-wider text-[var(--color-muted)] rounded-md bg-[var(--color-surface)] shrink-0">
+          <button
+            type="button"
+            onClick={() => setPreviewOpen(true)}
+            className="w-16 h-16 grid place-items-center text-[10px] uppercase tracking-wider text-[var(--color-muted)] rounded-md bg-[var(--color-surface)] shrink-0 hover:bg-[var(--color-border)] transition"
+            title="Click to preview"
+          >
+            <Eye className="w-3.5 h-3.5 mb-0.5" />
             {item.mediaType.toLowerCase()}
-          </div>
+          </button>
         ) : null}
 
         <div className="min-w-0 flex-1">
@@ -460,6 +480,16 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
       {/* Real-draft action row. */}
       {item.isReal && (
         <div className="flex items-center gap-2 mt-3 pt-2.5 border-t border-[var(--color-border)]">
+          {primary && (
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(true)}
+              className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md bg-[var(--color-surface)] hover:bg-[var(--color-border)] font-medium"
+              title="See full-size media + carousel + caption"
+            >
+              <Eye className="w-3 h-3" /> Preview
+            </button>
+          )}
           <Link
             href={`/compose?draft=${item.id}`}
             className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md bg-[var(--color-surface)] hover:bg-[var(--color-border)] font-medium"
@@ -529,6 +559,21 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
             </>
           )}
         </div>
+      )}
+
+      {/* Preview modal — full-size media + carousel + assembled text.
+          Hashtags fall through as [] for demo items (which don't carry
+          them). Esc / backdrop click / arrow keys all work inside. */}
+      {previewOpen && (
+        <MediaPreviewModal
+          mediaUrls={allMediaUrls}
+          hook={item.hookText || null}
+          caption={item.caption}
+          hashtags={item.hashtags ?? []}
+          platforms={item.platforms}
+          status={item.status}
+          onClose={() => setPreviewOpen(false)}
+        />
       )}
     </div>
   );
