@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
+  AlertTriangle,
   Send,
   Upload,
   X,
@@ -46,6 +47,9 @@ export function QuickPostCard({
   const [err, setErr] = useState<string | null>(null);
   const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
   const [published, setPublished] = useState(false);
+  // Inline two-stage confirm (browser confirm() can auto-block after a
+  // few dialogs and leave the button looking dead).
+  const [pubConfirm, setPubConfirm] = useState(false);
 
   // Parse hashtags out of the caption the way the full composer does, so
   // the saved draft gets a clean `hashtags` array instead of #tags only
@@ -130,6 +134,7 @@ export function QuickPostCard({
   }
 
   function publish() {
+    setErr(null);
     if (!caption.trim()) {
       setErr("Add a caption first.");
       return;
@@ -138,13 +143,12 @@ export function QuickPostCard({
       setErr("Pick at least one platform.");
       return;
     }
-    if (
-      !confirm(
-        `Publish to ${platforms.join(", ")} now? This posts to your live accounts.`,
-      )
-    )
+    // First click arms confirmation; second click actually publishes.
+    if (!pubConfirm) {
+      setPubConfirm(true);
       return;
-    setErr(null);
+    }
+    setPubConfirm(false);
     startPub(async () => {
       try {
         const d = await saveDraft({
@@ -351,14 +355,34 @@ export function QuickPostCard({
             {publishing ? "Scheduling…" : "Schedule"}
           </button>
         ) : (
-          <button
-            onClick={publish}
-            disabled={publishing || !caption.trim() || platforms.length === 0}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium disabled:opacity-50"
-          >
-            <Send className="w-3.5 h-3.5" />
-            {publishing ? "Publishing…" : "Publish now"}
-          </button>
+          <>
+            <button
+              onClick={publish}
+              disabled={publishing || !caption.trim() || platforms.length === 0}
+              className={
+                "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium disabled:opacity-50 " +
+                (pubConfirm
+                  ? "bg-amber-600 text-white hover:bg-amber-700"
+                  : "bg-[var(--color-accent)] text-[var(--color-text-on-dark)]")
+              }
+            >
+              {pubConfirm ? <AlertTriangle className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+              {publishing
+                ? "Publishing…"
+                : pubConfirm
+                  ? `Confirm: post to ${platforms.map((p) => p.toLowerCase()).join(" + ")}`
+                  : "Publish now"}
+            </button>
+            {pubConfirm && !publishing && (
+              <button
+                type="button"
+                onClick={() => setPubConfirm(false)}
+                className="text-xs px-2 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-text)]"
+              >
+                Cancel
+              </button>
+            )}
+          </>
         )}
         <button
           onClick={saveDraftOnly}

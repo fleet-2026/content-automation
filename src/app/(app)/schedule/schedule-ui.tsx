@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
+  AlertTriangle,
   CalendarClock,
+  Check,
   CheckCircle2,
   Clock,
   Edit,
@@ -308,6 +310,10 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
   const [publishing, startPub] = useTransition();
   const [deleting, startDel] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  // Inline two-stage confirms (browser confirm() auto-blocks after a few
+  // prompts on Chrome, leaving the button looking dead).
+  const [pubConfirm, setPubConfirm] = useState(false);
+  const [delConfirm, setDelConfirm] = useState(false);
 
   // mediaUrl may be a newline-packed carousel — pull primary + count.
   const allMediaUrls = parseMediaUrls(item.mediaUrl);
@@ -322,18 +328,18 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
       item.status === "APPROVED");
   const canDelete = item.isReal && item.status !== "PUBLISHING";
 
-  function onPublish() {
+  function onPublishClick() {
+    setErr(null);
     if (item.platforms.length === 0) {
       setErr("Pick at least one platform first (Edit → Platforms).");
       return;
     }
-    if (
-      !confirm(
-        `Publish now to ${item.platforms.join(", ")}? Posts to your live accounts.`,
-      )
-    )
+    if (!pubConfirm) {
+      setPubConfirm(true);
+      setDelConfirm(false);
       return;
-    setErr(null);
+    }
+    setPubConfirm(false);
     startPub(async () => {
       try {
         await publishDraftNow(item.id);
@@ -344,9 +350,14 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
     });
   }
 
-  function onDelete() {
-    if (!confirm("Delete this scheduled draft? This cannot be undone.")) return;
+  function onDeleteClick() {
     setErr(null);
+    if (!delConfirm) {
+      setDelConfirm(true);
+      setPubConfirm(false);
+      return;
+    }
+    setDelConfirm(false);
     startDel(async () => {
       try {
         await deleteDraft(item.id);
@@ -456,26 +467,66 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
             <Edit className="w-3 h-3" /> Edit
           </Link>
           {canPublish && (
-            <button
-              type="button"
-              onClick={onPublish}
-              disabled={publishing}
-              className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium disabled:opacity-50"
-            >
-              <Send className="w-3 h-3" />
-              {publishing ? "Publishing…" : "Publish now"}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onPublishClick}
+                disabled={publishing}
+                className={
+                  "flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md font-medium disabled:opacity-50 " +
+                  (pubConfirm
+                    ? "bg-amber-600 text-white hover:bg-amber-700"
+                    : "bg-[var(--color-accent)] text-[var(--color-text-on-dark)]")
+                }
+              >
+                {pubConfirm ? <AlertTriangle className="w-3 h-3" /> : <Send className="w-3 h-3" />}
+                {publishing
+                  ? "Publishing…"
+                  : pubConfirm
+                    ? "Confirm publish"
+                    : "Publish now"}
+              </button>
+              {pubConfirm && !publishing && (
+                <button
+                  type="button"
+                  onClick={() => setPubConfirm(false)}
+                  className="text-[11px] px-2 py-1 text-[var(--color-muted)] hover:text-[var(--color-text)]"
+                >
+                  Cancel
+                </button>
+              )}
+            </>
           )}
           {canDelete && (
-            <button
-              type="button"
-              onClick={onDelete}
-              disabled={deleting}
-              className="flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md text-red-700 hover:bg-red-50 font-medium disabled:opacity-50 ml-auto"
-            >
-              <Trash2 className="w-3 h-3" />
-              {deleting ? "Deleting…" : "Delete"}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={onDeleteClick}
+                disabled={deleting}
+                className={
+                  "flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-md font-medium disabled:opacity-50 ml-auto " +
+                  (delConfirm
+                    ? "bg-red-600 text-white hover:bg-red-700"
+                    : "text-red-700 hover:bg-red-50")
+                }
+              >
+                {delConfirm ? <Check className="w-3 h-3" /> : <Trash2 className="w-3 h-3" />}
+                {deleting
+                  ? "Deleting…"
+                  : delConfirm
+                    ? "Confirm delete"
+                    : "Delete"}
+              </button>
+              {delConfirm && !deleting && (
+                <button
+                  type="button"
+                  onClick={() => setDelConfirm(false)}
+                  className="text-[11px] px-2 py-1 text-[var(--color-muted)] hover:text-[var(--color-text)]"
+                >
+                  Cancel
+                </button>
+              )}
+            </>
           )}
         </div>
       )}

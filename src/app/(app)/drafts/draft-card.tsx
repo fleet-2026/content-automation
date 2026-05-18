@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Edit, Trash2, ExternalLink, Images } from "lucide-react";
+import { Send, Edit, Trash2, ExternalLink, Images, Check, AlertTriangle } from "lucide-react";
 import type { Platform, DraftStatus } from "@prisma/client";
 import { publishDraftNow, deleteDraft } from "../compose/actions";
 import { parseMediaUrls } from "@/lib/media-urls";
@@ -50,6 +50,12 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
   const [publishing, startPub] = useTransition();
   const [deleting, startDel] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  // Inline two-stage confirms instead of window.confirm(). Browser dialogs
+  // get auto-blocked after a few in-session prompts on Chrome/Edge — when
+  // that happens, confirm() returns false instantly and the user sees the
+  // button as "broken" (click → nothing). Inline state is bulletproof.
+  const [pubConfirm, setPubConfirm] = useState(false);
+  const [delConfirm, setDelConfirm] = useState(false);
 
   // mediaUrl may contain a newline-packed list of URLs when the draft is a
   // carousel. Pull out the primary for the thumbnail and keep the count so
@@ -70,19 +76,19 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
     draft.status === "SCHEDULED";
   const canDelete = draft.status !== "PUBLISHING";
 
-  function onPublish() {
+  function onPublishClick() {
+    setErr(null);
     if (draft.platforms.length === 0) {
       setErr("Pick at least one platform first (Edit → Platforms).");
       return;
     }
-    if (
-      !confirm(
-        `Publish this draft now to ${draft.platforms.join(", ")}? This action posts to your live accounts.`,
-      )
-    ) {
+    // First click → arm confirmation. Second click → actually publish.
+    if (!pubConfirm) {
+      setPubConfirm(true);
+      setDelConfirm(false);
       return;
     }
-    setErr(null);
+    setPubConfirm(false);
     startPub(async () => {
       try {
         await publishDraftNow(draft.id);
@@ -93,9 +99,14 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
     });
   }
 
-  function onDelete() {
-    if (!confirm("Delete this draft? This cannot be undone.")) return;
+  function onDeleteClick() {
     setErr(null);
+    if (!delConfirm) {
+      setDelConfirm(true);
+      setPubConfirm(false);
+      return;
+    }
+    setDelConfirm(false);
     startDel(async () => {
       try {
         await deleteDraft(draft.id);
@@ -215,27 +226,67 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
         </Link>
 
         {canPublish && (
-          <button
-            type="button"
-            onClick={onPublish}
-            disabled={publishing}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] hover:opacity-90 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Send className="w-3.5 h-3.5" />
-            {publishing ? "Publishing…" : "Publish now"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={onPublishClick}
+              disabled={publishing}
+              className={
+                "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed " +
+                (pubConfirm
+                  ? "bg-amber-600 text-white hover:bg-amber-700"
+                  : "bg-[var(--color-accent)] text-[var(--color-text-on-dark)] hover:opacity-90")
+              }
+            >
+              {pubConfirm ? <AlertTriangle className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
+              {publishing
+                ? "Publishing…"
+                : pubConfirm
+                  ? `Confirm: post to ${draft.platforms.join(" + ").toLowerCase()}`
+                  : "Publish now"}
+            </button>
+            {pubConfirm && !publishing && (
+              <button
+                type="button"
+                onClick={() => setPubConfirm(false)}
+                className="text-xs px-2 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-text)]"
+              >
+                Cancel
+              </button>
+            )}
+          </>
         )}
 
         {canDelete && (
-          <button
-            type="button"
-            onClick={onDelete}
-            disabled={deleting}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg text-red-700 hover:bg-red-50 font-medium disabled:opacity-50 ml-auto"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            {deleting ? "Deleting…" : "Delete"}
-          </button>
+          <>
+            <button
+              type="button"
+              onClick={onDeleteClick}
+              disabled={deleting}
+              className={
+                "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 ml-auto " +
+                (delConfirm
+                  ? "bg-red-600 text-white hover:bg-red-700"
+                  : "text-red-700 hover:bg-red-50")
+              }
+            >
+              {delConfirm ? <Check className="w-3.5 h-3.5" /> : <Trash2 className="w-3.5 h-3.5" />}
+              {deleting
+                ? "Deleting…"
+                : delConfirm
+                  ? "Confirm delete"
+                  : "Delete"}
+            </button>
+            {delConfirm && !deleting && (
+              <button
+                type="button"
+                onClick={() => setDelConfirm(false)}
+                className="text-xs px-2 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-text)]"
+              >
+                Cancel
+              </button>
+            )}
+          </>
         )}
       </div>
     </article>
