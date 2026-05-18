@@ -4,6 +4,7 @@ import { decrypt } from "@/lib/crypto";
 import { igPublish } from "@/lib/platforms/instagram-publish";
 import { ytPublish } from "@/lib/platforms/youtube-publish";
 import { ttPublishToInbox } from "@/lib/platforms/tiktok-publish";
+import { fbPublish } from "@/lib/platforms/facebook-publish";
 import { primaryMediaUrl } from "@/lib/media-urls";
 
 export type PublishResult = {
@@ -78,6 +79,24 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
             postId: out.publishId,
             url: undefined,
             error: "delivered_to_inbox_finish_in_app",
+          };
+        }
+
+        if (platform === Platform.FACEBOOK) {
+          // For Facebook the SocialAccount.platformUserId is the FB Page id
+          // and SocialAccount.accessToken is the per-page access token.
+          // Text-only posts are fine — we don't require primaryUrl here.
+          const isVideo = primaryUrl?.match(/\.(mp4|mov|m4v|webm)(\?|$)/i);
+          const out = await fbPublish(account.platformUserId, accessToken, {
+            message: combineCaption(draft),
+            imageUrl: !isVideo ? primaryUrl ?? undefined : undefined,
+            videoUrl: isVideo ? primaryUrl ?? undefined : undefined,
+          });
+          return {
+            platform,
+            ok: true,
+            postId: out.platformPostId,
+            url: out.permalink,
           };
         }
 

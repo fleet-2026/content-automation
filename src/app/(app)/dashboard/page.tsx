@@ -121,7 +121,15 @@ export default async function DashboardPage({
     }));
   }
 
-  const platforms: ("INSTAGRAM" | "YOUTUBE" | "TIKTOK")[] = ["INSTAGRAM", "YOUTUBE", "TIKTOK"];
+  // Show every platform we have a Connect flow for. LinkedIn is intentionally
+  // omitted until its OAuth route lands — listing it here without /api/connect/
+  // linkedin existing would 404 the user.
+  const platforms: ("INSTAGRAM" | "YOUTUBE" | "TIKTOK" | "FACEBOOK")[] = [
+    "INSTAGRAM",
+    "YOUTUBE",
+    "TIKTOK",
+    "FACEBOOK",
+  ];
 
   return (
     <div className="px-8 py-10 max-w-6xl">
@@ -171,7 +179,7 @@ export default async function DashboardPage({
           <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-3">
             Connect your accounts
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
             {platforms.map((p) => {
               const connected = accounts.find((a) => a.platform === p);
               return (

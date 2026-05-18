@@ -3,7 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
-type Platform = "INSTAGRAM" | "YOUTUBE" | "TIKTOK";
+// Match the Prisma Platform enum exactly so this component accepts every
+// platform we know about. Connect routes only need to exist for those that
+// have OAuth wired (currently IG / YT / TT / FB). LinkedIn falls back to
+// the same /api/connect/linkedin path when that gets built later.
+type Platform = "INSTAGRAM" | "YOUTUBE" | "TIKTOK" | "FACEBOOK" | "LINKEDIN";
 
 export function ConnectButton({
   platform,
