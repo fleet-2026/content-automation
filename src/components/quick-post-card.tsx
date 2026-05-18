@@ -17,6 +17,7 @@ import {
 import type { Platform } from "@prisma/client";
 import { saveDraft, publishDraftNow, scheduleDraft } from "@/app/(app)/compose/actions";
 import { packMediaUrls, isImageUrl } from "@/lib/media-urls";
+import { PLATFORM_INFO, ALL_PLATFORMS_ORDERED } from "@/lib/platform-info";
 
 /**
  * Compact dashboard-resident composer. Lets the user write a caption, attach
@@ -28,7 +29,6 @@ import { packMediaUrls, isImageUrl } from "@/lib/media-urls";
  * link to the full composer. Keeping the inline card lightweight prevents
  * the dashboard from turning into a full second composer.
  */
-const ALL_PLATFORMS: Platform[] = ["INSTAGRAM", "YOUTUBE", "TIKTOK"];
 const QUICK_MAX_IMAGES = 4; // dashboard card cap — push to /compose for full 10
 
 export function QuickPostCard({
@@ -39,7 +39,12 @@ export function QuickPostCard({
   const router = useRouter();
   const [caption, setCaption] = useState("");
   const [mediaUrls, setMediaUrls] = useState<string[]>([]);
-  const [platforms, setPlatforms] = useState<Platform[]>(connectedPlatforms);
+  // Default-on only the platforms the user has connected AND we can
+  // actually publish to. FB / LinkedIn are visible-but-disabled until
+  // their publish backends ship.
+  const [platforms, setPlatforms] = useState<Platform[]>(
+    connectedPlatforms.filter((p) => PLATFORM_INFO[p].publishSupported),
+  );
   const [scheduledFor, setScheduledFor] = useState("");
   const [uploading, setUploading] = useState(false);
   const [savingDraft, startSave] = useTransition();
@@ -306,31 +311,54 @@ export function QuickPostCard({
         )}
       </div>
 
-      {/* Platform toggles */}
+      {/* Platform toggles — all 5 visible. Brand color + icon when selected.
+          Disabled with explainer tooltip when either (a) the user hasn't
+          connected that account or (b) we don't have a working publish
+          backend for that platform yet (FB / LinkedIn). */}
       <div className="flex flex-wrap items-center gap-2 mt-3">
-        <span className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] mr-1">
+        <span className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] w-full sm:w-auto mr-1">
           Post to
         </span>
-        {ALL_PLATFORMS.map((p) => {
-          const enabled = connectedPlatforms.includes(p);
-          const on = platforms.includes(p);
+        {ALL_PLATFORMS_ORDERED.map((p) => {
+          const info = PLATFORM_INFO[p];
+          const Icon = info.icon;
+          const connected = connectedPlatforms.includes(p);
+          const supported = info.publishSupported;
+          const enabled = connected && supported;
+          const on = platforms.includes(p) && enabled;
+
+          let title = "";
+          if (!supported) title = `${info.label} publishing coming soon — backend integration not built yet.`;
+          else if (!connected) title = `Connect ${info.label} below to enable.`;
+
           return (
             <button
               key={p}
               type="button"
               disabled={!enabled}
               onClick={() => togglePlatform(p)}
-              title={enabled ? "" : "Connect this platform from the Connect section below"}
+              title={title}
+              style={
+                on
+                  ? { backgroundColor: info.brandColor, color: "white", borderColor: info.brandColor }
+                  : undefined
+              }
               className={
-                "px-2.5 py-1 rounded-full text-xs " +
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-full text-xs border transition " +
                 (!enabled
-                  ? "bg-[var(--color-surface-2)] text-[var(--color-muted)] line-through cursor-not-allowed"
+                  ? "bg-[var(--color-surface-2)] text-[var(--color-muted)] border-transparent line-through cursor-not-allowed opacity-60"
                   : on
-                    ? "bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium"
-                    : "bg-[var(--color-surface-2)] text-[var(--color-muted)] hover:text-[var(--color-text)]")
+                    ? "font-medium border-transparent"
+                    : "bg-[var(--color-surface-2)] text-[var(--color-muted)] border-[var(--color-border)] hover:text-[var(--color-text)] hover:border-[var(--color-muted)]")
               }
             >
-              {p.toLowerCase()}
+              <Icon className="w-3.5 h-3.5" />
+              {info.label}
+              {!supported && (
+                <span className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-amber-100 text-amber-900 normal-case font-medium">
+                  soon
+                </span>
+              )}
             </button>
           );
         })}

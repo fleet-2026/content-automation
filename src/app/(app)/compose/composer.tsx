@@ -8,6 +8,7 @@ import type { Platform } from "@prisma/client";
 import { HookOverlayEditor } from "./hook-overlay-editor";
 import { PostPreview } from "./post-preview";
 import { parseMediaUrls, packMediaUrls, isImageUrl } from "@/lib/media-urls";
+import { PLATFORM_INFO, ALL_PLATFORMS_ORDERED } from "@/lib/platform-info";
 
 type Hook = {
   text: string;
@@ -28,7 +29,6 @@ export type InitialDraft = {
   scheduledFor: string; // "YYYY-MM-DDTHH:MM" or empty
 };
 
-const ALL_PLATFORMS: Platform[] = ["INSTAGRAM", "YOUTUBE", "TIKTOK"];
 
 export function Composer({
   connectedPlatforms,
@@ -454,10 +454,19 @@ export function Composer({
         </Field>
 
         <Field label="Platforms">
-          <div className="flex gap-2">
-            {ALL_PLATFORMS.map((p) => {
-              const enabled = connectedPlatforms.includes(p);
-              const on = platforms.includes(p);
+          <div className="flex flex-wrap gap-2">
+            {ALL_PLATFORMS_ORDERED.map((p) => {
+              const info = PLATFORM_INFO[p];
+              const Icon = info.icon;
+              const connected = connectedPlatforms.includes(p);
+              const supported = info.publishSupported;
+              const enabled = connected && supported;
+              const on = platforms.includes(p) && enabled;
+
+              let title = "";
+              if (!supported) title = `${info.label} publishing coming soon — backend integration not built yet.`;
+              else if (!connected) title = `Connect ${info.label} from the dashboard to enable.`;
+
               return (
                 <button
                   key={p}
@@ -468,16 +477,28 @@ export function Composer({
                       cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p],
                     )
                   }
+                  title={title}
+                  style={
+                    on
+                      ? { backgroundColor: info.brandColor, color: "white", borderColor: info.brandColor }
+                      : undefined
+                  }
                   className={
-                    "px-3 py-1.5 rounded-full text-xs " +
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs border transition " +
                     (!enabled
-                      ? "bg-[var(--color-surface)] text-[var(--color-muted)] line-through cursor-not-allowed"
+                      ? "bg-[var(--color-surface)] text-[var(--color-muted)] border-transparent line-through cursor-not-allowed opacity-60"
                       : on
-                        ? "bg-white text-black"
-                        : "bg-[var(--color-surface-2)] text-[var(--color-muted)] hover:text-[var(--color-text)]")
+                        ? "font-medium border-transparent"
+                        : "bg-[var(--color-surface-2)] text-[var(--color-muted)] border-[var(--color-border)] hover:text-[var(--color-text)] hover:border-[var(--color-muted)]")
                   }
                 >
-                  {p.toLowerCase()}
+                  <Icon className="w-3.5 h-3.5" />
+                  {info.label}
+                  {!supported && (
+                    <span className="text-[9px] uppercase tracking-wider px-1 py-0.5 rounded bg-amber-100 text-amber-900 normal-case font-medium">
+                      soon
+                    </span>
+                  )}
                 </button>
               );
             })}
