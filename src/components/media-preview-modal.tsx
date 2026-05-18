@@ -1,7 +1,18 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { X, ChevronLeft, ChevronRight, Images } from "lucide-react";
+import Link from "next/link";
+import {
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Images,
+  Send,
+  Edit,
+  Trash2,
+  AlertTriangle,
+  Check,
+} from "lucide-react";
 import type { Platform } from "@prisma/client";
 import { isImageUrl, isVideoUrl } from "@/lib/media-urls";
 
@@ -20,24 +31,92 @@ import { isImageUrl, isVideoUrl } from "@/lib/media-urls";
  * of the host card.
  */
 export function MediaPreviewModal({
+  draftId,
   mediaUrls,
   hook,
   caption,
   hashtags,
   platforms,
   status,
+  canPublish = false,
+  canDelete = false,
+  canEdit = false,
+  onPublish,
+  onDelete,
   onClose,
 }: {
+  /** Backing draft id — used to build Edit link when `canEdit` is true. */
+  draftId?: string;
   mediaUrls: string[];
   hook: string | null;
   caption: string;
   hashtags: string[];
   platforms: Platform[];
   status?: string;
+  /** Show Publish button — caller provides onPublish. */
+  canPublish?: boolean;
+  /** Show Delete button — caller provides onDelete. */
+  canDelete?: boolean;
+  /** Show Edit link to /compose?draft=<draftId>. */
+  canEdit?: boolean;
+  /** Returns a promise so the modal can show a Publishing… state and
+   *  close on success. Caller decides what to do with errors. */
+  onPublish?: () => Promise<void> | void;
+  onDelete?: () => Promise<void> | void;
   onClose: () => void;
 }) {
   const [idx, setIdx] = useState(0);
   const total = mediaUrls.length;
+  // Two-stage confirms inside the modal so the user doesn't need a
+  // separate browser dialog (which Chrome auto-blocks after a few).
+  const [pubConfirm, setPubConfirm] = useState(false);
+  const [delConfirm, setDelConfirm] = useState(false);
+  const [actionBusy, setActionBusy] = useState<"publish" | "delete" | null>(null);
+  const [actionErr, setActionErr] = useState<string | null>(null);
+
+  async function runPublish() {
+    if (!onPublish) return;
+    if (platforms.length === 0) {
+      setActionErr("Pick at least one platform first (Edit).");
+      return;
+    }
+    if (!pubConfirm) {
+      setPubConfirm(true);
+      setDelConfirm(false);
+      return;
+    }
+    setPubConfirm(false);
+    setActionBusy("publish");
+    setActionErr(null);
+    try {
+      await onPublish();
+      onClose(); // success — close modal so the user sees the refreshed list
+    } catch (e) {
+      setActionErr(String((e as Error)?.message ?? e));
+    } finally {
+      setActionBusy(null);
+    }
+  }
+
+  async function runDelete() {
+    if (!onDelete) return;
+    if (!delConfirm) {
+      setDelConfirm(true);
+      setPubConfirm(false);
+      return;
+    }
+    setDelConfirm(false);
+    setActionBusy("delete");
+    setActionErr(null);
+    try {
+      await onDelete();
+      onClose();
+    } catch (e) {
+      setActionErr(String((e as Error)?.message ?? e));
+    } finally {
+      setActionBusy(null);
+    }
+  }
 
   // Clamp index if mediaUrls shrinks underneath us.
   useEffect(() => {
@@ -213,6 +292,12 @@ export function MediaPreviewModal({
               </>
             )}
 
+            {actionErr && (
+              <div className="mt-3 bg-red-100 border border-red-300 text-red-900 text-xs rounded-md p-2.5">
+                {actionErr}
+              </div>
+            )}
+
             {/* Thumbnail strip — quick visual map of the carousel + tap-to-jump */}
             {total > 1 && (
               <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
@@ -252,6 +337,95 @@ export function MediaPreviewModal({
             )}
           </aside>
         </div>
+
+        {/* Action footer — Edit / Publish / Delete. Hidden entirely when no
+            action is available (e.g. preview of an already-published post
+            or a demo placeholder). */}
+        {(canEdit || canPublish || canDelete) && (
+          <div className="flex items-center gap-2 px-5 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]">
+            {canEdit && draftId && (
+              <Link
+                href={`/compose?draft=${draftId}`}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-border)] font-medium"
+              >
+                <Edit className="w-3.5 h-3.5" />
+                Edit
+              </Link>
+            )}
+
+            {canPublish && onPublish && (
+              <>
+                <button
+                  type="button"
+                  onClick={runPublish}
+                  disabled={actionBusy === "publish"}
+                  className={
+                    "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 " +
+                    (pubConfirm
+                      ? "bg-amber-600 text-white hover:bg-amber-700"
+                      : "bg-[var(--color-accent)] text-[var(--color-text-on-dark)] hover:opacity-90")
+                  }
+                >
+                  {pubConfirm ? (
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  {actionBusy === "publish"
+                    ? "Publishing…"
+                    : pubConfirm
+                      ? `Confirm: post to ${platforms.map((p) => p.toLowerCase()).join(" + ")}`
+                      : "Publish now"}
+                </button>
+                {pubConfirm && actionBusy !== "publish" && (
+                  <button
+                    type="button"
+                    onClick={() => setPubConfirm(false)}
+                    className="text-xs px-2 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-text)]"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </>
+            )}
+
+            {canDelete && onDelete && (
+              <>
+                <button
+                  type="button"
+                  onClick={runDelete}
+                  disabled={actionBusy === "delete"}
+                  className={
+                    "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 ml-auto " +
+                    (delConfirm
+                      ? "bg-red-600 text-white hover:bg-red-700"
+                      : "text-red-700 hover:bg-red-50")
+                  }
+                >
+                  {delConfirm ? (
+                    <Check className="w-3.5 h-3.5" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  )}
+                  {actionBusy === "delete"
+                    ? "Deleting…"
+                    : delConfirm
+                      ? "Confirm delete"
+                      : "Delete"}
+                </button>
+                {delConfirm && actionBusy !== "delete" && (
+                  <button
+                    type="button"
+                    onClick={() => setDelConfirm(false)}
+                    className="text-xs px-2 py-1.5 text-[var(--color-muted)] hover:text-[var(--color-text)]"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -237,15 +237,29 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
 
       {/* Preview modal — rendered conditionally inside the card. Closes on
           Esc, on backdrop click, or via the X button. Carousel keyboard
-          arrows work while open. */}
+          arrows work while open. Now also exposes Edit / Publish / Delete
+          directly inside the modal so the user can publish from preview
+          without bouncing back to the card. */}
       {previewOpen && (
         <MediaPreviewModal
+          draftId={draft.id}
           mediaUrls={allMediaUrls}
           hook={draft.selectedHook}
           caption={draft.caption}
           hashtags={draft.hashtags}
           platforms={draft.platforms}
           status={draft.status}
+          canEdit={true}
+          canPublish={canPublish}
+          canDelete={canDelete}
+          onPublish={async () => {
+            await publishDraftNow(draft.id);
+            router.refresh();
+          }}
+          onDelete={async () => {
+            await deleteDraft(draft.id);
+            router.refresh();
+          }}
           onClose={() => setPreviewOpen(false)}
         />
       )}

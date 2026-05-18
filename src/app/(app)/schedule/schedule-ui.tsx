@@ -563,15 +563,30 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
 
       {/* Preview modal — full-size media + carousel + assembled text.
           Hashtags fall through as [] for demo items (which don't carry
-          them). Esc / backdrop click / arrow keys all work inside. */}
+          them). Esc / backdrop click / arrow keys all work inside.
+          Real drafts get Edit/Publish/Delete inside the modal too so
+          the user can publish without closing first. Demo items stay
+          view-only. */}
       {previewOpen && (
         <MediaPreviewModal
+          draftId={item.isReal ? item.id : undefined}
           mediaUrls={allMediaUrls}
           hook={item.hookText || null}
           caption={item.caption}
           hashtags={item.hashtags ?? []}
           platforms={item.platforms}
           status={item.status}
+          canEdit={item.isReal}
+          canPublish={item.isReal && canPublish}
+          canDelete={item.isReal && canDelete}
+          onPublish={async () => {
+            await publishDraftNow(item.id);
+            router.refresh();
+          }}
+          onDelete={async () => {
+            await deleteDraft(item.id);
+            router.refresh();
+          }}
           onClose={() => setPreviewOpen(false)}
         />
       )}
