@@ -5,6 +5,7 @@ import { igPublish } from "@/lib/platforms/instagram-publish";
 import { ytPublish } from "@/lib/platforms/youtube-publish";
 import { ttPublishToInbox } from "@/lib/platforms/tiktok-publish";
 import { fbPublish } from "@/lib/platforms/facebook-publish";
+import { liPublishText } from "@/lib/platforms/linkedin-publish";
 import { primaryMediaUrl } from "@/lib/media-urls";
 
 export type PublishResult = {
@@ -79,6 +80,28 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
             postId: out.publishId,
             url: undefined,
             error: "delivered_to_inbox_finish_in_app",
+          };
+        }
+
+        if (platform === Platform.LINKEDIN) {
+          // SocialAccount.platformUserId for LinkedIn is the bare `sub`
+          // from /userinfo — liPublishText prepends `urn:li:person:`.
+          // Currently text-only. If the draft has media attached we still
+          // post the text body; image/video posting is a future enhancement
+          // requiring the asset upload flow.
+          const text = combineCaption(draft).trim();
+          if (!text) {
+            return { platform, ok: false, error: "missing_text" };
+          }
+          const out = await liPublishText(account.platformUserId, accessToken, {
+            message: text,
+          });
+          return {
+            platform,
+            ok: true,
+            postId: out.platformPostId,
+            url: out.permalink,
+            error: primaryUrl ? "media_not_yet_posted_text_only_for_now" : undefined,
           };
         }
 

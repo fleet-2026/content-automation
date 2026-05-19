@@ -54,7 +54,7 @@ export const PLATFORM_INFO: Record<Platform, PlatformInfo> = {
     label: "LinkedIn",
     brandColor: "#0A66C2",
     icon: ({ className }) => <Linkedin className={className} />,
-    publishSupported: false,
+    publishSupported: true,
   },
 };
 
