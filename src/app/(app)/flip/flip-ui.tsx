@@ -12,6 +12,7 @@ import {
   Check,
   Loader2,
   Zap,
+  Download,
 } from "lucide-react";
 import {
   flipFromUrl,
@@ -19,6 +20,7 @@ import {
   ideasForNiche,
   buildImagePrompts,
   buildVideoPrompts,
+  extractVideo,
 } from "./actions";
 
 type Tab = "url" | "rewrite" | "ideas" | "image" | "video";
@@ -113,6 +115,17 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
   const [out, setOut] = useState<UrlExtractOut | null>(null);
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  // Video download state — separate from the FlipIt text extract because
+  // video extraction goes through Apify/tikwm and can take 10-30s.
+  const [video, setVideo] = useState<{
+    videoUrl?: string;
+    thumbnailUrl?: string;
+    author?: string;
+    duration?: number;
+    error?: string;
+    source?: string;
+  } | null>(null);
+  const [videoPending, startVideo] = useTransition();
 
   useEffect(() => setUrl(initialUrl), [initialUrl]);
 
@@ -120,6 +133,7 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
     if (!url.trim()) return;
     setErr(null);
     setOut(null);
+    setVideo(null);
     start(async () => {
       try {
         const r = (await flipFromUrl(url.trim())) as UrlExtractOut;
@@ -127,6 +141,29 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
         persistCarousel(r.sourceImages, url.trim());
       } catch (e) {
         setErr(String((e as Error).message ?? e));
+      }
+    });
+  }
+
+  function getVideo() {
+    if (!url.trim()) return;
+    setVideo(null);
+    startVideo(async () => {
+      try {
+        const r = await extractVideo(url.trim());
+        if (r.ok) {
+          setVideo({
+            videoUrl: r.videoUrl,
+            thumbnailUrl: r.thumbnailUrl,
+            author: r.author,
+            duration: r.duration,
+            source: r.source,
+          });
+        } else {
+          setVideo({ error: r.error ?? "Video extraction failed.", source: r.source });
+        }
+      } catch (e) {
+        setVideo({ error: String((e as Error).message ?? e) });
       }
     });
   }
@@ -153,6 +190,87 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
       </Field>
 
       {err && <ErrorBox message={err} />}
+
+      {/* Video download — works for TikTok + Instagram URLs. FlipIt only
+          extracts text + image thumbnails, so this is a separate step
+          that uses tikwm (TikTok, fast + free) or Apify (IG + TikTok
+          fallback) to fetch the actual downloadable video URL. Available
+          alongside the Flip output so the user can grab the source video
+          regardless of whether the text extract succeeded. */}
+      {url.trim() && (
+        <div className="border rounded-xl bg-[var(--color-surface)] p-4 space-y-3">
+          <div className="flex items-baseline justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="text-sm font-semibold flex items-center gap-2">
+                <Download className="w-4 h-4 text-[var(--color-accent)]" />
+                Download original video
+              </h3>
+              <p className="text-[11px] text-[var(--color-muted)] mt-0.5">
+                Pulls the unwatermarked video file from TikTok / Instagram.
+              </p>
+            </div>
+            <button
+              onClick={getVideo}
+              disabled={videoPending}
+              className="text-xs px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium disabled:opacity-50 inline-flex items-center gap-1.5"
+            >
+              {videoPending ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" /> Extracting…
+                </>
+              ) : (
+                <>
+                  <Download className="w-3.5 h-3.5" /> Get video
+                </>
+              )}
+            </button>
+          </div>
+
+          {video?.error && (
+            <div className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+              {video.error}
+              {video.source === "unsupported" && (
+                <div className="mt-1 text-[10px] text-red-900/70">
+                  Supported: tiktok.com, instagram.com URLs.
+                </div>
+              )}
+            </div>
+          )}
+
+          {video?.videoUrl && (
+            <div className="space-y-2">
+              <video
+                src={video.videoUrl}
+                controls
+                playsInline
+                poster={video.thumbnailUrl}
+                className="w-full max-h-[60vh] rounded-lg bg-black"
+                preload="metadata"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <a
+                  href={video.videoUrl}
+                  download
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs px-3 py-1.5 rounded-md bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium inline-flex items-center gap-1.5"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download MP4
+                </a>
+                {video.author && (
+                  <span className="text-[11px] text-[var(--color-muted)]">
+                    @{video.author}
+                    {video.duration ? ` · ${video.duration}s` : ""}
+                  </span>
+                )}
+                <span className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] ml-auto">
+                  via {video.source}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {out && (
         <div className="space-y-4">

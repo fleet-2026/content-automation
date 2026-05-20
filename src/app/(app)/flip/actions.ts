@@ -1,6 +1,7 @@
 "use server";
 
 import * as flipit from "@/lib/flipit";
+import { extractVideoUrl as extractVideoUrlImpl } from "@/lib/video-extract";
 import { requireUser } from "@/lib/auth-helpers";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 import {
@@ -79,4 +80,18 @@ export async function analyzeImage(input: { imageUrl: string; slideNumber?: numb
 export async function trending(input: { niche?: string; hashtag?: string; count?: number }) {
   await gate("trending");
   return flipit.trending(input);
+}
+
+/**
+ * Extract the downloadable video URL from a TikTok / Instagram URL.
+ * Used by the /flip URL tab "Download original video" button. FlipIt's
+ * own API only returns image thumbnails, so this is a separate path
+ * that uses tikwm (fast, free) for TikTok and Apify for Instagram.
+ *
+ * Rate-limited per user via the existing FLIPIT bucket so we don't
+ * accidentally burn an Apify quota.
+ */
+export async function extractVideo(url: string) {
+  await gate("video extract");
+  return extractVideoUrlImpl(url);
 }

@@ -1,6 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
+import { env } from "@/lib/env";
 
-const apiKey = process.env.ANTHROPIC_API_KEY;
+// Read via env() to strip BOM / wrapping quotes / hidden control chars.
+// Same hardening we did for r2.ts and the OAuth env vars — when a value
+// has a U+FEFF byte at position 0 (common from .env.local files saved as
+// UTF-8-with-BOM), the Anthropic SDK's Authorization header gets an
+// invalid character and Node rejects the outbound HTTPS request with
+// "Invalid character in header content [\"authorization\"]". That looks
+// to a debugging user like an Anthropic outage but is purely client-side.
+const apiKey = env("ANTHROPIC_API_KEY");
 
 export const anthropic = new Anthropic({
   apiKey: apiKey ?? "",
@@ -15,6 +23,8 @@ export const MODELS = {
 
 export function assertAnthropicConfigured() {
   if (!apiKey) {
-    throw new Error("ANTHROPIC_API_KEY is not set in .env.local");
+    throw new Error(
+      "ANTHROPIC_API_KEY is not set (or only contains BOM/whitespace after sanitization). Check your Vercel env vars.",
+    );
   }
 }
