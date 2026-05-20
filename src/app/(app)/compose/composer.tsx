@@ -595,6 +595,35 @@ export function Composer({
         </Field>
 
         <Field label="Platforms">
+          {/* "Select all connected" shortcut. Click to flip every
+              connected + publish-supported platform on at once. The
+              existing per-pill toggles stay for fine-grained control. */}
+          {(() => {
+            const eligible = ALL_PLATFORMS_ORDERED.filter(
+              (p) => connectedPlatforms.includes(p) && PLATFORM_INFO[p].publishSupported,
+            );
+            const allSelected =
+              eligible.length > 0 && eligible.every((p) => platforms.includes(p));
+            if (eligible.length === 0) return null;
+            return (
+              <div className="mb-2">
+                <button
+                  type="button"
+                  onClick={() => setPlatforms(allSelected ? [] : [...eligible])}
+                  className="text-[11px] text-[var(--color-accent)] hover:underline font-medium"
+                  title={
+                    allSelected
+                      ? "Deselect all platforms"
+                      : `Post to all ${eligible.length} connected platforms at once`
+                  }
+                >
+                  {allSelected
+                    ? "Deselect all"
+                    : `Select all (${eligible.length}) →`}
+                </button>
+              </div>
+            );
+          })()}
           <div className="flex flex-wrap gap-2">
             {ALL_PLATFORMS_ORDERED.map((p) => {
               const info = PLATFORM_INFO[p];

@@ -319,6 +319,34 @@ export function QuickPostCard({
         <span className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] w-full sm:w-auto mr-1">
           Post to
         </span>
+        {/* "Select all" shortcut — auto-toggles every connected AND
+            publish-supported platform so the user doesn't have to click
+            each pill. Hidden when nothing is currently available to add
+            (everything already selected, or no connected platforms). */}
+        {(() => {
+          const eligible = ALL_PLATFORMS_ORDERED.filter(
+            (p) => connectedPlatforms.includes(p) && PLATFORM_INFO[p].publishSupported,
+          );
+          const allSelected =
+            eligible.length > 0 && eligible.every((p) => platforms.includes(p));
+          if (eligible.length === 0) return null;
+          return (
+            <button
+              type="button"
+              onClick={() => {
+                setPlatforms(allSelected ? [] : [...eligible]);
+              }}
+              className="text-[10px] uppercase tracking-wider text-[var(--color-accent)] hover:underline font-medium"
+              title={
+                allSelected
+                  ? "Deselect all platforms"
+                  : `Post to all ${eligible.length} connected platforms at once`
+              }
+            >
+              {allSelected ? "Deselect all" : `Select all (${eligible.length})`}
+            </button>
+          );
+        })()}
         {ALL_PLATFORMS_ORDERED.map((p) => {
           const info = PLATFORM_INFO[p];
           const Icon = info.icon;
