@@ -150,8 +150,17 @@ export function instagramAuthUrl(redirectUri: string, state: string): string {
     redirect_uri: redirectUri,
     state,
     response_type: "code",
+    // CRITICAL: instagram_content_publish is required by the Graph API
+    // endpoints POST /{ig-user-id}/media and /media_publish that
+    // instagram-publish.ts uses. Without it, Meta returns the cryptic
+    // "Unsupported state or unable to authenticate data" error which
+    // looks like a token expiry but is actually a missing-scope failure.
+    //
+    // Order: keep instagram_basic first — Meta's consent screen renders
+    // the first listed scope as the primary "what this app wants" line.
     scope: [
       "instagram_basic",
+      "instagram_content_publish",
       "instagram_manage_insights",
       "pages_show_list",
       "pages_read_engagement",
