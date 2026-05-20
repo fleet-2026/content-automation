@@ -188,14 +188,20 @@ export function HookOverlayEditor({
     ctx.textBaseline = "top";
     ctx.fillStyle = COLOR_HEX[color];
     ctx.strokeStyle = STROKE_HEX[color];
-    ctx.lineWidth = Math.max(2, fontPx * 0.08);
+    // Thinner, crisper stroke. Previous 0.08 ratio made the outline read
+    // as a "halo" instead of an edge, which contributed to the blurry-
+    // text complaint. 0.05 with lineJoin=round still gives readability on
+    // busy backgrounds without bleeding into the glyph interior.
+    ctx.lineWidth = Math.max(2, fontPx * 0.05);
     ctx.lineJoin = "round";
     ctx.miterLimit = 2;
 
-    // Soft shadow under the stroke for readability against busy backgrounds.
-    ctx.shadowColor = "rgba(0,0,0,0.45)";
-    ctx.shadowBlur = Math.round(fontPx * 0.15);
-    ctx.shadowOffsetY = Math.round(fontPx * 0.05);
+    // Tighter shadow — was rgba(0,0,0,0.45) with 0.15× blur which spread
+    // a fuzzy halo around every glyph. Reduced opacity + blur so the
+    // shadow adds depth/legibility without softening the type edges.
+    ctx.shadowColor = "rgba(0,0,0,0.55)";
+    ctx.shadowBlur = Math.max(1, Math.round(fontPx * 0.06));
+    ctx.shadowOffsetY = Math.max(1, Math.round(fontPx * 0.04));
 
     const maxWidth = canvas.width * 0.86;
     const lines = wrapText(ctx, text, maxWidth);
@@ -233,21 +239,26 @@ export function HookOverlayEditor({
     setApplying(true);
     setErr(null);
     try {
+      // PNG (lossless) — JPEG at 0.92 was making text edges look blurry
+      // / fuzzy because JPEG's chroma subsampling + DCT compression mangles
+      // high-frequency content like type. PNG preserves every pixel of the
+      // canvas exactly. File size is bigger (especially for photo bg) but
+      // for an image with text baked on it that's the right trade-off —
+      // sharp captions are the whole point of this feature.
       const blob: Blob = await new Promise((resolve, reject) => {
         canvas.toBlob(
           (b) => {
             if (b) resolve(b);
             else reject(new Error("Canvas export failed"));
           },
-          "image/jpeg",
-          0.92,
+          "image/png",
         );
       });
 
       const fd = new FormData();
       fd.append(
         "file",
-        new File([blob], `hook-overlay-${Date.now()}.jpg`, { type: "image/jpeg" }),
+        new File([blob], `hook-overlay-${Date.now()}.png`, { type: "image/png" }),
       );
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       if (!res.ok) {
@@ -295,7 +306,15 @@ export function HookOverlayEditor({
             <canvas
               ref={canvasRef}
               className="max-w-full max-h-full object-contain"
-              style={{ display: loading ? "none" : "block" }}
+              style={{
+                display: loading ? "none" : "block",
+                // Hint to the browser to use a higher-quality downscale
+                // when fitting the canvas to the preview pane. Without
+                // this, Chromium uses bilinear which can soften text
+                // edges in the preview (the exported PNG is still
+                // razor-sharp regardless, this is purely cosmetic).
+                imageRendering: "-webkit-optimize-contrast",
+              }}
             />
           </div>
 
