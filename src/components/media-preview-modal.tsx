@@ -9,9 +9,11 @@ import {
   Images,
   Send,
   Edit,
+  Edit2,
   Trash2,
   AlertTriangle,
   Check,
+  Save,
 } from "lucide-react";
 import type { Platform } from "@prisma/client";
 import { isImageUrl, isVideoUrl } from "@/lib/media-urls";
@@ -43,6 +45,7 @@ export function MediaPreviewModal({
   canEdit = false,
   onPublish,
   onDelete,
+  onSaveDraft,
   onClose,
 }: {
   /** Backing draft id — used to build Edit link when `canEdit` is true. */
@@ -57,12 +60,24 @@ export function MediaPreviewModal({
   canPublish?: boolean;
   /** Show Delete button — caller provides onDelete. */
   canDelete?: boolean;
-  /** Show Edit link to /compose?draft=<draftId>. */
+  /** Show Edit link to /compose?draft=<draftId> + an inline "Quick edit"
+   *  toggle that lets the user modify caption + hook + hashtags without
+   *  leaving the modal. The full composer (with media swap, hooks A/B,
+   *  hook-on-image canvas, etc.) still lives at /compose?draft=<id>. */
   canEdit?: boolean;
   /** Returns a promise so the modal can show a Publishing… state and
    *  close on success. Caller decides what to do with errors. */
   onPublish?: () => Promise<void> | void;
   onDelete?: () => Promise<void> | void;
+  /** Optional inline-save handler. When provided AND canEdit=true, an
+   *  "Edit inline" toggle appears next to the Edit link. Caller receives
+   *  the next state of caption / selectedHook / hashtags and should
+   *  persist via saveDraft + router.refresh(). */
+  onSaveDraft?: (input: {
+    caption: string;
+    selectedHook: string | null;
+    hashtags: string[];
+  }) => Promise<void> | void;
   onClose: () => void;
 }) {
   const [idx, setIdx] = useState(0);
@@ -71,8 +86,54 @@ export function MediaPreviewModal({
   // separate browser dialog (which Chrome auto-blocks after a few).
   const [pubConfirm, setPubConfirm] = useState(false);
   const [delConfirm, setDelConfirm] = useState(false);
-  const [actionBusy, setActionBusy] = useState<"publish" | "delete" | null>(null);
+  const [actionBusy, setActionBusy] = useState<"publish" | "delete" | "save" | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
+
+  // Inline edit mode — turns the text panel into editable fields. State
+  // mirrors what saveDraft expects in compose/actions.ts: caption +
+  // selectedHook + hashtags array. Hashtags are extracted from the caption
+  // by the `#word` regex on save, the same way the Composer does.
+  const [editing, setEditing] = useState(false);
+  const [editHook, setEditHook] = useState(hook ?? "");
+  const [editCaption, setEditCaption] = useState(caption);
+  const [editHashtagsRaw, setEditHashtagsRaw] = useState(
+    hashtags.map((h) => `#${h}`).join(" "),
+  );
+
+  function enterEdit() {
+    setEditing(true);
+    setEditHook(hook ?? "");
+    setEditCaption(caption);
+    setEditHashtagsRaw(hashtags.map((h) => `#${h}`).join(" "));
+    setActionErr(null);
+  }
+
+  function cancelEdit() {
+    setEditing(false);
+    setActionErr(null);
+  }
+
+  async function saveEdit() {
+    if (!onSaveDraft) return;
+    setActionBusy("save");
+    setActionErr(null);
+    try {
+      const cleanHashtags = editHashtagsRaw
+        .split(/[,\s]+/)
+        .map((s) => s.replace(/^#/, "").trim().toLowerCase())
+        .filter(Boolean);
+      await onSaveDraft({
+        caption: editCaption,
+        selectedHook: editHook.trim() ? editHook : null,
+        hashtags: cleanHashtags,
+      });
+      setEditing(false);
+    } catch (e) {
+      setActionErr(String((e as Error)?.message ?? e));
+    } finally {
+      setActionBusy(null);
+    }
+  }
 
   async function runPublish() {
     if (!onPublish) return;
@@ -270,7 +331,59 @@ export function MediaPreviewModal({
               </div>
             )}
 
-            {!hasText ? (
+            {editing ? (
+              // Inline edit form. Mirrors the Composer's caption/hook/
+              // hashtags structure so the saved draft looks identical
+              // whether you edited in /compose or here.
+              <div className="space-y-3">
+                <Field label="Hook (shown first on publish)">
+                  <input
+                    type="text"
+                    value={editHook}
+                    onChange={(e) => setEditHook(e.target.value)}
+                    placeholder="Hook line (optional)"
+                    className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)] text-sm"
+                  />
+                </Field>
+                <Field label="Caption / body">
+                  <textarea
+                    value={editCaption}
+                    onChange={(e) => setEditCaption(e.target.value)}
+                    rows={6}
+                    placeholder="Caption text"
+                    className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)] text-sm resize-y"
+                  />
+                </Field>
+                <Field label="Hashtags">
+                  <input
+                    type="text"
+                    value={editHashtagsRaw}
+                    onChange={(e) => setEditHashtagsRaw(e.target.value)}
+                    placeholder="#tag #another"
+                    className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)] text-sm"
+                  />
+                </Field>
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={saveEdit}
+                    disabled={actionBusy === "save"}
+                    className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium disabled:opacity-50"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    {actionBusy === "save" ? "Saving…" : "Save changes"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelEdit}
+                    disabled={actionBusy === "save"}
+                    className="text-xs px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] disabled:opacity-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : !hasText ? (
               <p className="text-sm text-[var(--color-muted)] italic">
                 No caption.
               </p>
@@ -343,13 +456,30 @@ export function MediaPreviewModal({
             or a demo placeholder). */}
         {(canEdit || canPublish || canDelete) && (
           <div className="flex items-center gap-2 px-5 py-3 border-t border-[var(--color-border)] bg-[var(--color-surface-2)]">
+            {/* Inline quick edit — only shown when an onSaveDraft callback
+                is wired. Toggling this expands the right panel into an
+                edit form without leaving the modal. The full-editor Edit
+                link below is still useful for media swap / hooks A/B. */}
+            {canEdit && onSaveDraft && !editing && (
+              <button
+                type="button"
+                onClick={enterEdit}
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] hover:opacity-90 font-medium"
+                title="Edit caption / hook / hashtags inline"
+              >
+                <Edit2 className="w-3.5 h-3.5" />
+                Edit inline
+              </button>
+            )}
+
             {canEdit && draftId && (
               <Link
                 href={`/compose?draft=${draftId}`}
                 className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface)] hover:bg-[var(--color-border)] font-medium"
+                title="Open the full composer (media swap, hooks A/B, hook-on-image)"
               >
                 <Edit className="w-3.5 h-3.5" />
-                Edit
+                Full editor
               </Link>
             )}
 
@@ -428,5 +558,24 @@ export function MediaPreviewModal({
         )}
       </div>
     </div>
+  );
+}
+
+/** Tight inline-form field label. Keeps the edit panel readable without
+ *  adding 20 lines of repeated markup per field. */
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="block">
+      <span className="block text-[10px] uppercase tracking-wider text-[var(--color-muted)] mb-1">
+        {label}
+      </span>
+      {children}
+    </label>
   );
 }

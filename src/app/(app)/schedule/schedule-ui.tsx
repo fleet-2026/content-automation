@@ -27,7 +27,7 @@ import {
   type DemoAutomation,
   type DemoRecurringSlot,
 } from "@/lib/demo-data";
-import { publishDraftNow, deleteDraft } from "../compose/actions";
+import { publishDraftNow, deleteDraft, saveDraft } from "../compose/actions";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const PLATFORM_COLORS: Record<string, string> = {
@@ -587,6 +587,25 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
             await deleteDraft(item.id);
             router.refresh();
           }}
+          onSaveDraft={
+            item.isReal
+              ? async ({ caption, selectedHook, hashtags }) => {
+                  // Inline edit from preview. Preserves the schedule, the
+                  // selected platforms, and the media; only the text fields
+                  // get rewritten.
+                  await saveDraft({
+                    draftId: item.id,
+                    caption,
+                    hashtags,
+                    selectedHook,
+                    mediaUrl: item.mediaUrl,
+                    platforms: item.platforms,
+                    scheduledFor: item.scheduledAt.toISOString(),
+                  });
+                  router.refresh();
+                }
+              : undefined
+          }
           onClose={() => setPreviewOpen(false)}
         />
       )}

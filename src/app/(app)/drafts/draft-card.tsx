@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Send, Edit, Trash2, ExternalLink, Images, Check, AlertTriangle, Eye } from "lucide-react";
 import type { Platform, DraftStatus } from "@prisma/client";
-import { publishDraftNow, deleteDraft } from "../compose/actions";
+import { publishDraftNow, deleteDraft, saveDraft } from "../compose/actions";
 import { parseMediaUrls } from "@/lib/media-urls";
 import { MediaPreviewModal } from "@/components/media-preview-modal";
 
@@ -258,6 +258,23 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
           }}
           onDelete={async () => {
             await deleteDraft(draft.id);
+            router.refresh();
+          }}
+          onSaveDraft={async ({ caption, selectedHook, hashtags }) => {
+            // Inline edit from preview: only mutates the text fields.
+            // Media + platforms + scheduledFor stay as-is — the full
+            // editor is the path for those.
+            await saveDraft({
+              draftId: draft.id,
+              caption,
+              hashtags,
+              selectedHook,
+              mediaUrl: draft.mediaUrl,
+              platforms: draft.platforms,
+              scheduledFor: draft.scheduledFor
+                ? draft.scheduledFor.toISOString()
+                : null,
+            });
             router.refresh();
           }}
           onClose={() => setPreviewOpen(false)}
