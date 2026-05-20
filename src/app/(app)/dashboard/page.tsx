@@ -10,6 +10,7 @@ import { PostRatings, type RatedPostForUI } from "@/components/post-ratings";
 import { MyLinksSection, MyLinksSectionSkeleton } from "@/components/my-links-section";
 import { IntegrationStatus } from "@/components/integration-status";
 import { QuickPostCard } from "@/components/quick-post-card";
+import { ENABLED_PLATFORMS_ORDERED } from "@/lib/platform-info";
 import { getFollowerGrowth, getBestTimeToPost } from "@/lib/analytics";
 import { getCompoundingMap } from "@/lib/compound";
 import { ratePosts } from "@/lib/post-rating";
@@ -121,14 +122,10 @@ export default async function DashboardPage({
     }));
   }
 
-  // Show every platform we have a Connect flow for.
-  const platforms: ("INSTAGRAM" | "YOUTUBE" | "TIKTOK" | "FACEBOOK" | "LINKEDIN")[] = [
-    "INSTAGRAM",
-    "YOUTUBE",
-    "TIKTOK",
-    "FACEBOOK",
-    "LINKEDIN",
-  ];
+  // Show only platforms that are currently enabled in platform-info.tsx.
+  // YouTube and LinkedIn are hidden via `enabled: false` — flip back on
+  // in src/lib/platform-info.tsx when you want them visible again.
+  const platforms = ENABLED_PLATFORMS_ORDERED;
 
   return (
     <div className="px-8 py-10 max-w-6xl">
@@ -178,7 +175,7 @@ export default async function DashboardPage({
           <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--color-muted)] mb-3">
             Connect your accounts
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {platforms.map((p) => {
               const connected = accounts.find((a) => a.platform === p);
               return (

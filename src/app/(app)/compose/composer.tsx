@@ -9,7 +9,7 @@ import type { Platform } from "@prisma/client";
 import { HookOverlayEditor } from "./hook-overlay-editor";
 import { PostPreview } from "./post-preview";
 import { parseMediaUrls, parseMusicUrl, packMediaUrls, isImageUrl } from "@/lib/media-urls";
-import { PLATFORM_INFO, ALL_PLATFORMS_ORDERED } from "@/lib/platform-info";
+import { PLATFORM_INFO, ENABLED_PLATFORMS_ORDERED } from "@/lib/platform-info";
 
 type Hook = {
   text: string;
@@ -599,7 +599,7 @@ export function Composer({
               connected + publish-supported platform on at once. The
               existing per-pill toggles stay for fine-grained control. */}
           {(() => {
-            const eligible = ALL_PLATFORMS_ORDERED.filter(
+            const eligible = ENABLED_PLATFORMS_ORDERED.filter(
               (p) => connectedPlatforms.includes(p) && PLATFORM_INFO[p].publishSupported,
             );
             const allSelected =
@@ -625,7 +625,7 @@ export function Composer({
             );
           })()}
           <div className="flex flex-wrap gap-2">
-            {ALL_PLATFORMS_ORDERED.map((p) => {
+            {ENABLED_PLATFORMS_ORDERED.map((p) => {
               const info = PLATFORM_INFO[p];
               const Icon = info.icon;
               const connected = connectedPlatforms.includes(p);

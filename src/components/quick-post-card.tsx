@@ -17,7 +17,7 @@ import {
 import type { Platform } from "@prisma/client";
 import { saveDraft, publishDraftNow, scheduleDraft } from "@/app/(app)/compose/actions";
 import { packMediaUrls, isImageUrl } from "@/lib/media-urls";
-import { PLATFORM_INFO, ALL_PLATFORMS_ORDERED } from "@/lib/platform-info";
+import { PLATFORM_INFO, ENABLED_PLATFORMS_ORDERED } from "@/lib/platform-info";
 
 /**
  * Compact dashboard-resident composer. Lets the user write a caption, attach
@@ -324,7 +324,7 @@ export function QuickPostCard({
             each pill. Hidden when nothing is currently available to add
             (everything already selected, or no connected platforms). */}
         {(() => {
-          const eligible = ALL_PLATFORMS_ORDERED.filter(
+          const eligible = ENABLED_PLATFORMS_ORDERED.filter(
             (p) => connectedPlatforms.includes(p) && PLATFORM_INFO[p].publishSupported,
           );
           const allSelected =
@@ -347,7 +347,7 @@ export function QuickPostCard({
             </button>
           );
         })()}
-        {ALL_PLATFORMS_ORDERED.map((p) => {
+        {ENABLED_PLATFORMS_ORDERED.map((p) => {
           const info = PLATFORM_INFO[p];
           const Icon = info.icon;
           const connected = connectedPlatforms.includes(p);

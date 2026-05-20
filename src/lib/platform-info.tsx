@@ -20,6 +20,11 @@ export type PlatformInfo = {
   brandColor: string; // hex — used for selected-state bg + icon tint
   icon: (props: { className?: string }) => ReactNode;
   publishSupported: boolean;
+  /** When false, the platform is hidden from all UI surfaces (pickers,
+   *  dashboard Connect grid). Existing drafts that reference the
+   *  platform still publish normally — only NEW post creation hides
+   *  the option. Flip to true to re-enable. */
+  enabled: boolean;
 };
 
 export const PLATFORM_INFO: Record<Platform, PlatformInfo> = {
@@ -28,6 +33,7 @@ export const PLATFORM_INFO: Record<Platform, PlatformInfo> = {
     brandColor: "#E1306C",
     icon: ({ className }) => <Instagram className={className} />,
     publishSupported: true,
+    enabled: true,
   },
   TIKTOK: {
     label: "TikTok",
@@ -37,28 +43,39 @@ export const PLATFORM_INFO: Record<Platform, PlatformInfo> = {
     // label next to it disambiguates.
     icon: ({ className }) => <Music2 className={className} />,
     publishSupported: true,
+    enabled: true,
   },
   YOUTUBE: {
     label: "YouTube",
     brandColor: "#FF0000",
     icon: ({ className }) => <Youtube className={className} />,
     publishSupported: true,
+    // User asked to hide YouTube from the active picker — flip to true
+    // when you want it back.
+    enabled: false,
   },
   FACEBOOK: {
     label: "Facebook",
     brandColor: "#1877F2",
     icon: ({ className }) => <Facebook className={className} />,
     publishSupported: true,
+    enabled: true,
   },
   LINKEDIN: {
     label: "LinkedIn",
     brandColor: "#0A66C2",
     icon: ({ className }) => <Linkedin className={className} />,
     publishSupported: true,
+    // User asked to hide LinkedIn from the active picker — flip to true
+    // when you want it back.
+    enabled: false,
   },
 };
 
-/** Ordered list — Instagram first because that's the primary target. */
+/** Full ordered list — Instagram first because that's the primary target.
+ *  Includes platforms that are currently hidden via `enabled: false`. Use
+ *  this for back-compat reads (existing drafts may reference hidden
+ *  platforms). Use ENABLED_PLATFORMS_ORDERED for new-post UI. */
 export const ALL_PLATFORMS_ORDERED: Platform[] = [
   "INSTAGRAM",
   "TIKTOK",
@@ -66,3 +83,7 @@ export const ALL_PLATFORMS_ORDERED: Platform[] = [
   "FACEBOOK",
   "LINKEDIN",
 ];
+
+/** Visible-in-UI ordered list. Drops platforms with `enabled: false`. */
+export const ENABLED_PLATFORMS_ORDERED: Platform[] =
+  ALL_PLATFORMS_ORDERED.filter((p) => PLATFORM_INFO[p].enabled);
