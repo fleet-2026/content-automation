@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import type { Platform } from "@prisma/client";
 import { saveDraft, publishDraftNow, scheduleDraft } from "@/app/(app)/compose/actions";
-import { packMediaUrls, isImageUrl } from "@/lib/media-urls";
+import { packMediaUrls, isImageUrl, isVideoUrl } from "@/lib/media-urls";
 import { PLATFORM_INFO, ENABLED_PLATFORMS_ORDERED } from "@/lib/platform-info";
 
 /**
@@ -271,7 +271,7 @@ export function QuickPostCard({
           {uploading
             ? "Uploading…"
             : mediaUrls.length === 0
-              ? "Add image"
+              ? "Add image or video"
               : "Add more"}
           <input
             type="file"
@@ -290,9 +290,20 @@ export function QuickPostCard({
             {isImageUrl(u) ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={u} alt="" loading="lazy" className="w-full h-full object-cover" />
+            ) : isVideoUrl(u) ? (
+              // Render an actual video preview thumbnail instead of the
+              // text "video" placeholder so the user can see what they
+              // attached. preload="metadata" keeps it lightweight.
+              <video
+                src={u}
+                muted
+                playsInline
+                preload="metadata"
+                className="w-full h-full object-cover bg-black"
+              />
             ) : (
               <div className="w-full h-full grid place-items-center text-[9px] uppercase tracking-wider text-[var(--color-muted)]">
-                video
+                media
               </div>
             )}
             <button

@@ -8,7 +8,7 @@ import { generateHookVariants, saveDraft, publishDraftNow, scheduleDraft } from 
 import type { Platform } from "@prisma/client";
 import { HookOverlayEditor } from "./hook-overlay-editor";
 import { PostPreview } from "./post-preview";
-import { parseMediaUrls, parseMusicUrl, packMediaUrls, isImageUrl } from "@/lib/media-urls";
+import { parseMediaUrls, parseMusicUrl, packMediaUrls, isImageUrl, isVideoUrl } from "@/lib/media-urls";
 import { PLATFORM_INFO, ENABLED_PLATFORMS_ORDERED } from "@/lib/platform-info";
 
 type Hook = {
@@ -379,8 +379,8 @@ export function Composer({
               {uploading
                 ? "Uploading…"
                 : mediaUrls.length === 0
-                  ? "Upload"
-                  : "Add image"}
+                  ? "Upload image or video"
+                  : "Add more"}
               <input
                 type="file"
                 hidden
@@ -444,9 +444,23 @@ export function Composer({
                           decoding="async"
                           className="w-full h-full object-cover"
                         />
+                      ) : isVideoUrl(u) ? (
+                        // Actual video preview thumbnail. preload="metadata"
+                        // pulls just the first frame, not the whole file —
+                        // keeps the grid fast even with 10 video slots.
+                        // Muted + playsInline lets the browser autoplay-tease
+                        // on hover without sound. No controls because they'd
+                        // clash with the slot's overlay buttons.
+                        <video
+                          src={u}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="w-full h-full object-cover bg-black"
+                        />
                       ) : (
                         <div className="w-full h-full grid place-items-center text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
-                          video
+                          media
                         </div>
                       )}
                       {isPrimary && (
@@ -477,12 +491,17 @@ export function Composer({
                   ) : (
                     // Empty slot — labeled "1" / "2" / … so the carousel
                     // ordering is visible. Clicking it triggers the file
-                    // picker just like the "Add image" button does.
+                    // picker which accepts BOTH images and videos. Shown
+                    // sub-label makes that explicit since the icon alone
+                    // reads as image-only.
                     <label className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer text-[var(--color-muted)] hover:text-[var(--color-accent)] hover:bg-[var(--color-surface-2)] transition">
                       <Plus className="w-5 h-5 mb-1 opacity-60" />
                       <span className="text-[10px] uppercase tracking-wider">
                         Slot {idx + 1}
                         {isPrimary ? " (Primary)" : ""}
+                      </span>
+                      <span className="text-[9px] text-[var(--color-muted)]/60 normal-case mt-0.5">
+                        image or video
                       </span>
                       <input
                         type="file"
