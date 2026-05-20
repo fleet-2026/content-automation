@@ -3,10 +3,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Edit, Trash2, ExternalLink, Images, Check, AlertTriangle, Eye } from "lucide-react";
+import { Send, Edit, Trash2, ExternalLink, Images, Check, AlertTriangle, Eye, Music2 } from "lucide-react";
 import type { Platform, DraftStatus } from "@prisma/client";
 import { publishDraftNow, deleteDraft, saveDraft } from "../compose/actions";
-import { parseMediaUrls } from "@/lib/media-urls";
+import { parseMediaUrls, parseMusicUrl } from "@/lib/media-urls";
+import { stripHookPrefix } from "@/lib/captions";
 import { MediaPreviewModal } from "@/components/media-preview-modal";
 
 // `publishResults` is stored as `Json?` in Prisma. Each entry came from
@@ -65,8 +66,11 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
 
   // mediaUrl may contain a newline-packed list of URLs when the draft is a
   // carousel. Pull out the primary for the thumbnail and keep the count so
-  // we can badge multi-image drafts.
+  // we can badge multi-image drafts. Background music URL (if any) is
+  // packed in the same field with the `audio::` prefix — surfaced as a
+  // small badge next to the platform list.
   const allMediaUrls = parseMediaUrls(draft.mediaUrl);
+  const draftMusicUrl = parseMusicUrl(draft.mediaUrl);
   const primary = allMediaUrls[0] ?? null;
   const isImage = primary ? IMG_RE.test(primary) : false;
   const isVideo = primary ? VIDEO_RE.test(primary) : false;
@@ -131,7 +135,11 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
             <p className="font-medium leading-snug">&ldquo;{draft.selectedHook}&rdquo;</p>
           )}
           <p className="text-sm text-[var(--color-muted)] mt-1 line-clamp-2">
-            {draft.caption}
+            {/* Saved caption may have the hook baked in at the front
+                (saveDraft prepends it). Strip on render so the hook
+                isn't shown twice — once as the title, once at the
+                start of the caption body. */}
+            {stripHookPrefix(draft.caption, draft.selectedHook)}
           </p>
           <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-[var(--color-muted)]">
             <span
@@ -147,6 +155,11 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
             ))}
             {draft.scheduledFor && (
               <span>scheduled for {new Date(draft.scheduledFor).toLocaleString()}</span>
+            )}
+            {draftMusicUrl && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-[var(--color-accent)] bg-[var(--color-surface-2)] px-1.5 py-0.5 rounded">
+                <Music2 className="w-2.5 h-2.5" /> music
+              </span>
             )}
           </div>
 
@@ -244,6 +257,7 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
         <MediaPreviewModal
           draftId={draft.id}
           mediaUrls={allMediaUrls}
+          musicUrl={draftMusicUrl}
           hook={draft.selectedHook}
           caption={draft.caption}
           hashtags={draft.hashtags}

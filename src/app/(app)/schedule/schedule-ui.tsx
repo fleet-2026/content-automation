@@ -21,7 +21,7 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react";
-import { parseMediaUrls } from "@/lib/media-urls";
+import { parseMediaUrls, parseMusicUrl } from "@/lib/media-urls";
 import { MediaPreviewModal } from "@/components/media-preview-modal";
 import {
   type DemoAutomation,
@@ -322,7 +322,9 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
   const [previewOpen, setPreviewOpen] = useState(false);
 
   // mediaUrl may be a newline-packed carousel — pull primary + count.
+  // Music URL (if attached) is packed in the same field with `audio::`.
   const allMediaUrls = parseMediaUrls(item.mediaUrl);
+  const itemMusicUrl = parseMusicUrl(item.mediaUrl);
   const primary = allMediaUrls[0] ?? null;
   const isImage = primary ? IMG_RE.test(primary) : false;
   const isCarousel = allMediaUrls.length > 1;
@@ -571,6 +573,7 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
         <MediaPreviewModal
           draftId={item.isReal ? item.id : undefined}
           mediaUrls={allMediaUrls}
+          musicUrl={itemMusicUrl}
           hook={item.hookText || null}
           caption={item.caption}
           hashtags={item.hashtags ?? []}

@@ -14,9 +14,12 @@ import {
   AlertTriangle,
   Check,
   Save,
+  Music2,
+  ExternalLink,
 } from "lucide-react";
 import type { Platform } from "@prisma/client";
 import { isImageUrl, isVideoUrl } from "@/lib/media-urls";
+import { stripHookPrefix } from "@/lib/captions";
 
 /**
  * Full-screen media preview for drafts / scheduled posts.
@@ -35,6 +38,7 @@ import { isImageUrl, isVideoUrl } from "@/lib/media-urls";
 export function MediaPreviewModal({
   draftId,
   mediaUrls,
+  musicUrl,
   hook,
   caption,
   hashtags,
@@ -51,6 +55,9 @@ export function MediaPreviewModal({
   /** Backing draft id — used to build Edit link when `canEdit` is true. */
   draftId?: string;
   mediaUrls: string[];
+  /** Optional background-music URL attached to the draft. Shown as a
+   *  small badge in the text panel; not auto-played. */
+  musicUrl?: string | null;
   hook: string | null;
   caption: string;
   hashtags: string[];
@@ -93,9 +100,14 @@ export function MediaPreviewModal({
   // mirrors what saveDraft expects in compose/actions.ts: caption +
   // selectedHook + hashtags array. Hashtags are extracted from the caption
   // by the `#word` regex on save, the same way the Composer does.
+  //
+  // Pre-stripping the hook prefix from the caption when seeding the edit
+  // textarea avoids the user seeing their hook duplicated inside the body
+  // input — same fix as the read-only render below.
+  const captionBody = stripHookPrefix(caption, hook);
   const [editing, setEditing] = useState(false);
   const [editHook, setEditHook] = useState(hook ?? "");
-  const [editCaption, setEditCaption] = useState(caption);
+  const [editCaption, setEditCaption] = useState(captionBody);
   const [editHashtagsRaw, setEditHashtagsRaw] = useState(
     hashtags.map((h) => `#${h}`).join(" "),
   );
@@ -103,7 +115,7 @@ export function MediaPreviewModal({
   function enterEdit() {
     setEditing(true);
     setEditHook(hook ?? "");
-    setEditCaption(caption);
+    setEditCaption(stripHookPrefix(caption, hook));
     setEditHashtagsRaw(hashtags.map((h) => `#${h}`).join(" "));
     setActionErr(null);
   }
@@ -392,15 +404,29 @@ export function MediaPreviewModal({
                 {hook?.trim() && (
                   <p className="font-semibold leading-snug mb-3">{hook}</p>
                 )}
-                {caption.trim() && (
+                {captionBody.trim() && (
                   <p className="text-sm whitespace-pre-wrap leading-relaxed mb-3">
-                    {caption}
+                    {captionBody}
                   </p>
                 )}
                 {hashtags.length > 0 && (
                   <p className="text-sm text-[var(--color-accent)] leading-relaxed break-words">
                     {hashtags.map((h) => `#${h}`).join(" ")}
                   </p>
+                )}
+                {musicUrl && (
+                  <div className="mt-3 flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-[var(--color-surface-2)] border text-xs">
+                    <Music2 className="w-3.5 h-3.5 text-[var(--color-accent)] shrink-0" />
+                    <span className="flex-1 font-medium">Background music attached</span>
+                    <a
+                      href={musicUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[var(--color-accent)] hover:underline inline-flex items-center gap-0.5"
+                    >
+                      open <ExternalLink className="w-3 h-3" />
+                    </a>
+                  </div>
                 )}
               </>
             )}

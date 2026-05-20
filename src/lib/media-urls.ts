@@ -14,6 +14,12 @@
  */
 
 const SEP = "\n";
+// Tag prefix for music tracks packed into the same field. The visual-
+// media parser filters by /^https?:\/\//i so it naturally ignores any
+// line that begins with `audio::`, but `parseMusicUrl` looks for those
+// lines explicitly. This avoids a Prisma schema migration just to add
+// one nullable URL column.
+const MUSIC_PREFIX = "audio::";
 
 export function parseMediaUrls(stored: string | null | undefined): string[] {
   if (!stored) return [];
@@ -23,12 +29,40 @@ export function parseMediaUrls(stored: string | null | undefined): string[] {
     .filter((u) => /^https?:\/\//i.test(u));
 }
 
-export function packMediaUrls(urls: string[]): string | null {
+/**
+ * Pull out the optional background-music URL packed into the same
+ * `mediaUrl` field. Returns null when no audio line is present.
+ */
+export function parseMusicUrl(stored: string | null | undefined): string | null {
+  if (!stored) return null;
+  for (const line of stored.split(SEP)) {
+    const trimmed = line.trim();
+    if (!trimmed.startsWith(MUSIC_PREFIX)) continue;
+    const url = trimmed.slice(MUSIC_PREFIX.length).trim();
+    if (/^https?:\/\//i.test(url)) return url;
+  }
+  return null;
+}
+
+/**
+ * Pack visual media URLs (and optionally a background-music URL) into
+ * a single newline-separated string for the `Draft.mediaUrl` column.
+ * Visual URLs first; music line gets the `audio::` prefix.
+ */
+export function packMediaUrls(
+  urls: string[],
+  opts?: { musicUrl?: string | null },
+): string | null {
   const cleaned = urls
     .map((u) => u.trim())
     .filter((u) => /^https?:\/\//i.test(u));
-  if (cleaned.length === 0) return null;
-  return cleaned.join(SEP);
+  const lines = [...cleaned];
+  const music = opts?.musicUrl?.trim();
+  if (music && /^https?:\/\//i.test(music)) {
+    lines.push(`${MUSIC_PREFIX}${music}`);
+  }
+  if (lines.length === 0) return null;
+  return lines.join(SEP);
 }
 
 export function primaryMediaUrl(stored: string | null | undefined): string | null {

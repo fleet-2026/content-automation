@@ -1,8 +1,9 @@
 "use client";
 
 import type { Platform } from "@prisma/client";
-import { Eye, Images } from "lucide-react";
+import { Eye, Images, Music2 } from "lucide-react";
 import { isImageUrl, isVideoUrl } from "@/lib/media-urls";
+import { stripHookPrefix } from "@/lib/captions";
 
 /**
  * Visual "see the post all together" view. Shows what the assembled draft
@@ -20,18 +21,25 @@ export function PostPreview({
   caption,
   hashtags,
   mediaUrls,
+  musicUrl,
   platforms,
 }: {
   hook: string | null;
   caption: string;
   hashtags: string[];
   mediaUrls: string[];
+  musicUrl?: string | null;
   platforms: Platform[];
 }) {
   const primary = mediaUrls[0] ?? null;
+  // Strip the hook prefix from the displayed caption — saveDraft prepends
+  // it but we render hook + caption separately, so without this the hook
+  // appears twice (heading + start of body). The stored caption keeps
+  // the prepended hook so publish-time output is unchanged.
+  const captionBody = stripHookPrefix(caption, hook);
   const hasAnything =
     hook?.trim() ||
-    caption.trim() ||
+    captionBody.trim() ||
     hashtags.length > 0 ||
     mediaUrls.length > 0;
 
@@ -125,15 +133,21 @@ export function PostPreview({
                 {hook}
               </p>
             )}
-            {caption.trim() && (
+            {captionBody.trim() && (
               <p className="text-sm whitespace-pre-wrap leading-relaxed text-[var(--color-text)]">
-                {caption}
+                {captionBody}
               </p>
             )}
             {hashtags.length > 0 && (
               <p className="text-sm text-[var(--color-accent)] leading-relaxed break-words">
                 {hashtags.map((h) => `#${h}`).join(" ")}
               </p>
+            )}
+            {musicUrl && (
+              <div className="mt-1 inline-flex items-center gap-1.5 text-xs text-[var(--color-muted)] bg-[var(--color-surface-2)] px-2 py-1 rounded-md">
+                <Music2 className="w-3 h-3 text-[var(--color-accent)]" />
+                Background music attached
+              </div>
             )}
           </div>
         </div>

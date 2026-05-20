@@ -2,12 +2,13 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Upload, Send, CalendarClock, CheckCircle2, Type, X, Plus } from "lucide-react";
+import { Sparkles, Upload, Send, CalendarClock, CheckCircle2, Type, X, Plus, Music2, ExternalLink } from "lucide-react";
+import Link from "next/link";
 import { generateHookVariants, saveDraft, publishDraftNow, scheduleDraft } from "./actions";
 import type { Platform } from "@prisma/client";
 import { HookOverlayEditor } from "./hook-overlay-editor";
 import { PostPreview } from "./post-preview";
-import { parseMediaUrls, packMediaUrls, isImageUrl } from "@/lib/media-urls";
+import { parseMediaUrls, parseMusicUrl, packMediaUrls, isImageUrl } from "@/lib/media-urls";
 import { PLATFORM_INFO, ALL_PLATFORMS_ORDERED } from "@/lib/platform-info";
 
 type Hook = {
@@ -79,6 +80,15 @@ export function Composer({
     return [];
   });
   const primaryMediaUrl = mediaUrls[0] ?? null;
+
+  // Background music URL packed into the same Draft.mediaUrl field via the
+  // `audio::` prefix. See src/lib/media-urls.ts. We display it separately
+  // from visual media in the UI, but it travels with the draft.
+  const [musicUrl, setMusicUrl] = useState<string | null>(() => {
+    if (initialDraft) return parseMusicUrl(initialDraft.mediaUrl);
+    return null;
+  });
+  const [musicUploading, setMusicUploading] = useState(false);
   const [platforms, setPlatforms] = useState<Platform[]>(
     initialDraft?.platforms.length ? initialDraft.platforms : connectedPlatforms,
   );
@@ -156,6 +166,39 @@ export function Composer({
     setMediaUrls((cur) => cur.filter((_, i) => i !== idx));
   }
 
+  /**
+   * Upload a background-music file (mp3, m4a, wav, ogg) to R2 via the
+   * existing /api/upload endpoint. The endpoint sniffs file type from
+   * magic bytes — audio files are accepted as long as they're in the
+   * allowed-mime list in lib/file-sniff.ts.
+   */
+  async function handleMusicUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setErr(null);
+    setMusicUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message ?? body?.error ?? `HTTP ${res.status}`);
+      }
+      const { url } = (await res.json()) as { url: string };
+      setMusicUrl(url);
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : String(e2));
+    } finally {
+      setMusicUploading(false);
+      e.target.value = "";
+    }
+  }
+
+  function removeMusic() {
+    setMusicUrl(null);
+  }
+
   function moveMediaToPrimary(idx: number) {
     setMediaUrls((cur) => {
       if (idx === 0 || idx >= cur.length) return cur;
@@ -176,7 +219,7 @@ export function Composer({
           hashtags,
           hookOptions: hooks,
           selectedHook,
-          mediaUrl: packMediaUrls(mediaUrls),
+          mediaUrl: packMediaUrls(mediaUrls, { musicUrl }),
           platforms,
           scheduledFor: scheduledFor || null,
         });
@@ -199,7 +242,7 @@ export function Composer({
             hashtags,
             hookOptions: hooks,
             selectedHook,
-            mediaUrl: packMediaUrls(mediaUrls),
+            mediaUrl: packMediaUrls(mediaUrls, { musicUrl }),
             platforms,
           });
           id = d.id;
@@ -226,7 +269,7 @@ export function Composer({
             hashtags,
             hookOptions: hooks,
             selectedHook,
-            mediaUrl: packMediaUrls(mediaUrls),
+            mediaUrl: packMediaUrls(mediaUrls, { musicUrl }),
             platforms,
             scheduledFor,
           });
@@ -432,6 +475,77 @@ export function Composer({
             carousel · TikTok &amp; YouTube only post the Primary slot.
           </p>
 
+          {/* ─── Background music (optional) ───────────────────────
+              Heads-up shown alongside: platform APIs DO NOT let us
+              attach TikTok/IG sound-library music programmatically
+              (music licensing). For uploaded audio files we store the
+              URL with the draft so it travels with the post; merging
+              the audio INTO the video file is a separate Cloudinary /
+              Mux integration that isn't wired yet. Until then the
+              uploaded file shows up in the post preview as "Music
+              attached" so the user knows to apply it manually when
+              finalizing in the native app. */}
+          <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
+            <div className="flex items-baseline justify-between mb-2">
+              <h4 className="text-xs uppercase tracking-wider text-[var(--color-muted)] flex items-center gap-1.5">
+                <Music2 className="w-3.5 h-3.5" /> Background music
+                <span className="text-[10px] normal-case text-[var(--color-muted)]/70 ml-1">optional</span>
+              </h4>
+              <Link
+                href="/trends"
+                className="text-[11px] text-[var(--color-accent)] hover:underline inline-flex items-center gap-1"
+                title="Browse trending TikTok / Instagram sounds"
+              >
+                Browse trending →
+              </Link>
+            </div>
+
+            {musicUrl ? (
+              <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border">
+                <Music2 className="w-4 h-4 text-[var(--color-accent)] shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Music attached</p>
+                  <a
+                    href={musicUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] text-[var(--color-muted)] truncate hover:underline inline-flex items-center gap-0.5"
+                  >
+                    Open audio file <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <button
+                  type="button"
+                  onClick={removeMusic}
+                  className="p-1 rounded hover:bg-[var(--color-border)] text-[var(--color-muted)] hover:text-red-700"
+                  aria-label="Remove music"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <label className="cursor-pointer flex items-center gap-2 text-xs px-3 py-2 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium border border-dashed border-[var(--color-border)]">
+                <Upload className="w-3.5 h-3.5" />
+                {musicUploading ? "Uploading…" : "Upload audio (.mp3 / .m4a / .wav)"}
+                <input
+                  type="file"
+                  hidden
+                  accept="audio/*,.mp3,.m4a,.wav,.ogg"
+                  onChange={handleMusicUpload}
+                />
+              </label>
+            )}
+
+            <p className="mt-1.5 text-[10px] text-[var(--color-muted)] leading-relaxed">
+              <strong>Heads-up:</strong> Platform APIs don&apos;t let us
+              auto-attach TikTok / Instagram sound-library music. Upload
+              your own audio file here (we store it with the draft); merging
+              it into the video file isn&apos;t wired yet — you&apos;ll
+              still need to apply the sound when finalizing the post in the
+              TikTok / Instagram app.
+            </p>
+          </div>
+
           {/* Opens the canvas editor on the PRIMARY image. The text inside is
               fully editable — the user can put the hook, the caption, both,
               or anything custom on the image. */}
@@ -615,6 +729,7 @@ export function Composer({
         caption={caption}
         hashtags={hashtags}
         mediaUrls={mediaUrls}
+        musicUrl={musicUrl}
         platforms={platforms}
       />
     </div>
