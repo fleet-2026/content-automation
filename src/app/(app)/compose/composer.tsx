@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Upload, Send, CalendarClock, CheckCircle2, Type, X, Plus, Music2, ExternalLink } from "lucide-react";
 import Link from "next/link";
@@ -96,6 +96,33 @@ export function Composer({
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
+  // Schedule popover state. Replaces the dynamic Publish/Schedule label
+  // pattern that confused users — clicking "Schedule or publish" now
+  // opens a small popover with both options clearly listed so the user
+  // chooses post-now vs. scheduled time without guessing what the button
+  // will do.
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const scheduleRef = useRef<HTMLDivElement>(null);
+
+  // Close popover on outside click / Esc.
+  useEffect(() => {
+    if (!scheduleOpen) return;
+    function onDown(e: MouseEvent) {
+      if (!scheduleRef.current) return;
+      if (!scheduleRef.current.contains(e.target as Node)) {
+        setScheduleOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setScheduleOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [scheduleOpen]);
 
   const [generating, startGen] = useTransition();
   const [saving, startSave] = useTransition();
@@ -619,15 +646,6 @@ export function Composer({
           </div>
         </Field>
 
-        <Field label="Schedule for (optional)">
-          <input
-            type="datetime-local"
-            value={scheduledFor}
-            onChange={(e) => setScheduledFor(e.target.value)}
-            className="px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)] text-sm"
-          />
-        </Field>
-
         <div className="flex flex-wrap gap-2 pt-3 border-t border-[var(--color-border)]">
           <button
             onClick={save}
@@ -636,23 +654,80 @@ export function Composer({
           >
             {saving ? "Saving…" : "Save draft"}
           </button>
-          {scheduledFor ? (
+
+          {/* Publish/Schedule popover. Click the button → small panel
+              opens with two clear options: post immediately, or pick a
+              date/time. No more "the button label changes based on
+              whether I touched the datetime input" confusion. */}
+          <div className="relative" ref={scheduleRef}>
             <button
-              onClick={schedule}
-              disabled={publishing || platforms.length === 0}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-black font-medium text-sm disabled:opacity-50"
-            >
-              <CalendarClock className="w-4 h-4" /> Schedule
-            </button>
-          ) : (
-            <button
-              onClick={publish}
+              type="button"
+              onClick={() => setScheduleOpen((o) => !o)}
               disabled={publishing || platforms.length === 0 || !caption.trim()}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-black font-medium text-sm disabled:opacity-50"
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium text-sm disabled:opacity-50"
             >
-              <Send className="w-4 h-4" /> {publishing ? "Publishing…" : "Publish now"}
+              <Send className="w-4 h-4" />
+              {publishing
+                ? scheduledFor
+                  ? "Scheduling…"
+                  : "Publishing…"
+                : "Publish or schedule"}
             </button>
-          )}
+
+            {scheduleOpen && !publishing && (
+              <div className="absolute left-0 bottom-full mb-2 w-80 bg-[var(--color-surface)] border rounded-xl shadow-2xl z-30 p-3 space-y-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setScheduleOpen(false);
+                    publish();
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2.5 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium text-sm hover:opacity-90"
+                >
+                  <Send className="w-4 h-4" />
+                  Publish now to {platforms.length} platform
+                  {platforms.length === 1 ? "" : "s"}
+                </button>
+
+                <div className="border-t border-[var(--color-border)] pt-3">
+                  <label className="block text-[10px] uppercase tracking-wider text-[var(--color-muted)] mb-1.5 flex items-center gap-1.5">
+                    <CalendarClock className="w-3 h-3" /> Schedule for later
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={scheduledFor}
+                    onChange={(e) => setScheduledFor(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)] text-sm"
+                    // Default min to now so the user can't pick a past date.
+                    min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setScheduleOpen(false);
+                      schedule();
+                    }}
+                    disabled={!scheduledFor}
+                    className="mt-2 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <CalendarClock className="w-4 h-4" />
+                    {scheduledFor
+                      ? `Schedule for ${new Date(scheduledFor).toLocaleString()}`
+                      : "Pick a date + time above"}
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setScheduleOpen(false)}
+                  className="w-full text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] py-1"
+                >
+                  Close
+                </button>
+              </div>
+            )}
+          </div>
+
           {savedAt && (
             <span className="text-xs text-[var(--color-muted)] flex items-center gap-1 ml-auto">
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-800" /> saved

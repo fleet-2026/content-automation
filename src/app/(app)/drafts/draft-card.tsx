@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Send, Edit, Trash2, ExternalLink, Images, Check, AlertTriangle, Eye, Music2 } from "lucide-react";
+import { Send, Edit, Trash2, ExternalLink, Images, Check, AlertTriangle, Eye, Music2, CheckCircle2, RefreshCw } from "lucide-react";
 import type { Platform, DraftStatus } from "@prisma/client";
 import { publishDraftNow, deleteDraft, saveDraft } from "../compose/actions";
 import { parseMediaUrls, parseMusicUrl } from "@/lib/media-urls";
@@ -76,6 +76,56 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
   const isVideo = primary ? VIDEO_RE.test(primary) : false;
   const isCarousel = allMediaUrls.length > 1;
 
+  // Posted state: PUBLISHED status + at least one successful per-platform
+  // result. We render a prominent "Posted ✓" banner at the top of the card
+  // when this is true, with quick view links to each platform's live post.
+  const isPosted = draft.status === "PUBLISHED";
+  const successfulPosts = (draft.publishResults ?? []).filter((r) => r.ok);
+
+  // Per-platform error classifier. Maps Meta/Instagram-specific token-
+  // expiry messages to a friendlier "Reconnect Instagram" hint instead of
+  // showing the raw "Unsupported state or unable to authenticate data"
+  // string the user saw in the screenshot.
+  function classifyError(platform: string, raw: string | undefined): {
+    friendly: string;
+    needsReconnect: boolean;
+  } {
+    if (!raw) return { friendly: "", needsReconnect: false };
+    const lower = raw.toLowerCase();
+    if (
+      lower.includes("unsupported state") ||
+      lower.includes("authenticate data") ||
+      lower.includes("token") ||
+      lower.includes("expired") ||
+      lower.includes("invalid_token") ||
+      lower.includes("oauthexception")
+    ) {
+      return {
+        friendly: `${platform} access token expired — reconnect to publish.`,
+        needsReconnect: true,
+      };
+    }
+    if (lower.includes("delivered_to_inbox")) {
+      return {
+        friendly: "Delivered to TikTok inbox — finalize inside the app.",
+        needsReconnect: false,
+      };
+    }
+    if (lower.includes("no_connected_account")) {
+      return {
+        friendly: `No ${platform} account connected.`,
+        needsReconnect: true,
+      };
+    }
+    if (lower.includes("missing_video") || lower.includes("missing_media")) {
+      return {
+        friendly: "Missing video — attach media before publishing.",
+        needsReconnect: false,
+      };
+    }
+    return { friendly: raw, needsReconnect: false };
+  }
+
   // Publish is only meaningful for editable states. PUBLISHING is mid-flight
   // (don't double-fire). PUBLISHED would be a republish, which we deliberately
   // don't expose — that's a new-post action, not a draft action.
@@ -128,7 +178,42 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
   }
 
   return (
-    <article className="border rounded-xl bg-[var(--color-surface)] p-5">
+    <article
+      className={
+        "border rounded-xl bg-[var(--color-surface)] p-5 " +
+        (isPosted ? "border-emerald-500/40" : "")
+      }
+    >
+      {/* Posted banner — shown prominently when the draft has been
+          successfully published. Quick links to each platform's live post
+          on the right side so the user can jump straight to the URL. */}
+      {isPosted && successfulPosts.length > 0 && (
+        <div className="mb-4 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 flex items-center gap-3 flex-wrap">
+          <span className="flex items-center gap-1.5 text-sm font-semibold text-emerald-900">
+            <CheckCircle2 className="w-4 h-4" />
+            Posted
+            {draft.publishResults && draft.publishResults.length > 0 && (
+              <span className="text-xs font-normal text-emerald-700">
+                · {new Date(draft.updatedAt).toLocaleString()}
+              </span>
+            )}
+          </span>
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
+            {successfulPosts.map((r) => (
+              <a
+                key={r.platform}
+                href={r.url ?? "#"}
+                target="_blank"
+                rel="noreferrer"
+                className="text-xs px-2 py-1 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-medium inline-flex items-center gap-1"
+              >
+                {r.platform.toLowerCase()} <ExternalLink className="w-3 h-3" />
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           {draft.selectedHook && (
@@ -163,33 +248,48 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
             )}
           </div>
 
-          {/* Per-platform publish results, when present. Surfaces "delivered
-              to inbox" for TikTok and any platform-specific errors. */}
+          {/* Per-platform publish results. Errors now run through
+              classifyError() to produce friendlier messages + surface a
+              "Reconnect" CTA when the failure looks like an expired or
+              invalid OAuth token (the IG "Unsupported state" case). */}
           {draft.publishResults && draft.publishResults.length > 0 && (
             <ul className="mt-3 space-y-1 text-xs">
-              {draft.publishResults.map((r) => (
-                <li key={r.platform} className="flex items-center gap-2">
-                  <span
-                    className={
-                      "inline-block w-2 h-2 rounded-full " +
-                      (r.ok ? "bg-emerald-500" : "bg-red-500")
-                    }
-                  />
-                  <span className="font-medium">{r.platform.toLowerCase()}</span>
-                  {r.url ? (
-                    <a
-                      href={r.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[var(--color-accent)] hover:underline flex items-center gap-1"
-                    >
-                      view <ExternalLink className="w-3 h-3" />
-                    </a>
-                  ) : r.error ? (
-                    <span className="text-[var(--color-muted)]">— {r.error}</span>
-                  ) : null}
-                </li>
-              ))}
+              {draft.publishResults.map((r) => {
+                const cls = classifyError(r.platform, r.error);
+                return (
+                  <li key={r.platform} className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={
+                        "inline-block w-2 h-2 rounded-full " +
+                        (r.ok ? "bg-emerald-500" : "bg-red-500")
+                      }
+                    />
+                    <span className="font-medium">{r.platform.toLowerCase()}</span>
+                    {r.url ? (
+                      <a
+                        href={r.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-[var(--color-accent)] hover:underline flex items-center gap-1"
+                      >
+                        view <ExternalLink className="w-3 h-3" />
+                      </a>
+                    ) : cls.friendly ? (
+                      <span className="text-[var(--color-muted)]">— {cls.friendly}</span>
+                    ) : null}
+                    {cls.needsReconnect && (
+                      <a
+                        href={`/api/connect/${r.platform.toLowerCase()}`}
+                        className="text-xs px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-medium inline-flex items-center gap-1 ml-1"
+                        title={`Reconnect your ${r.platform.toLowerCase()} account`}
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Reconnect
+                      </a>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           )}
 
