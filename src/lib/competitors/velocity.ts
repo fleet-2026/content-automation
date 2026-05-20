@@ -72,3 +72,32 @@ export async function getViralCompetitorPosts(limit = 8) {
     include: { creator: { select: { handle: true, platform: true, displayName: true, profileImage: true } } },
   });
 }
+
+/**
+ * Broader viral discovery — any niche-matching CompetitorPost flagged
+ * as viral in the last 7 days, regardless of whether the creator is in
+ * the user's personal watchlist. Backs the "Viral in your niche"
+ * section on /trends so users see what's hot in their niche overall,
+ * not just from creators they've already added.
+ *
+ * Returns shape mirrors getViralCompetitorPosts so the page can render
+ * both lists with the same component layout.
+ */
+export async function getNicheViralPosts(niche: string | undefined, limit = 12) {
+  return prisma.competitorPost.findMany({
+    where: {
+      isViral: true,
+      publishedAt: { gte: new Date(Date.now() - 7 * 86400_000) },
+      // Only filter by niche when one is set; otherwise show globally viral
+      // posts so a brand-new user without a niche still sees something useful.
+      ...(niche ? { creator: { niche } } : {}),
+    },
+    orderBy: { views: "desc" },
+    take: limit,
+    include: {
+      creator: {
+        select: { handle: true, platform: true, displayName: true, profileImage: true, niche: true },
+      },
+    },
+  });
+}
