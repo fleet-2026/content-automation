@@ -15,12 +15,15 @@ import {
   AlertTriangle,
   UserCircle2,
   Palette,
+  Gem,
 } from "lucide-react";
 import {
   createImage,
   createVideo,
   createAvatarVideo,
   createOpenartGen,
+  createGeminiImage,
+  createGeminiVideo,
   getOpenartStatus,
   pollAsset,
   listAssets,
@@ -33,7 +36,7 @@ import {
 import type { HeygenAvatar, HeygenVoice } from "@/lib/ai/heygen";
 import type { OpenartModel, OpenartAspect } from "@/lib/ai/openart";
 
-type Tab = "image" | "video" | "avatar" | "openart" | "library";
+type Tab = "image" | "video" | "avatar" | "openart" | "gemini" | "library";
 
 /**
  * Poll a placeholder asset until its status flips to READY or FAILED.
@@ -79,6 +82,9 @@ export function StudioUI() {
         <TabButton id="openart" current={tab} onClick={() => setTab("openart")} icon={Palette}>
           OpenArt
         </TabButton>
+        <TabButton id="gemini" current={tab} onClick={() => setTab("gemini")} icon={Gem}>
+          Gemini Omni
+        </TabButton>
         <TabButton id="library" current={tab} onClick={() => setTab("library")} icon={Library}>
           Library
         </TabButton>
@@ -88,6 +94,7 @@ export function StudioUI() {
       {tab === "video" && <VideoTab />}
       {tab === "avatar" && <AvatarTab />}
       {tab === "openart" && <OpenartTab />}
+      {tab === "gemini" && <GeminiTab />}
       {tab === "library" && <LibraryTab />}
     </div>
   );
@@ -965,6 +972,270 @@ function OpenartTab() {
       <section className="lg:col-span-3">
         <PreviewPanel asset={result} pending={pending} kind={kind === "video" ? "video" : "image"} />
       </section>
+    </div>
+  );
+}
+
+// ─── GEMINI OMNI TAB (Imagen 4 + Veo 3) ────────────────────────
+//
+// One tab with two sub-modes — image OR video — because that's the
+// "omni" framing Google sells. Both go through the same GOOGLE_GEMINI_API_KEY
+// env var; image is sync via createGeminiImage, video is async via
+// createGeminiVideo → /api/studio/gemini-video → poll.
+
+function GeminiTab() {
+  type Mode = "image" | "video";
+  const router = useRouter();
+  const [mode, setMode] = useState<Mode>("image");
+  const [prompt, setPrompt] = useState("");
+
+  // Image config
+  const [imgAspect, setImgAspect] = useState<"1:1" | "3:4" | "4:3" | "9:16" | "16:9">("1:1");
+  const [imgTier, setImgTier] = useState<"standard" | "ultra">("standard");
+
+  // Video config
+  const [vidAspect, setVidAspect] = useState<"9:16" | "16:9" | "1:1">("9:16");
+  const [vidDuration, setVidDuration] = useState<4 | 8>(8);
+  const [vidTier, setVidTier] = useState<"fast" | "standard">("fast");
+
+  const [pending, start] = useTransition();
+  const [err, setErr] = useState<string | null>(null);
+  const [result, setResult] = useState<StudioAsset | null>(null);
+  const [progress, setProgress] = useState<StudioAsset | null>(null);
+
+  function go() {
+    if (!prompt.trim()) return;
+    setErr(null);
+    setResult(null);
+    setProgress(null);
+    start(async () => {
+      try {
+        if (mode === "image") {
+          const out = await createGeminiImage({
+            prompt: prompt.trim(),
+            aspectRatio: imgAspect,
+            model:
+              imgTier === "ultra"
+                ? "imagen-4.0-ultra-generate-preview-06-06"
+                : "imagen-4.0-generate-preview-06-06",
+          });
+          setResult(out);
+        } else {
+          // Video — start async + poll
+          const placeholder = await createGeminiVideo({
+            prompt: prompt.trim(),
+            aspectRatio: vidAspect,
+            durationSec: vidDuration,
+            model:
+              vidTier === "fast"
+                ? "veo-3.0-fast-generate-preview"
+                : "veo-3.0-generate-preview",
+          });
+          setProgress(placeholder);
+          const done = await pollUntilReady(placeholder.id, {
+            onTick: (a) => setProgress(a),
+          });
+          setResult(done);
+          setProgress(null);
+        }
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : String(e));
+      }
+    });
+  }
+
+  async function sendToCompose() {
+    if (!result) return;
+    try {
+      const { draftId } = await useInDraft(result.id);
+      router.push(`/compose?draft=${draftId}`);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  return (
+    <div className="space-y-4 max-w-3xl">
+      {/* Mode switch */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => setMode("image")}
+          className={
+            "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium " +
+            (mode === "image"
+              ? "bg-[var(--color-accent)] text-[var(--color-text-on-dark)]"
+              : "bg-[var(--color-surface-2)] hover:bg-[var(--color-border)]")
+          }
+        >
+          <ImageIcon className="w-3.5 h-3.5" /> Image (Imagen 4)
+        </button>
+        <button
+          onClick={() => setMode("video")}
+          className={
+            "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md font-medium " +
+            (mode === "video"
+              ? "bg-[var(--color-accent)] text-[var(--color-text-on-dark)]"
+              : "bg-[var(--color-surface-2)] hover:bg-[var(--color-border)]")
+          }
+        >
+          <Film className="w-3.5 h-3.5" /> Video (Veo 3)
+        </button>
+      </div>
+
+      {/* Prompt */}
+      <label className="block">
+        <span className="block text-xs uppercase tracking-wider text-[var(--color-muted)] mb-1.5">
+          Prompt
+        </span>
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          rows={5}
+          placeholder={
+            mode === "image"
+              ? "e.g. A flat-lay photo of a vintage typewriter on a wooden desk, golden hour light, sharp focus, magazine editorial style."
+              : "e.g. Drone shot pulling out from a person walking on a misty mountain trail at dawn, cinematic 9:16, ambient nature sound."
+          }
+          className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)] text-sm resize-y"
+        />
+      </label>
+
+      {/* Per-mode controls */}
+      {mode === "image" ? (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Field label="Aspect ratio">
+            <select
+              value={imgAspect}
+              onChange={(e) => setImgAspect(e.target.value as typeof imgAspect)}
+              className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface-2)] border outline-none text-sm"
+            >
+              <option value="1:1">1:1 square</option>
+              <option value="3:4">3:4 portrait</option>
+              <option value="4:3">4:3 landscape</option>
+              <option value="9:16">9:16 vertical (reel)</option>
+              <option value="16:9">16:9 wide</option>
+            </select>
+          </Field>
+          <Field label="Quality">
+            <select
+              value={imgTier}
+              onChange={(e) => setImgTier(e.target.value as typeof imgTier)}
+              className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface-2)] border outline-none text-sm"
+            >
+              <option value="standard">Standard (~$0.04)</option>
+              <option value="ultra">Ultra (~$0.06)</option>
+            </select>
+          </Field>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <Field label="Aspect ratio">
+            <select
+              value={vidAspect}
+              onChange={(e) => setVidAspect(e.target.value as typeof vidAspect)}
+              className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface-2)] border outline-none text-sm"
+            >
+              <option value="9:16">9:16 vertical (reel)</option>
+              <option value="16:9">16:9 wide</option>
+              <option value="1:1">1:1 square</option>
+            </select>
+          </Field>
+          <Field label="Duration">
+            <select
+              value={vidDuration}
+              onChange={(e) => setVidDuration(Number(e.target.value) as 4 | 8)}
+              className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface-2)] border outline-none text-sm"
+            >
+              <option value="4">4 seconds</option>
+              <option value="8">8 seconds</option>
+            </select>
+          </Field>
+          <Field label="Model">
+            <select
+              value={vidTier}
+              onChange={(e) => setVidTier(e.target.value as typeof vidTier)}
+              className="w-full px-2.5 py-1.5 rounded-md bg-[var(--color-surface-2)] border outline-none text-sm"
+            >
+              <option value="fast">Veo 3 Fast (~$0.20 / 8s)</option>
+              <option value="standard">Veo 3 Standard (~$0.40 / 8s)</option>
+            </select>
+          </Field>
+        </div>
+      )}
+
+      <button
+        onClick={go}
+        disabled={pending || !prompt.trim()}
+        className="inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium disabled:opacity-50"
+      >
+        {pending ? (
+          <>
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {mode === "video"
+              ? progress
+                ? `Generating… (${progress.status.toLowerCase()})`
+                : "Starting…"
+              : "Generating…"}
+          </>
+        ) : (
+          <>
+            <Sparkles className="w-4 h-4" /> Generate {mode}
+          </>
+        )}
+      </button>
+
+      {err && (
+        <div className="bg-red-50 border border-red-200 text-red-900 text-xs rounded-md p-3 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium mb-1">Gemini failed</p>
+            <p className="whitespace-pre-wrap leading-relaxed">{err}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Result */}
+      {result && result.url && (
+        <div className="border rounded-xl bg-[var(--color-surface)] p-4 space-y-3">
+          {result.type === "IMAGE" ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={result.url}
+              alt=""
+              loading="lazy"
+              className="w-full rounded-lg bg-black"
+            />
+          ) : (
+            <video
+              src={result.url}
+              controls
+              playsInline
+              className="w-full rounded-lg bg-black max-h-[60vh]"
+            />
+          )}
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={sendToCompose}
+              className="text-xs px-3 py-1.5 rounded-md bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium inline-flex items-center gap-1.5"
+            >
+              <Send className="w-3.5 h-3.5" /> Use in new draft
+            </button>
+            <a
+              href={result.url}
+              download
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium inline-flex items-center gap-1.5"
+            >
+              Download
+            </a>
+            <span className="text-[11px] text-[var(--color-muted)] ml-auto">
+              {result.model} · {result.size}
+              {result.costCents != null ? ` · $${(result.costCents / 100).toFixed(2)}` : ""}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

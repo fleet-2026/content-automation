@@ -26,6 +26,16 @@ import {
   type OpenartModel,
   type OpenartAspect,
 } from "@/lib/ai/openart";
+import {
+  generateImageWithImagen,
+  generateVideoWithVeo,
+  isGeminiConfigured,
+  type ImagenAspect,
+  type ImagenModel,
+  type VeoAspect,
+  type VeoModel,
+  type VeoDuration,
+} from "@/lib/ai/gemini";
 
 export type StudioAsset = {
   id: string;
@@ -101,7 +111,11 @@ export async function createImage(input: {
 // MediaAsset id; client polls `pollAsset(id)` until READY/FAILED.
 
 async function startAsync(
-  path: "/api/studio/video" | "/api/studio/avatar" | "/api/studio/openart",
+  path:
+    | "/api/studio/video"
+    | "/api/studio/avatar"
+    | "/api/studio/openart"
+    | "/api/studio/gemini-video",
   body: unknown,
 ): Promise<StudioAsset> {
   // Always use the absolute URL when calling our own API from a server action
@@ -187,6 +201,82 @@ export async function getOpenartStatus(): Promise<{
     videoModels: ["veo3", "sora-v2", "kling", "hailuo", "seedance", "wan"],
     imageModels: ["flux-pro", "flux-kontext", "flux-dev", "gpt-image", "gemini", "imagen-4", "sdxl"],
   };
+}
+
+// ─── GEMINI OMNI (Imagen 4 + Veo 3) ───────────────────────────
+//
+// Image gen is sync (Imagen returns base64 in ~10s). Video gen polls
+// inside the server action up to 5 minutes — that's longer than
+// Vercel's default 60s timeout, so the route handler that wraps this
+// needs `export const maxDuration = 300` if we ever move it off the
+// shared-server action infra. For now Imagen is fine as a server
+// action; Veo runs through the /api/studio/gemini-video API route.
+
+export async function createGeminiImage(input: {
+  prompt: string;
+  aspectRatio?: ImagenAspect;
+  model?: ImagenModel;
+}): Promise<StudioAsset> {
+  const userId = await requireUser();
+  await enforceRateLimit(`imagegen:${userId}`, {
+    ...RATE_LIMITS.IMAGE_GEN,
+    label: "Gemini image gen",
+  });
+  const { prompt, aspectRatio = "1:1", model = "imagen-4.0-generate-preview-06-06" } = input;
+  if (!prompt.trim()) throw new Error("Prompt is required.");
+  if (!isGeminiConfigured()) {
+    throw new Error(
+      "GOOGLE_GEMINI_API_KEY is not configured. Add it from https://aistudio.google.com/apikey to your Vercel env vars.",
+    );
+  }
+
+  const placeholder = await prisma.mediaAsset.create({
+    data: {
+      userId,
+      type: "IMAGE",
+      prompt: prompt.trim(),
+      url: "",
+      model,
+      size: aspectRatio,
+      status: "GENERATING",
+    },
+  });
+
+  try {
+    const out = await generateImageWithImagen({ userId, prompt, aspectRatio, model });
+    const updated = await prisma.mediaAsset.update({
+      where: { id: placeholder.id },
+      data: {
+        url: out.url,
+        width: out.width,
+        height: out.height,
+        costCents: out.costCents,
+        status: "READY",
+      },
+    });
+    revalidatePath("/studio");
+    return updated as StudioAsset;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    await prisma.mediaAsset.update({
+      where: { id: placeholder.id },
+      data: { status: "FAILED", error: msg },
+    });
+    revalidatePath("/studio");
+    throw new Error(msg);
+  }
+}
+
+export async function createGeminiVideo(input: {
+  prompt: string;
+  aspectRatio?: VeoAspect;
+  durationSec?: VeoDuration;
+  model?: VeoModel;
+}): Promise<StudioAsset> {
+  // Routed through an API endpoint so the long-running poll can use
+  // `after()` instead of blocking the server-action response. Same shape
+  // as our Sora / HeyGen / OpenArt async flows.
+  return startAsync("/api/studio/gemini-video", input);
 }
 
 export async function pollAsset(id: string): Promise<StudioAsset | null> {
