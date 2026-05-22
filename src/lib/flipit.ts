@@ -45,9 +45,35 @@ export type ExtractAndTwist = {
   thumbnail?: string;
   /** Echo of the source URL the backend extracted from. */
   sourceUrl?: string;
+  /** Which path produced this result — useful for the UI to surface
+   *  "served via fallback because FlipIt was down" type messaging. */
+  source?: "flipit" | "native";
 };
-export function extractAndTwist(url: string) {
-  return call<ExtractAndTwist>("extract-and-twist", { url });
+
+/**
+ * Extract + flip a viral post. Tries FlipIt's hosted API first because
+ * it's purpose-built for this and returns the cleanest output. When
+ * FlipIt is down (502 from their Netlify functions has been observed),
+ * falls back to our own pipeline:
+ *   1. Apify scraper extracts caption + images from the post URL
+ *   2. Claude rewrites the caption into a "flipped" viral version
+ *
+ * The fallback works for TikTok and Instagram URLs. YouTube / X / LinkedIn
+ * URLs still depend on FlipIt and will error if FlipIt is down — for now.
+ */
+export async function extractAndTwist(url: string): Promise<ExtractAndTwist> {
+  try {
+    const r = await call<ExtractAndTwist>("extract-and-twist", { url });
+    return { ...r, source: "flipit" };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.warn("[flipit] extract-and-twist failed, falling back to native:", msg);
+    // Lazy-import the fallback so it doesn't pull Apify + Claude SDKs
+    // into route bundles that never hit the fallback path. Apify is
+    // ~2MB of types alone.
+    const { extractAndTwistNative } = await import("@/lib/flipit-native");
+    return await extractAndTwistNative(url);
+  }
 }
 
 export type RewriteScript = { rewritten: string; hook: string; cta: string };

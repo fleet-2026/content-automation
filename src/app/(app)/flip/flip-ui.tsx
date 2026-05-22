@@ -91,6 +91,10 @@ type UrlExtractOut = {
   sourceImages?: string[];
   thumbnail?: string;
   sourceUrl?: string;
+  // Which backend served the result. "native" means FlipIt was down and
+  // we used our own Apify + Claude pipeline as a fallback — useful to
+  // surface in the UI so users know the result still came through.
+  source?: "flipit" | "native";
 };
 
 const CAROUSEL_KEY = "flipit:lastCarouselUrls";
@@ -274,6 +278,16 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
 
       {out && (
         <div className="space-y-4">
+          {/* When the result came from our native fallback (because FlipIt
+              was returning 5xx), let the user know — they might wonder why
+              the output is slightly different from a normal Flip. */}
+          {out.source === "native" && (
+            <div className="text-xs text-amber-900 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+              FlipIt was unavailable so we served this from our native Apify +
+              Claude pipeline. Output quality is similar; ping me if it&apos;s
+              missing something.
+            </div>
+          )}
           {out.sourceImages && out.sourceImages.length > 0 && (
             <div>
               <div className="text-xs uppercase tracking-wider text-[var(--color-muted)] mb-2">
