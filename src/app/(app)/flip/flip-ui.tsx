@@ -13,6 +13,8 @@ import {
   Loader2,
   Zap,
   Download,
+  Send,
+  Sparkles,
 } from "lucide-react";
 import {
   flipFromUrl,
@@ -21,6 +23,8 @@ import {
   buildImagePrompts,
   buildVideoPrompts,
   extractVideo,
+  createImageFromFlip,
+  createDraftFromFlip,
 } from "./actions";
 
 type Tab = "url" | "rewrite" | "ideas" | "image" | "video";
@@ -131,6 +135,15 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
   } | null>(null);
   const [videoPending, startVideo] = useTransition();
 
+  // "Create image from flipped script" and "Create post" — quick chains
+  // that turn a flipped result into actual content without leaving /flip.
+  // The image goes through Imagen 4 (createImageFromFlip server action);
+  // the draft creation uses createDraftFromFlip and navigates to /compose.
+  const [genImage, setGenImage] = useState<string | null>(null);
+  const [imagePending, startImage] = useTransition();
+  const [draftPending, startDraft] = useTransition();
+  const [actionErr, setActionErr] = useState<string | null>(null);
+
   useEffect(() => setUrl(initialUrl), [initialUrl]);
 
   function go() {
@@ -168,6 +181,45 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
         }
       } catch (e) {
         setVideo({ error: String((e as Error).message ?? e) });
+      }
+    });
+  }
+
+  function createImage() {
+    if (!out?.twisted?.trim()) return;
+    setActionErr(null);
+    setGenImage(null);
+    startImage(async () => {
+      try {
+        // Image prompt = the flipped script. Imagen is good at narrative
+        // prompts but the user can iterate via /studio Gemini Omni or the
+        // Image prompts tab if they want a more deliberate prompt.
+        const r = await createImageFromFlip({
+          prompt: out.twisted,
+          aspectRatio: "1:1",
+        });
+        setGenImage(r.url);
+      } catch (e) {
+        setActionErr(e instanceof Error ? e.message : String(e));
+      }
+    });
+  }
+
+  function createPost() {
+    if (!out?.twisted?.trim()) return;
+    setActionErr(null);
+    startDraft(async () => {
+      try {
+        const r = await createDraftFromFlip({
+          caption: out.twisted,
+          mediaUrl: genImage,
+          // Hook left null — the user can pick one inside /compose's
+          // Hook A/B simulator. Passing no hook avoids a duplicate
+          // hook+caption display in the draft card.
+        });
+        router.push(`/compose?draft=${r.draftId}`);
+      } catch (e) {
+        setActionErr(e instanceof Error ? e.message : String(e));
       }
     });
   }
@@ -318,11 +370,46 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
           </div>
 
           <div className="flex flex-wrap gap-2">
+            {/* Primary chain: generate an image from the flipped script,
+                then "Create post" pulls both into a draft. The buttons
+                appear in chain order so the user sees Image → Post as a
+                natural left-to-right flow. */}
+            <button
+              onClick={createImage}
+              disabled={imagePending || draftPending}
+              className="text-sm py-2 px-4 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium inline-flex items-center gap-2 disabled:opacity-50"
+              title="Generate an image via Imagen 4 from the flipped script"
+            >
+              {imagePending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+              {imagePending ? "Generating image…" : genImage ? "Regenerate image" : "Create image"}
+            </button>
+            <button
+              onClick={createPost}
+              disabled={draftPending || imagePending}
+              className="text-sm py-2 px-4 rounded-lg bg-[var(--color-surface-2)] text-[var(--color-text)] font-medium border border-[var(--color-border)] inline-flex items-center gap-2 disabled:opacity-50"
+              title={
+                genImage
+                  ? "Create a draft with the flipped script + generated image, then open it in Compose"
+                  : "Create a draft with the flipped script (no image), then open it in Compose"
+              }
+            >
+              {draftPending ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Send className="w-3.5 h-3.5" />
+              )}
+              {draftPending ? "Creating draft…" : genImage ? "Create post (with image)" : "Create post"}
+            </button>
             <button
               onClick={() => router.push(`/compose?prefill=${encodeURIComponent(out.twisted)}`)}
-              className="text-sm py-2 px-4 rounded-lg bg-[var(--color-accent)] text-black font-medium"
+              className="text-sm py-2 px-4 rounded-lg bg-transparent text-[var(--color-muted)] hover:text-[var(--color-text)] font-medium"
+              title="Open Compose with just the prefilled caption (no draft created yet)"
             >
-              Send flipped script to Compose →
+              Open in Compose →
             </button>
             {out.sourceImages && out.sourceImages.length > 0 && (
               <button
@@ -338,6 +425,40 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
               </button>
             )}
           </div>
+
+          {/* Inline error from createImage / createPost */}
+          {actionErr && (
+            <div className="bg-red-50 border border-red-200 text-red-900 text-xs rounded-md px-3 py-2">
+              {actionErr}
+            </div>
+          )}
+
+          {/* Generated image preview — shows up after createImage succeeds.
+              Has its own use-in-draft path that bypasses the chain in case
+              the user wants to just take the image without making a post. */}
+          {genImage && (
+            <div className="border rounded-xl bg-[var(--color-surface)] p-3 space-y-2">
+              <p className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                Generated image (Imagen 4)
+              </p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={genImage}
+                alt="Generated from flipped script"
+                loading="lazy"
+                className="w-full max-w-sm rounded-lg bg-black"
+              />
+              <a
+                href={genImage}
+                download
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-xs text-[var(--color-muted)] hover:text-[var(--color-text)]"
+              >
+                <Download className="w-3 h-3" /> Download PNG
+              </a>
+            </div>
+          )}
         </div>
       )}
     </div>
