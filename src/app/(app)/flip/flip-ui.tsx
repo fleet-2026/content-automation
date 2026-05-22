@@ -103,6 +103,13 @@ type UrlExtractOut = {
 
 const CAROUSEL_KEY = "flipit:lastCarouselUrls";
 const CAROUSEL_SOURCE_KEY = "flipit:lastSourceUrl";
+// Flipped-script sessionStorage so Image / Video prompts tabs can auto-fill
+// from the most recent URL extract. Tabs are independent React components
+// with their own state, so without this they'd start empty every time the
+// user switches — forcing manual copy-paste of the flipped script. The
+// auto-fill only applies when the textarea is empty, so user edits aren't
+// clobbered.
+const FLIPPED_SCRIPT_KEY = "flipit:lastFlippedScript";
 
 function persistCarousel(urls: string[] | undefined, sourceUrl: string) {
   const list = (urls ?? []).filter(Boolean);
@@ -115,6 +122,24 @@ function persistCarousel(urls: string[] | undefined, sourceUrl: string) {
     } catch {
       // sessionStorage may be unavailable (private mode etc.) — fail silent
     }
+  }
+}
+
+function persistFlippedScript(twisted: string) {
+  if (typeof window === "undefined" || !twisted.trim()) return;
+  try {
+    sessionStorage.setItem(FLIPPED_SCRIPT_KEY, twisted);
+  } catch {
+    // private mode etc. — fail silent
+  }
+}
+
+function readPersistedFlippedScript(): string {
+  if (typeof window === "undefined") return "";
+  try {
+    return sessionStorage.getItem(FLIPPED_SCRIPT_KEY) ?? "";
+  } catch {
+    return "";
   }
 }
 
@@ -156,6 +181,9 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
         const r = (await flipFromUrl(url.trim())) as UrlExtractOut;
         setOut(r);
         persistCarousel(r.sourceImages, url.trim());
+        // Persist the flipped script too so Image / Video prompts tabs
+        // pick it up automatically when the user navigates over.
+        persistFlippedScript(r.twisted);
       } catch (e) {
         setErr(String((e as Error).message ?? e));
       }
@@ -245,6 +273,7 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
         const flipped = (await flipFromUrl(url.trim())) as UrlExtractOut;
         setOut(flipped);
         persistCarousel(flipped.sourceImages, url.trim());
+        persistFlippedScript(flipped.twisted);
         const draft = await createDraftFromFlip({
           caption: flipped.twisted,
         });
@@ -459,19 +488,37 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
             >
               Open in Compose →
             </button>
-            {out.sourceImages && out.sourceImages.length > 0 && (
-              <button
-                onClick={() =>
-                  router.push(
-                    `/flip?tab=image&useCarousel=1`, // ImageTab will read from sessionStorage
-                  )
-                }
-                className="text-sm py-2 px-4 rounded-lg bg-[var(--color-surface-2)] text-[var(--color-text)] font-medium border border-[var(--color-border)] inline-flex items-center gap-2"
-              >
-                <ImageIcon className="w-3.5 h-3.5" />
-                Use these images for prompts →
-              </button>
-            )}
+            {/* Direct jumps to Image / Video prompt tabs. The flipped
+                script is already persisted to sessionStorage above, so
+                these tabs will pre-fill their textareas on mount. */}
+            <button
+              onClick={() => {
+                persistFlippedScript(out.twisted);
+                router.push(
+                  out.sourceImages && out.sourceImages.length > 0
+                    ? `/flip?tab=image&useCarousel=1`
+                    : `/flip?tab=image`,
+                );
+              }}
+              className="text-sm py-2 px-4 rounded-lg bg-[var(--color-surface-2)] text-[var(--color-text)] font-medium border border-[var(--color-border)] inline-flex items-center gap-2"
+              title="Open Image prompts with this flipped script pre-filled"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              {out.sourceImages && out.sourceImages.length > 0
+                ? "Generate image prompts (with source images) →"
+                : "Generate image prompts →"}
+            </button>
+            <button
+              onClick={() => {
+                persistFlippedScript(out.twisted);
+                router.push(`/flip?tab=video`);
+              }}
+              className="text-sm py-2 px-4 rounded-lg bg-[var(--color-surface-2)] text-[var(--color-text)] font-medium border border-[var(--color-border)] inline-flex items-center gap-2"
+              title="Open Video prompts with this flipped script pre-filled"
+            >
+              <Video className="w-3.5 h-3.5" />
+              Generate video prompts →
+            </button>
           </div>
 
           {/* Inline error from createImage / createPost */}
@@ -663,7 +710,11 @@ function IdeasTab() {
 
 function ImageTab() {
   const [mode, setMode] = useState<"script" | "scaffold">("script");
-  const [script, setScript] = useState("");
+  // Pre-fill from the most recent URL extract via sessionStorage so users
+  // who flip something on the URL tab don't have to copy-paste the
+  // result over here. Only seeds when the textarea would otherwise be
+  // empty — user edits stay sticky.
+  const [script, setScript] = useState(() => readPersistedFlippedScript());
   const [niche, setNiche] = useState("ai");
   const [event, setEvent] = useState("");
   const [style, setStyle] = useState("photorealistic");
@@ -885,7 +936,9 @@ function ImageTab() {
 // ─── VIDEO PROMPTS ───────────────────────────────────────────
 
 function VideoTab() {
-  const [script, setScript] = useState("");
+  // Same pre-fill as ImageTab — read the last flipped script so users
+  // moving from URL extract → Video prompts don't see an empty textarea.
+  const [script, setScript] = useState(() => readPersistedFlippedScript());
   const [platform, setPlatform] = useState("Runway");
   const [prompts, setPrompts] = useState<{ label: string; prompt: string }[] | null>(null);
   const [pending, start] = useTransition();
