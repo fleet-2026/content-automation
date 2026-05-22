@@ -18,12 +18,21 @@ import {
   Wand2,
   Search,
   StickyNote,
+  Library,
+  ListChecks,
   Menu,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const items = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof LayoutDashboard;
+  external?: boolean;
+};
+
+const items: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/posts", label: "Posts", icon: FileText },
   { href: "/hooks", label: "Hooks", icon: Sparkles },
@@ -35,9 +44,16 @@ const items = [
   { href: "/studio", label: "Studio", icon: Wand2 },
   { href: "/compose", label: "Compose", icon: PenLine },
   { href: "/drafts", label: "Drafts", icon: ClipboardList },
+  { href: "/tracker", label: "31-day tracker", icon: ListChecks },
   { href: "/notes", label: "Notes", icon: StickyNote },
   { href: "/schedule", label: "Schedule", icon: CalendarClock },
   { href: "/chat", label: "Chat", icon: MessageSquare },
+  {
+    href: "https://ayla-prompts-dashboard.netlify.app",
+    label: "Prompts",
+    icon: Library,
+    external: true,
+  },
 ];
 
 export function Nav() {
@@ -107,19 +123,36 @@ export function Nav() {
           </Link>
         </div>
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {items.map(({ href, label, icon: Icon }) => {
-            const active = pathname === href || pathname.startsWith(href + "/");
+          {items.map(({ href, label, icon: Icon, external }) => {
+            const active =
+              !external && (pathname === href || pathname.startsWith(href + "/"));
+            const className = cn(
+              "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition",
+              active
+                ? "bg-[var(--color-surface-2)] text-[var(--color-text)]"
+                : "text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]",
+            );
+            if (external) {
+              return (
+                <a
+                  key={href}
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={className}
+                >
+                  <Icon className="w-4 h-4 shrink-0" />
+                  <span className="flex-1">{label}</span>
+                  <span aria-hidden className="text-xs opacity-60">↗</span>
+                </a>
+              );
+            }
             return (
               <Link
                 key={href}
                 href={href}
                 aria-current={active ? "page" : undefined}
-                className={cn(
-                  "flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition",
-                  active
-                    ? "bg-[var(--color-surface-2)] text-[var(--color-text)]"
-                    : "text-[var(--color-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]",
-                )}
+                className={className}
               >
                 <Icon className="w-4 h-4 shrink-0" />
                 {label}
