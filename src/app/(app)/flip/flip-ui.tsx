@@ -224,23 +224,71 @@ function UrlTab({ initialUrl, router }: { initialUrl: string; router: ReturnType
     });
   }
 
+  /**
+   * Direct path: URL → Flip → Create draft → /compose, all in one click
+   * without waiting for the user to see the Flip output first. Used by
+   * the "Create post →" shortcut next to the Flip button. Useful when
+   * you already know what you want and just need a draft ready to edit.
+   *
+   * Errors at any stage surface to the same err banner the Flip button
+   * uses — keeps UX consistent.
+   */
+  function flipAndCreatePost() {
+    if (!url.trim()) return;
+    setErr(null);
+    setActionErr(null);
+    setOut(null);
+    setVideo(null);
+    setGenImage(null);
+    startDraft(async () => {
+      try {
+        const flipped = (await flipFromUrl(url.trim())) as UrlExtractOut;
+        setOut(flipped);
+        persistCarousel(flipped.sourceImages, url.trim());
+        const draft = await createDraftFromFlip({
+          caption: flipped.twisted,
+        });
+        router.push(`/compose?draft=${draft.draftId}`);
+      } catch (e) {
+        setErr(e instanceof Error ? e.message : String(e));
+      }
+    });
+  }
+
   return (
     <div className="space-y-4">
       <Field label="Paste a TikTok / IG / YouTube / X / LinkedIn URL">
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <input
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             placeholder="https://www.tiktok.com/@creator/video/123…"
-            className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)]"
+            className="flex-1 min-w-[200px] px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)]"
           />
           <button
             onClick={go}
-            disabled={pending || !url.trim()}
-            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-black font-medium text-sm disabled:opacity-50 inline-flex items-center gap-2"
+            disabled={pending || draftPending || !url.trim()}
+            className="px-4 py-2 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] text-[var(--color-text)] font-medium text-sm border border-[var(--color-border)] disabled:opacity-50 inline-flex items-center gap-2"
+            title="Show the flipped script + source images first (so you can review before creating a post)"
           >
             {pending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
             Flip
+          </button>
+          {/* Direct path: URL → flipped draft → /compose, no review step.
+              Available even when the user hasn't clicked Flip yet — the
+              one-click answer to "I just want a draft from this URL." */}
+          <button
+            onClick={flipAndCreatePost}
+            disabled={pending || draftPending || !url.trim()}
+            className="px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium text-sm disabled:opacity-50 inline-flex items-center gap-2"
+            title="Flip the URL and create a draft post in one step, then open it in Compose"
+          >
+            {draftPending ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Send className="w-4 h-4" />
+            )}
+            {draftPending ? "Creating post…" : "Create post →"}
           </button>
         </div>
       </Field>
