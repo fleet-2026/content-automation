@@ -235,25 +235,51 @@ export function HookOverlayEditor({
 
   async function apply() {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    if (!canvas) {
+      setErr("Canvas not ready — try closing and reopening the editor.");
+      return;
+    }
+    if (!text.trim()) {
+      setErr("Type some text first.");
+      return;
+    }
     setApplying(true);
     setErr(null);
     try {
-      // PNG (lossless) — JPEG at 0.92 was making text edges look blurry
-      // / fuzzy because JPEG's chroma subsampling + DCT compression mangles
-      // high-frequency content like type. PNG preserves every pixel of the
-      // canvas exactly. File size is bigger (especially for photo bg) but
-      // for an image with text baked on it that's the right trade-off —
-      // sharp captions are the whole point of this feature.
+      // Force a final render() before export so the canvas reflects the
+      // very latest text/position/color/font state. Previously the
+      // useEffect-driven render might be one tick behind a fast Apply
+      // click, exporting a stale canvas.
+      render();
+
       const blob: Blob = await new Promise((resolve, reject) => {
-        canvas.toBlob(
-          (b) => {
-            if (b) resolve(b);
-            else reject(new Error("Canvas export failed"));
-          },
-          "image/png",
-        );
+        try {
+          canvas.toBlob(
+            (b) => {
+              if (b) resolve(b);
+              else
+                reject(
+                  new Error(
+                    "Canvas export returned null — usually a CORS taint on the source image.",
+                  ),
+                );
+            },
+            "image/png",
+          );
+        } catch (toBlobErr) {
+          // SecurityError from canvas.toBlob on tainted canvas — surfaces
+          // here instead of via the callback in some browsers.
+          reject(
+            toBlobErr instanceof Error
+              ? toBlobErr
+              : new Error("Canvas toBlob threw " + String(toBlobErr)),
+          );
+        }
       });
+
+      if (blob.size === 0) {
+        throw new Error("Generated image is empty.");
+      }
 
       const fd = new FormData();
       fd.append(
@@ -261,14 +287,25 @@ export function HookOverlayEditor({
         new File([blob], `hook-overlay-${Date.now()}.png`, { type: "image/png" }),
       );
       const res = await fetch("/api/upload", { method: "POST", body: fd });
+      const bodyJson = await res.json().catch(() => ({} as { message?: string; error?: string }));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.message ?? body?.error ?? `HTTP ${res.status}`);
+        const msg =
+          (bodyJson as { message?: string; error?: string }).message ??
+          (bodyJson as { message?: string; error?: string }).error ??
+          `HTTP ${res.status}`;
+        // Diagnostic log so server-side has more than the user-facing message.
+        // eslint-disable-next-line no-console
+        console.error("[overlay] upload failed:", res.status, bodyJson);
+        throw new Error("Upload failed: " + msg);
       }
-      const { url } = (await res.json()) as { url: string };
+      const url = (bodyJson as { url?: string }).url;
+      if (!url) throw new Error("Server didn't return a URL");
       onApply(url);
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      // eslint-disable-next-line no-console
+      console.error("[overlay] apply failed:", msg);
+      setErr(msg);
     } finally {
       setApplying(false);
     }
@@ -320,6 +357,13 @@ export function HookOverlayEditor({
 
           {/* Controls */}
           <div className="space-y-4">
+            {/* Sticky top error banner so users always see save failures
+                even if the modal is taller than the screen. */}
+            {err && (
+              <div className="sticky top-0 z-10 bg-red-100 border-2 border-red-400 text-red-900 text-xs rounded-lg p-3 font-medium">
+                {err}
+              </div>
+            )}
             <Field label="Text to put on image">
               <textarea
                 autoFocus
@@ -412,11 +456,9 @@ export function HookOverlayEditor({
               />
             </Field>
 
-            {err && (
-              <div className="bg-red-100 border border-red-300 text-red-900 text-xs rounded-lg p-2.5">
-                {err}
-              </div>
-            )}
+            {/* (Error banner moved to sticky-top of controls column — see
+                above. Removed the duplicate to avoid double-rendering the
+                same message in two places.) */}
 
             <div className="flex flex-col gap-2 pt-2 border-t border-[var(--color-border)]">
               <button
