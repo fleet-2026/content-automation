@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import {
   updatePost,
   setPublished,
@@ -10,6 +10,12 @@ import {
   rateHook,
   replaceHook,
 } from "../actions";
+import {
+  createAvatarVideo,
+  pollAsset,
+  listHeygenAvatars,
+  listHeygenVoices,
+} from "@/app/(app)/studio/actions";
 import type { DailyPost } from "../data";
 
 type HookRating = {
@@ -103,6 +109,117 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   };
 
   const [videoUrl, setVideoUrl] = useState<string | null>(post.videoUrl ?? null);
+
+  // HeyGen state — list of trained avatars + available voices loaded on
+  // mount from the HeyGen API. The selected avatar/voice persists per-user
+  // in localStorage so they don't have to repick on every guide.
+  type HGAvatar = { avatar_id: string; avatar_name: string; preview_image_url?: string };
+  type HGVoice = { voice_id: string; name: string; language: string; gender: string };
+  const [heygenAvatars, setHeygenAvatars] = useState<HGAvatar[]>([]);
+  const [heygenVoices, setHeygenVoices] = useState<HGVoice[]>([]);
+  const [heygenAvatarId, setHeygenAvatarId] = useState<string>("");
+  const [heygenVoiceId, setHeygenVoiceId] = useState<string>("");
+  const [heygenLoading, setHeygenLoading] = useState(false);
+  const [heygenStatus, setHeygenStatus] = useState<string>(""); // running progress text
+  const [heygenError, setHeygenError] = useState<string | null>(null);
+
+  // Load HeyGen avatars + voices on mount + restore last-used selection
+  // from localStorage. Failures (no API key, network) leave the dropdowns
+  // empty + show an inline hint instead of crashing the page.
+  useEffect(() => {
+    (async () => {
+      try {
+        const [avatars, voices] = await Promise.all([
+          listHeygenAvatars(),
+          listHeygenVoices(),
+        ]);
+        setHeygenAvatars(avatars as HGAvatar[]);
+        setHeygenVoices(voices as HGVoice[]);
+        if (typeof window !== "undefined") {
+          const a = window.localStorage.getItem("heygen:lastAvatarId") ?? "";
+          const v = window.localStorage.getItem("heygen:lastVoiceId") ?? "";
+          if (a && (avatars as HGAvatar[]).some((x) => x.avatar_id === a)) {
+            setHeygenAvatarId(a);
+          }
+          if (v && (voices as HGVoice[]).some((x) => x.voice_id === v)) {
+            setHeygenVoiceId(v);
+          }
+        }
+      } catch (e) {
+        setHeygenError((e as Error).message);
+      }
+    })();
+  }, []);
+
+  // Save user's choices so the next guide remembers them.
+  useEffect(() => {
+    if (typeof window !== "undefined" && heygenAvatarId) {
+      window.localStorage.setItem("heygen:lastAvatarId", heygenAvatarId);
+    }
+  }, [heygenAvatarId]);
+  useEffect(() => {
+    if (typeof window !== "undefined" && heygenVoiceId) {
+      window.localStorage.setItem("heygen:lastVoiceId", heygenVoiceId);
+    }
+  }, [heygenVoiceId]);
+
+  // Run the HeyGen job: kick off via createAvatarVideo → poll the
+  // /api/studio/poll endpoint until READY → save the resulting MP4 URL
+  // to DailyGuide.videoUrl via setMedia → update local state so the
+  // existing video preview tile shows it.
+  const runHeyGenGenerate = async () => {
+    setHeygenError(null);
+    if (!script.trim()) {
+      setHeygenError("Talking-head script is empty — fill it in first.");
+      return;
+    }
+    if (!heygenAvatarId) {
+      setHeygenError("Pick an avatar.");
+      return;
+    }
+    if (!heygenVoiceId) {
+      setHeygenError("Pick a voice.");
+      return;
+    }
+    setHeygenLoading(true);
+    setHeygenStatus("Kicking off HeyGen job…");
+    try {
+      const placeholder = await createAvatarVideo({
+        script: script.trim(),
+        avatarId: heygenAvatarId,
+        voiceId: heygenVoiceId,
+        aspect: "9:16",
+      });
+      setHeygenStatus("Rendering — usually 2-5 min…");
+      // Poll every 4s for up to 10 min.
+      const deadline = Date.now() + 10 * 60 * 1000;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        if (Date.now() > deadline) {
+          throw new Error("Timed out after 10 min — check HeyGen dashboard.");
+        }
+        await new Promise((r) => setTimeout(r, 4000));
+        const a = await pollAsset(placeholder.id);
+        if (!a) throw new Error("Asset disappeared.");
+        if (a.status === "READY" && a.url) {
+          setHeygenStatus("Saving to guide…");
+          await setMedia(post.slug, { videoUrl: a.url });
+          setVideoUrl(a.url);
+          setHeygenStatus("");
+          break;
+        }
+        if (a.status === "FAILED") {
+          throw new Error(a.error || "HeyGen render failed");
+        }
+        // else still rendering — keep polling
+      }
+    } catch (e) {
+      setHeygenError((e as Error).message);
+      setHeygenStatus("");
+    } finally {
+      setHeygenLoading(false);
+    }
+  };
   const [imageUrls, setImageUrls] = useState<string[]>(post.imageUrls ?? []);
   const [uploadingKind, setUploadingKind] = useState<"video" | "image" | null>(
     null,
@@ -626,6 +743,93 @@ export default function PostEditor({ post }: { post: DailyPost }) {
         {videoPrompt && (
           <div className="mt-1 text-[10px] text-[var(--color-muted)]">
             {videoPrompt.split(/\s+/).filter(Boolean).length} words · edits auto-save on blur
+          </div>
+        )}
+      </Section>
+
+      {/* HeyGen avatar generator — pick an avatar + voice you've
+          already trained on heygen.com, hit Generate, and the resulting
+          9:16 MP4 lands automatically in the talking-head video tile
+          below. Uses the existing async studio pipeline so the long
+          (~3-5 min) render doesn't block this page. */}
+      <Section
+        label="HeyGen avatar video"
+        hint="Render the talking-head clip from your trained HeyGen avatar"
+      >
+        {heygenError && (
+          <div className="mb-2 rounded border border-red-500/30 bg-red-500/5 p-2 text-xs text-red-300">
+            {heygenError}
+          </div>
+        )}
+        {heygenAvatars.length === 0 && !heygenError ? (
+          <div className="rounded border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-xs text-[var(--color-muted)]">
+            Loading your HeyGen avatars… If this stays empty, check that
+            HEYGEN_API_KEY is set in your Vercel env vars and that you've
+            trained at least one Photo Avatar on heygen.com.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* Avatar picker */}
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-[var(--color-muted)] font-semibold mb-1">
+                  Avatar (your trained photo avatars)
+                </label>
+                <select
+                  value={heygenAvatarId}
+                  onChange={(e) => setHeygenAvatarId(e.target.value)}
+                  disabled={heygenLoading}
+                  className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm disabled:opacity-50"
+                >
+                  <option value="">— Pick an avatar —</option>
+                  {heygenAvatars.map((a) => (
+                    <option key={a.avatar_id} value={a.avatar_id}>
+                      {a.avatar_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {/* Voice picker */}
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-[var(--color-muted)] font-semibold mb-1">
+                  Voice
+                </label>
+                <select
+                  value={heygenVoiceId}
+                  onChange={(e) => setHeygenVoiceId(e.target.value)}
+                  disabled={heygenLoading}
+                  className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm disabled:opacity-50"
+                >
+                  <option value="">— Pick a voice —</option>
+                  {heygenVoices
+                    .filter((v) => v.language.toLowerCase().startsWith("en"))
+                    .map((v) => (
+                      <option key={v.voice_id} value={v.voice_id}>
+                        {v.name} · {v.gender} · {v.language}
+                      </option>
+                    ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <button
+                type="button"
+                onClick={runHeyGenGenerate}
+                disabled={heygenLoading || !script.trim() || !heygenAvatarId || !heygenVoiceId}
+                className="rounded bg-[var(--color-text)] text-[var(--color-text-on-dark)] px-3 py-2 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+              >
+                {heygenLoading ? "Generating…" : "Generate talking-head with HeyGen"}
+              </button>
+              {heygenStatus && (
+                <span className="text-xs text-[var(--color-muted)]">
+                  {heygenStatus}
+                </span>
+              )}
+              <span className="text-[10px] text-[var(--color-muted)] ml-auto">
+                Selection saved for next guide · uses the Talking-head script above as the voiceover
+              </span>
+            </div>
           </div>
         )}
       </Section>
