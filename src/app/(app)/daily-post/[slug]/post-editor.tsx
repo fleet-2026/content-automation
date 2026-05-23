@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { updatePost, setPublished } from "../actions";
+import { useRef, useState, useTransition } from "react";
+import { updatePost, setPublished, setMedia } from "../actions";
 import type { DailyPost } from "../data";
 
 export default function PostEditor({ post }: { post: DailyPost }) {
@@ -17,7 +17,96 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const [published, setPublishedState] = useState<boolean>(!!post.isPublished);
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState<string | null>(null);
-  const [videoFile, setVideoFile] = useState<File | null>(null);
+
+  // Media state — initialized from the server-rendered guide so the
+  // upload section shows what's already saved. After upload + setMedia
+  // server action, we update local state immediately so the preview
+  // appears without a full page reload.
+  const [videoUrl, setVideoUrl] = useState<string | null>(post.videoUrl ?? null);
+  const [imageUrls, setImageUrls] = useState<string[]>(post.imageUrls ?? []);
+  const [uploadingKind, setUploadingKind] = useState<"video" | "image" | null>(
+    null,
+  );
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+
+  // POST to /api/upload — returns the R2 URL.
+  const uploadOne = async (file: File): Promise<string> => {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body: form });
+    if (!res.ok) {
+      const j = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
+      throw new Error(j.message ?? j.error ?? `Upload failed (${res.status})`);
+    }
+    const j = (await res.json()) as { url: string };
+    return j.url;
+  };
+
+  const handleVideoSelected = async (file: File | null) => {
+    if (!file) return;
+    setUploadError(null);
+    setUploadingKind("video");
+    try {
+      const url = await uploadOne(file);
+      const res = await setMedia(post.slug, { videoUrl: url });
+      if (!res.ok) throw new Error("Save failed");
+      setVideoUrl(url);
+    } catch (e) {
+      setUploadError((e as Error).message);
+    } finally {
+      setUploadingKind(null);
+      if (videoInputRef.current) videoInputRef.current.value = "";
+    }
+  };
+
+  const handleVideoRemove = async () => {
+    setUploadError(null);
+    setUploadingKind("video");
+    try {
+      const res = await setMedia(post.slug, { videoUrl: null });
+      if (!res.ok) throw new Error("Save failed");
+      setVideoUrl(null);
+    } catch (e) {
+      setUploadError((e as Error).message);
+    } finally {
+      setUploadingKind(null);
+    }
+  };
+
+  const handleImagesSelected = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadError(null);
+    setUploadingKind("image");
+    try {
+      // Upload sequentially so /api/upload's rate limit isn't tripped
+      // by a 10-image carousel parallel-blast.
+      const next = [...imageUrls];
+      for (const file of Array.from(files)) {
+        const url = await uploadOne(file);
+        next.push(url);
+        setImageUrls([...next]); // optimistic per-image render
+      }
+      const res = await setMedia(post.slug, { imageUrls: next });
+      if (!res.ok) throw new Error("Save failed");
+    } catch (e) {
+      setUploadError((e as Error).message);
+    } finally {
+      setUploadingKind(null);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+    }
+  };
+
+  const handleImageRemove = async (idx: number) => {
+    const next = imageUrls.filter((_, i) => i !== idx);
+    setImageUrls(next);
+    try {
+      await setMedia(post.slug, { imageUrls: next });
+    } catch (e) {
+      setUploadError((e as Error).message);
+    }
+  };
 
   const togglePublish = () => {
     const next = !published;
@@ -339,39 +428,128 @@ export default function PostEditor({ post }: { post: DailyPost }) {
         <ActionBar onCopy={() => copy(hashtagsRaw)} />
       </Section>
 
-      {/* Video upload slot */}
-      <Section label="Talking-head video" hint="Drop your recorded video here">
-        <div className="rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-center">
-          {videoFile ? (
-            <div>
-              <div className="text-sm font-medium">{videoFile.name}</div>
-              <div className="text-xs text-[var(--color-muted)] mt-1">
-                {(videoFile.size / 1024 / 1024).toFixed(1)} MB
+      {/* Media uploads — talking-head video + carousel images. Both
+          upload to R2 via /api/upload and the URL gets saved to
+          DailyGuide.videoUrl / .imageUrls. */}
+      <Section
+        label="Talking-head post & images"
+        hint="Upload the recorded Reel and/or carousel images for this guide"
+      >
+        {uploadError && (
+          <div className="mb-3 rounded border border-red-500/30 bg-red-500/5 p-2 text-xs text-red-300">
+            Upload error: {uploadError}
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Talking-head video */}
+          <div>
+            <div className="text-xs font-semibold mb-1.5">Talking-head video</div>
+            {videoUrl ? (
+              <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+                <video
+                  src={videoUrl}
+                  controls
+                  className="w-full rounded aspect-[9/16] object-cover bg-black"
+                />
+                <div className="mt-2 flex gap-2 items-center">
+                  <a
+                    href={videoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[11px] underline text-[var(--color-muted)] truncate"
+                  >
+                    {videoUrl.split("/").pop()}
+                  </a>
+                  <div className="flex-1" />
+                  <button
+                    type="button"
+                    onClick={handleVideoRemove}
+                    disabled={uploadingKind === "video"}
+                    className="text-[11px] rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => setVideoFile(null)}
-                className="mt-3 text-xs text-[var(--color-muted)] underline"
-              >
-                Remove
-              </button>
+            ) : (
+              <label className="block cursor-pointer rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-center hover:border-[var(--color-text)]/30 transition">
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/*"
+                  className="hidden"
+                  onChange={(e) => handleVideoSelected(e.target.files?.[0] ?? null)}
+                  disabled={uploadingKind === "video"}
+                />
+                <div className="text-sm text-[var(--color-muted)]">
+                  {uploadingKind === "video" ? "Uploading…" : "Click to upload Reel"}
+                </div>
+                <div className="text-xs text-[var(--color-muted)] mt-1">
+                  MP4 / MOV · max 200 MB
+                </div>
+              </label>
+            )}
+          </div>
+
+          {/* Carousel images */}
+          <div>
+            <div className="text-xs font-semibold mb-1.5">
+              Carousel images{" "}
+              <span className="font-normal text-[var(--color-muted)]">
+                ({imageUrls.length})
+              </span>
             </div>
-          ) : (
-            <label className="cursor-pointer">
-              <input
-                type="file"
-                accept="video/*"
-                className="hidden"
-                onChange={(e) => setVideoFile(e.target.files?.[0] ?? null)}
-              />
-              <div className="text-sm text-[var(--color-muted)]">
-                Click to select video (or drag here)
-              </div>
-              <div className="text-xs text-[var(--color-muted)] mt-1">
-                MP4 / MOV — typically a 60-90 sec talking-head clip
-              </div>
-            </label>
-          )}
+            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 space-y-3">
+              {imageUrls.length > 0 && (
+                <div className="grid grid-cols-3 gap-2">
+                  {imageUrls.map((url, i) => (
+                    <div key={url + i} className="relative group">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={url}
+                        alt={`Carousel ${i + 1}`}
+                        className="w-full aspect-square object-cover rounded border border-[var(--color-border)]"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleImageRemove(i)}
+                        className="absolute top-1 right-1 rounded bg-black/60 text-white text-[10px] px-1.5 py-0.5 opacity-0 group-hover:opacity-100 transition"
+                        title="Remove image"
+                      >
+                        ✕
+                      </button>
+                      <div className="absolute bottom-1 left-1 rounded bg-black/60 text-white text-[10px] px-1.5 py-0.5">
+                        {i + 1}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <label className="block cursor-pointer rounded border border-dashed border-[var(--color-border)] py-4 text-center hover:border-[var(--color-text)]/30 transition">
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleImagesSelected(e.target.files)}
+                  disabled={uploadingKind === "image"}
+                />
+                <div className="text-xs text-[var(--color-muted)]">
+                  {uploadingKind === "image"
+                    ? "Uploading…"
+                    : imageUrls.length === 0
+                    ? "Click to add images (pick multiple)"
+                    : "Add more images"}
+                </div>
+                <div className="text-[10px] text-[var(--color-muted)] mt-0.5">
+                  JPEG / PNG / WebP · max 200 MB each
+                </div>
+              </label>
+            </div>
+          </div>
         </div>
       </Section>
 

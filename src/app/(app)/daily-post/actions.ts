@@ -2,7 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { savePost, type GeneratedFields } from "./data";
-import { listAllGuidesAdmin, setGuidePublished } from "@/lib/guides";
+import {
+  listAllGuidesAdmin,
+  setGuidePublished,
+  updateGuide,
+} from "@/lib/guides";
 
 export async function updatePost(
   slug: string,
@@ -59,6 +63,20 @@ export async function publishAllReady() {
   revalidatePath(`/guides`);
   revalidatePath(`/sitemap.xml`);
   return { ok: true, published, skipped };
+}
+
+/** Save media URLs for a guide. Either videoUrl, imageUrls, or both.
+ *  Used by the post-editor's media upload section after /api/upload
+ *  returns an R2 URL. */
+export async function setMedia(
+  slug: string,
+  patch: { videoUrl?: string | null; imageUrls?: string[] },
+) {
+  const ok = await updateGuide(slug, patch);
+  revalidatePath(`/daily-post/${slug}`);
+  revalidatePath(`/daily-post`);
+  revalidatePath(`/guides/${slug}`);
+  return { ok };
 }
 
 /** Bulk unpublish — flips every published guide back to draft. */

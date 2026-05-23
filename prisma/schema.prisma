@@ -478,6 +478,13 @@ model DailyGuide {
   /// breaks; rendered with whitespace-pre-wrap. Empty by default; the admin
   /// writes/pastes the content per guide in /daily-post.
   body            String    @db.Text @default("")
+  /// Talking-head video URL (R2-hosted). Single file. Surfaced on the
+  /// dashboard editor as the "Talking-head post" upload slot; the public
+  /// /guides/<slug> page can optionally embed it.
+  videoUrl        String?   @db.Text
+  /// Carousel image URLs (R2-hosted). For image-based posts (no talking
+  /// head). Stored in order; admin uploads multiple at once.
+  imageUrls       String[]  @default([])
   /// Permalink to the live post on social once it's published. Null while still
   /// in draft state — once the user publishes, /daily-post writes the URL here.
   sourceUrl       String?   @db.Text

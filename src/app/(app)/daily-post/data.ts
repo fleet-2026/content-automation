@@ -36,6 +36,10 @@ export type DailyPost = {
   // Long-form article body — the "full guide" content rendered on
   // /guides/<slug>. Empty by default; admin fills it in from the editor.
   body?: string;
+  // Talking-head video URL (R2). Optional.
+  videoUrl?: string | null;
+  // Carousel image URLs (R2). Empty array if not set.
+  imageUrls?: string[];
   // New fields surfaced by the DB-backed source (used by the admin UI's
   // Publish toggle — render conditional on `isPublished`).
   isPublished?: boolean;
@@ -95,6 +99,8 @@ function toDailyPost(g: GuideAdminShape): DailyPost {
       keyword: g.manychatKeyword,
     },
     body: g.body,
+    videoUrl: g.videoUrl,
+    imageUrls: g.imageUrls,
     isPublished: g.isPublished,
     publishedAt: g.publishedAt ? g.publishedAt.toISOString() : null,
   };
