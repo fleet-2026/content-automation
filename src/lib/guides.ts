@@ -18,6 +18,7 @@ export type GuidePublic = {
   caption: string;
   hashtags: string[];
   manychatKeyword: string;
+  body: string;
   sourceUrl: string | null;
   publishedAt: Date | null;
 };
@@ -102,6 +103,7 @@ type Patchable = Partial<{
   caption: string;
   hashtags: string[];
   manychatKeyword: string;
+  body: string;
   sourceUrl: string | null;
   isPublished: boolean;
   index: number | null;
@@ -145,6 +147,7 @@ type RawGuide = {
   caption: string;
   hashtags: string[];
   manychatKeyword: string;
+  body: string;
   sourceUrl: string | null;
   isPublished: boolean;
   publishedAt: Date | null;
@@ -162,6 +165,7 @@ function toPublic(r: RawGuide): GuidePublic {
     caption: r.caption,
     hashtags: r.hashtags,
     manychatKeyword: r.manychatKeyword,
+    body: r.body,
     sourceUrl: r.sourceUrl,
     publishedAt: r.publishedAt,
   };

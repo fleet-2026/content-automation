@@ -13,6 +13,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
     (g?.hashtags ?? []).join(" "),
   );
   const [keyword, setKeyword] = useState(g?.keyword ?? "");
+  const [body, setBody] = useState(post.body ?? "");
   const [published, setPublishedState] = useState<boolean>(!!post.isPublished);
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState<string | null>(null);
@@ -34,7 +35,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   };
 
   const save = (patch: Partial<{
-    hook: string; script: string; caption: string; hashtags: string[]; keyword: string;
+    hook: string; script: string; caption: string; hashtags: string[]; keyword: string; body: string;
   }>) => {
     setStatus(null);
     startTransition(async () => {
@@ -171,6 +172,47 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm leading-relaxed font-mono"
         />
         <ActionBar onCopy={() => copy(script)} />
+      </Section>
+
+      {/* Long-form article body — the "full guide" shown on /guides/<slug>.
+          Empty by default; the admin pastes/writes a fuller piece of prose
+          here when they want the public page to read as a real article
+          (not just hook + script). Blank lines render as paragraph breaks
+          on the public page. */}
+      <Section
+        label="Full guide body"
+        hint="Long-form article shown on the public /guides page. Blank line = new paragraph."
+      >
+        <textarea
+          value={body}
+          onChange={(e) => setBody(e.target.value)}
+          onBlur={() => save({ body })}
+          rows={18}
+          placeholder="Write or paste the full guide here. This is what visitors read on the public /guides/<slug> page. Leave empty if you only want hook + script + caption on the page."
+          className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm leading-relaxed"
+        />
+        <div className="mt-1.5 flex gap-2 items-center">
+          <button
+            type="button"
+            onClick={() => copy(body)}
+            className="text-[11px] rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 hover:bg-[var(--color-surface-hover)]"
+          >
+            Copy
+          </button>
+          <span className="text-[10px] text-[var(--color-muted)]">
+            {body.trim().split(/\s+/).filter(Boolean).length} words · auto-saves on blur
+          </span>
+          {published && body.trim() && (
+            <a
+              href={`/guides/${post.slug}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] text-[var(--color-blush-deep)] hover:underline ml-auto"
+            >
+              Preview public page ↗
+            </a>
+          )}
+        </div>
       </Section>
 
       {/* Caption */}

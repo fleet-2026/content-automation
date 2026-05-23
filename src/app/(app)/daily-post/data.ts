@@ -33,6 +33,9 @@ export type DailyPost = {
   generated?: GeneratedFields;
   generated_at?: string;
   model?: string;
+  // Long-form article body — the "full guide" content rendered on
+  // /guides/<slug>. Empty by default; admin fills it in from the editor.
+  body?: string;
   // New fields surfaced by the DB-backed source (used by the admin UI's
   // Publish toggle — render conditional on `isPublished`).
   isPublished?: boolean;
@@ -58,16 +61,19 @@ export async function getPost(slug: string): Promise<DailyPost | null> {
 
 export async function savePost(
   slug: string,
-  patch: Partial<GeneratedFields>,
+  patch: Partial<GeneratedFields> & { body?: string },
 ): Promise<boolean> {
   // The old shape lumped everything under `generated`. The DB stores
   // each field at the top level, so we translate. `keyword` → `manychatKeyword`.
+  // `body` is a sibling of `generated` in the new shape (it's not script-y),
+  // so it passes straight through.
   return updateGuide(slug, {
     hook: patch.hook,
     script: patch.script,
     caption: patch.caption,
     hashtags: patch.hashtags,
     manychatKeyword: patch.keyword,
+    body: patch.body,
   });
 }
 
@@ -88,6 +94,7 @@ function toDailyPost(g: GuideAdminShape): DailyPost {
       hashtags: g.hashtags,
       keyword: g.manychatKeyword,
     },
+    body: g.body,
     isPublished: g.isPublished,
     publishedAt: g.publishedAt ? g.publishedAt.toISOString() : null,
   };

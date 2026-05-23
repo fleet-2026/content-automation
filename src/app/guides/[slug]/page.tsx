@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ExternalLink } from "lucide-react";
 import { getPublishedGuide } from "@/lib/guides";
 
 export const revalidate = 300; // 5-min ISR cache, matches the index page
@@ -93,33 +92,35 @@ export default async function GuideDetailPage({
         </blockquote>
       )}
 
-      {/* Primary CTA to the full source guide — promoted up top so it's
-          the first thing readers reach for after the hook. Bottom-of-
-          page link below stays as a secondary, lower-friction option. */}
-      {guide.sourceUrl && (
-        <div className="my-10">
-          <a
-            href={guide.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 rounded-full bg-[var(--color-blush-deep)] text-white px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition"
-          >
-            Read the full guide
-            <ExternalLink className="w-4 h-4" />
-          </a>
-        </div>
+      {/* Full guide body — owns the article experience on /guides/<slug>.
+          Renders as paragraphs split on blank lines so the admin can author
+          structured prose in /daily-post without a markdown library. When
+          empty, we fall through to the talking-head script below as the
+          minimum-viable page content. */}
+      {guide.body && guide.body.trim() ? (
+        <section className="prose-section my-10 space-y-5">
+          {guide.body
+            .trim()
+            .split(/\n\s*\n/) // blank line = new paragraph
+            .map((para, i) => (
+              <p
+                key={i}
+                className="whitespace-pre-wrap leading-relaxed text-[var(--color-text)] text-lg"
+              >
+                {para}
+              </p>
+            ))}
+        </section>
+      ) : (
+        <section className="prose-section">
+          <h2 className="font-display text-xl mb-4 mt-12 text-[var(--color-muted)]">
+            The talking-head script
+          </h2>
+          <p className="whitespace-pre-wrap leading-relaxed text-[var(--color-text)] text-lg">
+            {guide.script}
+          </p>
+        </section>
       )}
-
-      {/* Script — the meat. Pre-wrap preserves line breaks the user
-          intentionally added in their script. */}
-      <section className="prose-section">
-        <h2 className="font-display text-xl mb-4 mt-12 text-[var(--color-muted)]">
-          The talking-head script
-        </h2>
-        <p className="whitespace-pre-wrap leading-relaxed text-[var(--color-text)] text-lg">
-          {guide.script}
-        </p>
-      </section>
 
       {/* Caption (the actual post text) */}
       {guide.caption && (
@@ -164,21 +165,6 @@ export default async function GuideDetailPage({
             </div>
           )}
         </section>
-      )}
-
-      {/* Secondary outbound link at the foot of the page for readers
-          who scrolled past the hero CTA. Same href, lower visual weight. */}
-      {guide.sourceUrl && (
-        <div className="mt-12 pt-6 border-t border-[var(--color-border)]">
-          <a
-            href={guide.sourceUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-2 text-sm text-[var(--color-blush-deep)] hover:underline font-medium"
-          >
-            Read the full guide <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        </div>
       )}
 
       {/* Subtle CTA back to index */}

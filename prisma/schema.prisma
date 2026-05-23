@@ -473,6 +473,11 @@ model DailyGuide {
   caption         String    @db.Text // Instagram/TikTok caption text
   hashtags        String[]  @default([])
   manychatKeyword String    @db.Text // ManyChat trigger word for DM automation
+  /// Long-form article body — owns the "full guide" experience on /guides/<slug>
+  /// so we don't have to send readers off-domain. Plain text with paragraph
+  /// breaks; rendered with whitespace-pre-wrap. Empty by default; the admin
+  /// writes/pastes the content per guide in /daily-post.
+  body            String    @db.Text @default("")
   /// Permalink to the live post on social once it's published. Null while still
   /// in draft state — once the user publishes, /daily-post writes the URL here.
   sourceUrl       String?   @db.Text

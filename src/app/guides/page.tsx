@@ -43,12 +43,11 @@ export default async function GuidesIndexPage() {
       ) : (
         <ul className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {guides.map((g) => (
-            <li
-              key={g.slug}
-              className="relative h-full rounded-2xl border bg-[var(--color-surface)] p-6 hover:border-[var(--color-text)]/30 transition group"
-            >
-              {/* Whole-card link to the on-site detail page */}
-              <Link href={`/guides/${g.slug}`} className="block">
+            <li key={g.slug}>
+              <Link
+                href={`/guides/${g.slug}`}
+                className="block h-full rounded-2xl border bg-[var(--color-surface)] p-6 hover:border-[var(--color-text)]/30 transition group"
+              >
                 <div className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] mb-2">
                   {g.index != null ? `Day ${g.index}` : "Guide"}
                 </div>
@@ -60,30 +59,10 @@ export default async function GuidesIndexPage() {
                     {g.hook}
                   </p>
                 )}
+                <div className="mt-4 inline-flex items-center text-xs font-medium text-[var(--color-blush-deep)]">
+                  Read the guide →
+                </div>
               </Link>
-
-              {/* Two-CTA row: on-site detail + outbound full guide.
-                  The full-guide anchor sits relative-positioned on top
-                  of the card link so clicks bubble to the outbound
-                  href instead of being swallowed by the wrapper Link. */}
-              <div className="mt-4 flex items-center gap-3 flex-wrap">
-                <Link
-                  href={`/guides/${g.slug}`}
-                  className="text-xs font-medium text-[var(--color-blush-deep)] hover:underline"
-                >
-                  Read on site →
-                </Link>
-                {g.sourceUrl && (
-                  <a
-                    href={g.sourceUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="relative z-10 text-xs font-medium text-[var(--color-muted)] hover:text-[var(--color-text)] underline-offset-2 hover:underline"
-                  >
-                    Full guide ↗
-                  </a>
-                )}
-              </div>
             </li>
           ))}
         </ul>

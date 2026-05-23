@@ -4,9 +4,12 @@ import { revalidatePath } from "next/cache";
 import { savePost, type GeneratedFields } from "./data";
 import { listAllGuidesAdmin, setGuidePublished } from "@/lib/guides";
 
-export async function updatePost(slug: string, patch: Partial<GeneratedFields>) {
+export async function updatePost(
+  slug: string,
+  patch: Partial<GeneratedFields> & { body?: string },
+) {
   // Normalize hashtags if provided as a string
-  let p: Partial<GeneratedFields> = { ...patch };
+  let p: Partial<GeneratedFields> & { body?: string } = { ...patch };
   if (typeof (patch as unknown as { hashtagsRaw?: string }).hashtagsRaw === "string") {
     const raw = (patch as unknown as { hashtagsRaw: string }).hashtagsRaw;
     p.hashtags = raw
@@ -19,6 +22,9 @@ export async function updatePost(slug: string, patch: Partial<GeneratedFields>) 
   const ok = await savePost(slug, p);
   revalidatePath(`/daily-post/${slug}`);
   revalidatePath(`/daily-post`);
+  // Also revalidate the public page so body edits on a published guide
+  // show up without waiting for the 5-min ISR cache to expire.
+  revalidatePath(`/guides/${slug}`);
   return { ok };
 }
 
