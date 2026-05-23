@@ -131,12 +131,31 @@ export default async function DashboardPage({
     <div className="px-8 py-10 max-w-6xl">
       <div className="flex items-baseline justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-[var(--color-muted)] mt-1">
+          {/* Editorial display: Fraunces 900 with the SOFT axis, plus
+              a Fraunces Italic accent in blush pink. Matches the
+              "The takeaway for operators." reference style. */}
+          <h1 className="font-display text-4xl sm:text-5xl">
+            {userId && user?.name ? (
+              <>
+                Welcome back,{" "}
+                <span className="font-italic-accent text-blush">
+                  {user.name.split(" ")[0]}.
+                </span>
+              </>
+            ) : (
+              <>
+                Your{" "}
+                <span className="font-italic-accent text-blush">
+                  creator OS.
+                </span>
+              </>
+            )}
+          </h1>
+          <p className="text-[var(--color-muted)] mt-2">
             {DEMO
               ? "Demo mode — populated with sample data."
               : userId
-                ? `Welcome back${user?.name ? `, ${user.name}` : ""}.`
+                ? "Everything you post and everyone you watch, in one place."
                 : "Set DATABASE_URL and create a user to populate."}
           </p>
         </div>

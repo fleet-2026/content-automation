@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 @theme {
+  /* ─── Surfaces + body ─────────────────────────────────────────── */
   --color-bg: #fbf8f3;          /* very light cream — barely tinted, easy on eyes */
   --color-surface: #ffffff;     /* pure white cards */
   --color-surface-2: #f4eee5;   /* subtle warm sand — inputs, filled buttons */
@@ -9,9 +10,30 @@
   --color-text: #1f1410;        /* near-black with warm undertone — body text */
   --color-text-on-dark: #faf6ee;/* cream for text on chocolate */
   --color-muted: #7a6957;       /* warm grey-brown — secondary text, readable on white */
+
+  /* ─── Brand accents ──────────────────────────────────────────── */
   --color-accent: #b58a5a;      /* mustard / olive — primary accent */
   --color-accent-2: #8a9678;    /* deeper sage — secondary accent */
   --color-accent-3: #b8857a;    /* dusty rose — tertiary accent */
+
+  /* New blush pink — matches the italic "operators." accent in the
+     editorial reference. Use sparingly for italic flourishes and
+     hover highlights so it doesn't compete with the mustard primary. */
+  --color-blush: #f2a6b5;       /* soft pink — editorial italic accent */
+  --color-blush-deep: #d97a8d;  /* darker variant for hover / contrast on cream */
+
+  /* ─── Font-family tokens ─────────────────────────────────────── */
+  /* `--font-fraunces` / `--font-playfair` / `--font-inter` are injected by
+     next/font in src/app/layout.tsx. Define semantic aliases so component
+     CSS can reference intent ("display serif", "body sans") instead of
+     hard-coding family names. */
+  --font-display:
+    var(--font-fraunces), ui-serif, Georgia, "Times New Roman", serif;
+  --font-serif-italic:
+    var(--font-fraunces), var(--font-playfair), ui-serif, Georgia, serif;
+  --font-body:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 html,
@@ -20,9 +42,8 @@ body {
     radial-gradient(circle at top left, #fdfaf5 0%, #fbf8f3 40%, #f7f1e8 100%);
   background-attachment: fixed;
   color: var(--color-text);
-  font-family:
-    ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-family: var(--font-body);
+  font-feature-settings: "ss01", "cv11"; /* tabular figures + alt 'a' in Inter */
   min-height: 100vh;
 }
 
@@ -33,4 +54,41 @@ body {
 ::selection {
   background: var(--color-accent);
   color: var(--color-text-on-dark);
+}
+
+/* ─── Utility classes for opt-in editorial typography ──────────────────
+   These don't force every h1/h2/h3 in the app to switch — that would
+   break functional UI labels (e.g. card titles in dense layouts). Pages
+   that want the editorial look opt in via `font-display` / `font-italic-
+   accent`. The reference image style is reproduced with:
+
+     <h1 class="font-display font-black">
+       The takeaway for <span class="font-italic-accent text-blush">operators.</span>
+     </h1>
+*/
+
+.font-display {
+  font-family: var(--font-display);
+  /* High contrast + slab terminals come alive at heavy weights. */
+  font-weight: 900;
+  letter-spacing: -0.015em;
+  /* Variable-axes magic — only kicks in on browsers that support font-
+     variation-settings; gracefully ignored elsewhere. SOFT axis softens
+     the sharp terminals slightly for a more magazine-like feel; opsz
+     picks the display cut. */
+  font-variation-settings: "SOFT" 50, "opsz" 144;
+  line-height: 1.05;
+}
+
+.font-italic-accent {
+  font-family: var(--font-serif-italic);
+  font-style: italic;
+  font-weight: 700;
+  /* The reference image uses a slight tilt with the soft axis cranked
+     so italic strokes feel rounded rather than aggressive. */
+  font-variation-settings: "SOFT" 100, "opsz" 144;
+}
+
+.text-blush {
+  color: var(--color-blush-deep);
 }
