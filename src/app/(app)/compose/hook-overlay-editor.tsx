@@ -164,12 +164,26 @@ export function HookOverlayEditor({
     const canvas = canvasRef.current;
     const img = imageRef.current;
     if (!canvas || !img) return;
-    canvas.width = img.naturalWidth;
-    canvas.height = img.naturalHeight;
+
+    // Cap output at 1920px on the longest edge. Source images straight
+    // from phone cameras can be 4000×4000+ which made the exported PNG
+    // exceed Vercel's request body size limit (HTTP 413). 1920 is the
+    // standard Reels long-edge resolution — still razor sharp for text,
+    // ~75% smaller file. Preserves aspect ratio.
+    const MAX_DIM = 1920;
+    const ow = img.naturalWidth;
+    const oh = img.naturalHeight;
+    const scale = Math.min(1, MAX_DIM / Math.max(ow, oh));
+    canvas.width = Math.round(ow * scale);
+    canvas.height = Math.round(oh * scale);
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    ctx.drawImage(img, 0, 0);
+    // Use higher-quality downscale when shrinking
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
     if (!text.trim()) return;
 
@@ -252,39 +266,62 @@ export function HookOverlayEditor({
       // click, exporting a stale canvas.
       render();
 
-      const blob: Blob = await new Promise((resolve, reject) => {
-        try {
-          canvas.toBlob(
-            (b) => {
-              if (b) resolve(b);
-              else
-                reject(
-                  new Error(
-                    "Canvas export returned null — usually a CORS taint on the source image.",
-                  ),
-                );
-            },
-            "image/png",
-          );
-        } catch (toBlobErr) {
-          // SecurityError from canvas.toBlob on tainted canvas — surfaces
-          // here instead of via the callback in some browsers.
-          reject(
-            toBlobErr instanceof Error
-              ? toBlobErr
-              : new Error("Canvas toBlob threw " + String(toBlobErr)),
-          );
-        }
-      });
+      // Helper: canvas.toBlob wrapped in a Promise with proper error
+      // handling for CORS taint (SecurityError in toBlob).
+      const exportBlob = (mime: string, quality?: number): Promise<Blob> =>
+        new Promise((resolve, reject) => {
+          try {
+            canvas.toBlob(
+              (b) => {
+                if (b) resolve(b);
+                else
+                  reject(
+                    new Error(
+                      `Canvas export returned null (${mime}) — usually a CORS taint on the source image.`,
+                    ),
+                  );
+              },
+              mime,
+              quality,
+            );
+          } catch (toBlobErr) {
+            reject(
+              toBlobErr instanceof Error
+                ? toBlobErr
+                : new Error("Canvas toBlob threw " + String(toBlobErr)),
+            );
+          }
+        });
+
+      // Vercel rejects request bodies over a few MB with HTTP 413 before
+      // they even reach our /api/upload route. Try PNG first (sharpest
+      // text), but if it's > 3.5 MB fall back to a high-quality JPEG.
+      // JPEG @ 0.92 on a 1920px image is typically 300-800 KB — well
+      // inside Vercel's limit — and text edges still look crisp.
+      const PNG_LIMIT = 3.5 * 1024 * 1024;
+      let blob = await exportBlob("image/png");
+      let ext = "png";
+      let mime = "image/png";
+      if (blob.size > PNG_LIMIT) {
+        // eslint-disable-next-line no-console
+        console.info(
+          `[overlay] PNG ${Math.round(blob.size / 1024)}KB > limit, retrying as JPEG`,
+        );
+        blob = await exportBlob("image/jpeg", 0.92);
+        ext = "jpg";
+        mime = "image/jpeg";
+      }
 
       if (blob.size === 0) {
         throw new Error("Generated image is empty.");
       }
+      // eslint-disable-next-line no-console
+      console.info(`[overlay] uploading ${ext.toUpperCase()} ${Math.round(blob.size / 1024)}KB`);
 
       const fd = new FormData();
       fd.append(
         "file",
-        new File([blob], `hook-overlay-${Date.now()}.png`, { type: "image/png" }),
+        new File([blob], `hook-overlay-${Date.now()}.${ext}`, { type: mime }),
       );
       const res = await fetch("/api/upload", { method: "POST", body: fd });
       const bodyJson = await res.json().catch(() => ({} as { message?: string; error?: string }));
