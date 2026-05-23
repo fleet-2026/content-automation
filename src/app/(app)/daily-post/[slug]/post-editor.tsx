@@ -1,7 +1,13 @@
 "use client";
 
 import { useRef, useState, useTransition } from "react";
-import { updatePost, setPublished, setMedia } from "../actions";
+import {
+  updatePost,
+  setPublished,
+  setMedia,
+  generateVideoPrompt,
+  saveVideoPrompt,
+} from "../actions";
 import type { DailyPost } from "../data";
 
 export default function PostEditor({ post }: { post: DailyPost }) {
@@ -22,6 +28,32 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   // upload section shows what's already saved. After upload + setMedia
   // server action, we update local state immediately so the preview
   // appears without a full page reload.
+  // Video-prompt brief state — separate from media URLs since it's a
+  // text artifact, not a binary upload.
+  const [videoPrompt, setVideoPromptText] = useState<string>(post.videoPrompt ?? "");
+  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+  const [promptError, setPromptError] = useState<string | null>(null);
+
+  const runGeneratePrompt = async () => {
+    setPromptError(null);
+    setIsGeneratingPrompt(true);
+    try {
+      const res = await generateVideoPrompt(post.slug);
+      if (!res.ok) throw new Error(res.error ?? "Generation failed");
+      setVideoPromptText(res.text ?? "");
+    } catch (e) {
+      setPromptError((e as Error).message);
+    } finally {
+      setIsGeneratingPrompt(false);
+    }
+  };
+
+  const persistVideoPrompt = (text: string) => {
+    // Fire-and-forget save on textarea blur. The action revalidates the
+    // page server-side; no need to await the result for UI flow.
+    void saveVideoPrompt(post.slug, text);
+  };
+
   const [videoUrl, setVideoUrl] = useState<string | null>(post.videoUrl ?? null);
   const [imageUrls, setImageUrls] = useState<string[]>(post.imageUrls ?? []);
   const [uploadingKind, setUploadingKind] = useState<"video" | "image" | null>(
@@ -459,6 +491,60 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-mono"
         />
         <ActionBar onCopy={() => copy(hashtagsRaw)} />
+      </Section>
+
+      {/* AI video-prompt brief — interactive: hit Generate to build a
+          SCENES + VOICEOVER + CAPTIONS production brief from the guide's
+          hook + script + body + caption. Editable after generation;
+          edits auto-save on blur. */}
+      <Section
+        label="AI video prompt"
+        hint="Generate a Sora / Veo / Runway brief from this guide's content"
+      >
+        {promptError && (
+          <div className="mb-2 rounded border border-red-500/30 bg-red-500/5 p-2 text-xs text-red-300">
+            {promptError}
+          </div>
+        )}
+        <div className="mb-2 flex gap-2 flex-wrap items-center">
+          <button
+            type="button"
+            onClick={runGeneratePrompt}
+            disabled={isGeneratingPrompt}
+            className="rounded bg-[var(--color-text)] text-[var(--color-text-on-dark)] px-3 py-1.5 text-xs font-semibold hover:opacity-90 disabled:opacity-50"
+          >
+            {isGeneratingPrompt
+              ? "Generating…"
+              : videoPrompt
+              ? "Regenerate with AI"
+              : "Generate with AI"}
+          </button>
+          {videoPrompt && (
+            <button
+              type="button"
+              onClick={() => copy(videoPrompt)}
+              className="text-[11px] rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 hover:bg-[var(--color-surface-hover)]"
+            >
+              Copy brief
+            </button>
+          )}
+          <span className="text-[10px] text-[var(--color-muted)]">
+            Paste output into Sora / Veo / Runway / Pika · 4 scenes × 3s · 9:16 vertical
+          </span>
+        </div>
+        <textarea
+          value={videoPrompt}
+          onChange={(e) => setVideoPromptText(e.target.value)}
+          onBlur={() => persistVideoPrompt(videoPrompt)}
+          rows={20}
+          placeholder="Click 'Generate with AI' above to build a SCENES + VOICEOVER + CAPTIONS brief from your hook + script + caption. Then edit anything you want before pasting into your video generator."
+          className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs leading-relaxed font-mono"
+        />
+        {videoPrompt && (
+          <div className="mt-1 text-[10px] text-[var(--color-muted)]">
+            {videoPrompt.split(/\s+/).filter(Boolean).length} words · edits auto-save on blur
+          </div>
+        )}
       </Section>
 
       {/* Media uploads — talking-head video + carousel images. Both

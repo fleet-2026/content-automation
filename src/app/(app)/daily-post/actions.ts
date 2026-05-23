@@ -1,12 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { prisma } from "@/lib/db";
 import { savePost, type GeneratedFields } from "./data";
 import {
   listAllGuidesAdmin,
   setGuidePublished,
   updateGuide,
 } from "@/lib/guides";
+import { generateVideoPromptText } from "@/lib/ai/video-prompt";
+import { requireUser } from "@/lib/auth-helpers";
+import { rateLimit } from "@/lib/rate-limit";
 
 export async function updatePost(
   slug: string,
@@ -63,6 +67,86 @@ export async function publishAllReady() {
   revalidatePath(`/guides`);
   revalidatePath(`/sitemap.xml`);
   return { ok: true, published, skipped };
+}
+
+/** Generate a SCENES + VOICEOVER + CAPTIONS video brief for the guide
+ *  by feeding its title + hook + script + body + caption to Claude.
+ *  Saves the result to DailyGuide.videoPrompt and returns it so the
+ *  client can show the new text without a page reload.
+ *
+ *  Gates: auth (admin user) + 20 generations/hour per user (Claude calls
+ *  aren't free). */
+export async function generateVideoPrompt(slug: string): Promise<{
+  ok: boolean;
+  text?: string;
+  error?: string;
+}> {
+  let userId: string;
+  try {
+    userId = await requireUser();
+  } catch {
+    return { ok: false, error: "unauthenticated" };
+  }
+
+  const rl = await rateLimit(`video-prompt:${userId}`, {
+    max: 20,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!rl.allowed) {
+    return {
+      ok: false,
+      error: `Rate limit hit — try again in ${rl.retryAfterSec}s`,
+    };
+  }
+
+  const guide = await prisma.dailyGuide.findUnique({
+    where: { slug },
+    select: {
+      title: true,
+      hook: true,
+      script: true,
+      caption: true,
+      body: true,
+    },
+  });
+  if (!guide) return { ok: false, error: "guide_not_found" };
+  if (!guide.script.trim() && !guide.hook.trim()) {
+    return {
+      ok: false,
+      error: "Guide has no script or hook to derive a brief from",
+    };
+  }
+
+  try {
+    const text = await generateVideoPromptText({
+      title: guide.title,
+      hook: guide.hook,
+      script: guide.script,
+      caption: guide.caption,
+      body: guide.body,
+    });
+    await prisma.dailyGuide.update({
+      where: { slug },
+      data: { videoPrompt: text },
+    });
+    revalidatePath(`/daily-post/${slug}`);
+    return { ok: true, text };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** Manual save for the video-prompt textarea (after the admin edits the
+ *  AI-generated brief). */
+export async function saveVideoPrompt(slug: string, text: string) {
+  try {
+    await requireUser();
+  } catch {
+    return { ok: false };
+  }
+  const ok = await updateGuide(slug, { videoPrompt: text });
+  revalidatePath(`/daily-post/${slug}`);
+  return { ok };
 }
 
 /** Save media URLs for a guide. Either videoUrl, imageUrls, or both.

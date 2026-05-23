@@ -36,6 +36,8 @@ export type DailyPost = {
   // Long-form article body — the "full guide" content rendered on
   // /guides/<slug>. Empty by default; admin fills it in from the editor.
   body?: string;
+  // AI-video production brief (SCENES + VOICEOVER + CAPTIONS).
+  videoPrompt?: string;
   // Talking-head video URL (R2). Optional.
   videoUrl?: string | null;
   // Carousel image URLs (R2). Empty array if not set.
@@ -99,6 +101,7 @@ function toDailyPost(g: GuideAdminShape): DailyPost {
       keyword: g.manychatKeyword,
     },
     body: g.body,
+    videoPrompt: g.videoPrompt,
     videoUrl: g.videoUrl,
     imageUrls: g.imageUrls,
     isPublished: g.isPublished,

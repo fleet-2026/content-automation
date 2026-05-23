@@ -485,6 +485,11 @@ model DailyGuide {
   /// Carousel image URLs (R2-hosted). For image-based posts (no talking
   /// head). Stored in order; admin uploads multiple at once.
   imageUrls       String[]  @default([])
+  /// Structured AI-video production brief (SCENES + VOICEOVER + CAPTIONS).
+  /// Pasted into Sora / Veo / Runway to generate the Reel for this guide.
+  /// Empty by default; the admin clicks "Generate" in /daily-post to fill
+  /// it in based on the guide's hook + script + body + caption.
+  videoPrompt     String    @db.Text @default("")
   /// Permalink to the live post on social once it's published. Null while still
   /// in draft state — once the user publishes, /daily-post writes the URL here.
   sourceUrl       String?   @db.Text
