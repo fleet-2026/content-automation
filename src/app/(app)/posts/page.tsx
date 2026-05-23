@@ -70,7 +70,9 @@ export default async function PostsPage({
 
   return (
     <div className="px-8 py-10 max-w-6xl">
-      <h1 className="text-3xl font-semibold tracking-tight">Posts</h1>
+      <h1 className="font-display text-3xl sm:text-4xl">
+        Your <span className="font-italic-accent text-blush">posts.</span>
+      </h1>
       <p className="text-[var(--color-muted)] mt-1 mb-6">
         {posts.length} of your synced posts.
       </p>

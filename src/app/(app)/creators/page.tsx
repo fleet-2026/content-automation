@@ -35,7 +35,9 @@ export default async function CreatorsPage() {
 
   return (
     <div className="px-8 py-10 max-w-5xl">
-      <h1 className="text-3xl font-semibold tracking-tight">Creators you watch</h1>
+      <h1 className="font-display text-3xl sm:text-4xl">
+        Creators <span className="font-italic-accent text-blush">you watch.</span>
+      </h1>
       <p className="text-[var(--color-muted)] mt-1 mb-6">
         We scrape new posts daily, transcribe videos, and surface viral patterns
         into your hook library.

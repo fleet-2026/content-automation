@@ -46,7 +46,9 @@ export default async function TrackerPage() {
     <div className="px-8 py-10 max-w-7xl">
       <div className="mb-8 flex items-end justify-between gap-6 flex-wrap">
         <div>
-          <h1 className="text-3xl font-semibold tracking-tight">31-day tracker</h1>
+          <h1 className="font-display text-3xl sm:text-4xl">
+            31-day <span className="font-italic-accent text-blush">tracker.</span>
+          </h1>
           <p className="text-sm text-[var(--color-muted)] mt-1">
             {rows.length} of {total} rows · {postedCount} posted · {wiredCount} ManyChat-wired
           </p>

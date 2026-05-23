@@ -50,7 +50,9 @@ export default async function DraftsPage() {
   return (
     <div className="px-8 py-10 max-w-5xl">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-semibold tracking-tight">Drafts &amp; queue</h1>
+        <h1 className="font-display text-3xl sm:text-4xl">
+          Drafts &amp; <span className="font-italic-accent text-blush">queue.</span>
+        </h1>
         <Link
           href="/compose"
           className="text-sm px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium"

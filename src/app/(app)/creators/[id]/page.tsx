@@ -44,7 +44,7 @@ export default async function CreatorDetailPage({ params }: { params: Promise<{ 
       <Link href="/creators" className="text-sm text-[var(--color-muted)] hover:text-[var(--color-text)]">
         ← back to creators
       </Link>
-      <h1 className="text-3xl font-semibold tracking-tight mt-2">@{creator.handle}</h1>
+      <h1 className="font-display text-3xl sm:text-4xl mt-2">@{creator.handle}</h1>
       <p className="text-[var(--color-muted)] mt-1 mb-6">
         {creator.platform.toLowerCase()} · {posts.length} scraped posts ·{" "}
         {posts.filter((p) => p.isViral).length} viral

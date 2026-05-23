@@ -118,7 +118,9 @@ export default async function TrendsPage() {
   return (
     <div className="px-8 py-10 max-w-6xl space-y-10">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Trends</h1>
+        <h1 className="font-display text-3xl sm:text-4xl">
+          What&apos;s <span className="font-italic-accent text-blush">trending.</span>
+        </h1>
         <p className="text-[var(--color-muted)] mt-1">
           What&apos;s heating up in {niche ? `the "${niche}" niche` : "your niche"}.
         </p>

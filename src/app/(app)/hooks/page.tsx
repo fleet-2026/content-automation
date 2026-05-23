@@ -17,7 +17,9 @@ export default async function HooksPage() {
 
   return (
     <div className="px-8 py-10 max-w-5xl">
-      <h1 className="text-3xl font-semibold tracking-tight">Your hooks, ranked</h1>
+      <h1 className="font-display text-3xl sm:text-4xl">
+        Your hooks, <span className="font-italic-accent text-blush">ranked.</span>
+      </h1>
       <p className="text-[var(--color-muted)] mt-1 mb-6">
         Sorted by average engagement rate across posts that opened with them.
       </p>

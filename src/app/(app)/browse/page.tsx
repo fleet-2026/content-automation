@@ -5,7 +5,9 @@ export const dynamic = "force-dynamic";
 export default function BrowsePage() {
   return (
     <div className="px-8 py-10 max-w-6xl">
-      <h1 className="text-3xl font-semibold tracking-tight">Browse</h1>
+      <h1 className="font-display text-3xl sm:text-4xl">
+        Browse <span className="font-italic-accent text-blush">anyone.</span>
+      </h1>
       <p className="text-[var(--color-muted)] mt-1 mb-8">
         Peek at any Instagram account without committing to your watchlist.
         Search a handle, scan their latest posts, click through to Instagram

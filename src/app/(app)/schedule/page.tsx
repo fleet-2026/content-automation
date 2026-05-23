@@ -99,7 +99,9 @@ export default async function SchedulePage() {
 
   return (
     <div className="px-8 py-10 max-w-5xl">
-      <h1 className="text-3xl font-semibold tracking-tight">Schedule &amp; automations</h1>
+      <h1 className="font-display text-3xl sm:text-4xl">
+        Schedule &amp; <span className="font-italic-accent text-blush">automations.</span>
+      </h1>
       <p className="text-[var(--color-muted)] mt-1 mb-8">
         Your posting calendar, recurring slots, and every background job running
         on your behalf.

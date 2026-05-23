@@ -78,7 +78,9 @@ export default async function ComposePage({
 
   return (
     <div className="px-8 py-10 max-w-6xl">
-      <h1 className="text-3xl font-semibold tracking-tight">Compose</h1>
+      <h1 className="font-display text-3xl sm:text-4xl">
+        Compose <span className="font-italic-accent text-blush">something.</span>
+      </h1>
       <p className="text-[var(--color-muted)] mt-1 mb-4">
         {initialDraft
           ? "Loaded from your dashboard fix. Pick the strongest variant, tweak, then publish."
