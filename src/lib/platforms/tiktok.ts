@@ -12,11 +12,28 @@ const AUTH_URL = "https://www.tiktok.com/v2/auth/authorize/";
 const TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/";
 const API_BASE = "https://open.tiktokapis.com/v2";
 
+// TikTok scopes — note the difference between read and write:
+//   user.info.*  / video.list   → READ only (profile + own posts)
+//   video.upload                → REQUIRED to push a video into the
+//                                 user's TikTok inbox via Content
+//                                 Posting API (/post/publish/inbox/...).
+//                                 Without this scope, init returns
+//                                 401 scope_not_authorized.
+//   video.publish               → Direct-post (skips the inbox draft
+//                                 step). We don't use it; we send to
+//                                 inbox so the creator can review +
+//                                 hit Post inside the TikTok app.
+//
+// When this list changes, EXISTING connections must be re-authorized:
+// TikTok bakes the granted scopes into the access token at connect
+// time, so newly-added scopes only apply after the user re-clicks
+// Connect TikTok in /settings.
 export const TT_SCOPES = [
   "user.info.basic",
   "user.info.profile",
   "user.info.stats",
   "video.list",
+  "video.upload",
 ];
 
 export function tiktokAuthUrl(redirectUri: string, state: string): string {

@@ -105,6 +105,20 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
         needsReconnect: true,
       };
     }
+    // TikTok-specific: scope wasn't granted at connect time (we recently
+    // added `video.upload`, but pre-existing connections kept the older
+    // read-only scope set). Reconnecting re-prompts TikTok for the full
+    // scope list and grants the upload permission.
+    if (
+      lower.includes("scope_not_authorized") ||
+      lower.includes("scope not authorized") ||
+      lower.includes("did not authorize the scope")
+    ) {
+      return {
+        friendly: `${platform} is missing the video-upload permission — reconnect to grant it.`,
+        needsReconnect: true,
+      };
+    }
     if (lower.includes("delivered_to_inbox")) {
       return {
         friendly: "Delivered to TikTok inbox — finalize inside the app.",
