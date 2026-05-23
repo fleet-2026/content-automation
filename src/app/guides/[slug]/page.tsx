@@ -93,6 +93,23 @@ export default async function GuideDetailPage({
         </blockquote>
       )}
 
+      {/* Primary CTA to the full source guide — promoted up top so it's
+          the first thing readers reach for after the hook. Bottom-of-
+          page link below stays as a secondary, lower-friction option. */}
+      {guide.sourceUrl && (
+        <div className="my-10">
+          <a
+            href={guide.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full bg-[var(--color-blush-deep)] text-white px-5 py-2.5 text-sm font-semibold hover:opacity-90 transition"
+          >
+            Read the full guide
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
+      )}
+
       {/* Script — the meat. Pre-wrap preserves line breaks the user
           intentionally added in their script. */}
       <section className="prose-section">
@@ -149,7 +166,8 @@ export default async function GuideDetailPage({
         </section>
       )}
 
-      {/* Outbound to the live post if the admin filled in sourceUrl */}
+      {/* Secondary outbound link at the foot of the page for readers
+          who scrolled past the hero CTA. Same href, lower visual weight. */}
       {guide.sourceUrl && (
         <div className="mt-12 pt-6 border-t border-[var(--color-border)]">
           <a
@@ -158,7 +176,7 @@ export default async function GuideDetailPage({
             rel="noreferrer"
             className="inline-flex items-center gap-2 text-sm text-[var(--color-blush-deep)] hover:underline font-medium"
           >
-            See the live post <ExternalLink className="w-3.5 h-3.5" />
+            Read the full guide <ExternalLink className="w-3.5 h-3.5" />
           </a>
         </div>
       )}
