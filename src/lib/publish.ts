@@ -28,6 +28,13 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
   // until then a multi-image draft publishes its primary image and the rest
   // are still saved on the draft so the user doesn't lose them.
   const primaryUrl = primaryMediaUrl(draft.mediaUrl);
+  // All visual URLs (newline-packed in Draft.mediaUrl) so we can publish
+  // carousels to platforms that support them (Instagram). Filters out
+  // the `audio::` prefix used for background music.
+  const allMediaUrls = (draft.mediaUrl ?? "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !s.startsWith("audio::"));
   const accounts = await prisma.socialAccount.findMany({
     where: {
       userId: draft.userId,
@@ -48,10 +55,15 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
 
         if (platform === Platform.INSTAGRAM) {
           const isVideo = primaryUrl?.match(/\.(mp4|mov|m4v)(\?|$)/i);
+          // Use the IG carousel endpoint when the draft has ≥2 visual
+          // attachments. IG ignores the imageUrl/videoUrl single-item
+          // fields when imageUrls[] is set.
+          const isCarousel = allMediaUrls.length >= 2 && !isVideo;
           const out = await igPublish(account.platformUserId, accessToken, {
             caption: combineCaption(draft),
             videoUrl: isVideo ? primaryUrl ?? undefined : undefined,
-            imageUrl: !isVideo ? primaryUrl ?? undefined : undefined,
+            imageUrl: !isVideo && !isCarousel ? primaryUrl ?? undefined : undefined,
+            imageUrls: isCarousel ? allMediaUrls : undefined,
             isReel: !!isVideo,
           });
           return { platform, ok: true, postId: out.platformPostId, url: out.permalink };
