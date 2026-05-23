@@ -92,3 +92,51 @@ body {
 .text-blush {
   color: var(--color-blush-deep);
 }
+
+/* ─── /guides public site palette (scoped via wrapper) ────────────────
+   Green + yellow brand-matched theme that only applies inside the
+   public guides shell. CSS custom properties inherit naturally, so
+   overriding them on a wrapper recolors every component that reads
+   from --color-bg / --color-surface / --color-text / --color-blush /
+   etc. without touching dashboard styles.
+
+   Tokens map intentionally:
+     bg          → warm cream with yellow undertone
+     surface     → near-white cream card surface
+     surface-2   → deeper yellow tint for filled inputs
+     text        → deep forest green (primary copy)
+     muted       → muted forest (secondary copy)
+     accent      → mustard yellow (CTAs)
+     blush*      → re-mapped to yellow so existing .text-blush /
+                   --color-blush-deep utilities recolor without
+                   needing new classes everywhere.
+*/
+.guides-theme {
+  --color-bg: #fbf6e0;
+  --color-surface: #fefcf0;
+  --color-surface-2: #f1e9c4;
+  --color-surface-dark: #1f3d2e;
+  --color-border: #d9cf9e;
+  --color-text: #1f3d2e;
+  --color-text-on-dark: #faf6ee;
+  --color-muted: #5a7263;
+
+  --color-accent: #d4a017;
+  --color-accent-2: #1f3d2e;
+  --color-accent-3: #b8860b;
+
+  --color-blush: #e6b800;
+  --color-blush-deep: #b8860b;
+
+  /* The wrapper is min-h-screen so its background covers the viewport
+     entirely, painting over the dashboard body gradient that bleeds
+     in from <body>. */
+  background: radial-gradient(
+    circle at top left,
+    #fdfae9 0%,
+    #fbf6e0 40%,
+    #f5edc2 100%
+  );
+  background-attachment: fixed;
+  color: var(--color-text);
+}

@@ -8,7 +8,9 @@ import Link from "next/link";
  */
 export default function GuidesLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen flex flex-col">
+    // `guides-theme` swaps in the green + yellow palette via CSS var
+    // overrides — scoped to this subtree only, leaves dashboard alone.
+    <div className="guides-theme min-h-screen flex flex-col">
       <header className="border-b border-[var(--color-border)] bg-[var(--color-bg)]/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link
