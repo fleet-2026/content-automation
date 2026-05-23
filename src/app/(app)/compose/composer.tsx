@@ -592,20 +592,18 @@ export function Composer({
             </p>
           </div>
 
-          {/* Opens the canvas editor on the PRIMARY image. The text inside is
-              fully editable — the user can put the hook, the caption, both,
-              or anything custom on the image. */}
+          {/* Opens the canvas editor on the PRIMARY image. The modal's
+              textarea is fully editable — the user can type any text
+              there, even if no hook/caption was set on the main page.
+              Previously this button was gated on having hook OR caption
+              already filled in, which made it look broken. Now: image
+              present = button works. */}
           {primaryMediaUrl && isImageUrl(primaryMediaUrl) && (
             <button
               type="button"
               onClick={() => setOverlayOpen(true)}
-              disabled={!selectedHook?.trim() && !caption.trim()}
-              title={
-                !selectedHook?.trim() && !caption.trim()
-                  ? "Pick a hook or type a caption first"
-                  : "Bake hook or caption text onto the primary image"
-              }
-              className="mt-3 flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Open editor to write text directly on the image"
+              className="mt-3 flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium"
             >
               <Type className="w-3.5 h-3.5" />
               Add text on image (hook / caption)
@@ -859,19 +857,18 @@ export function Composer({
 
     {/* Hook-on-image canvas modal. Operates on the PRIMARY image — the first
         attachment. When the user clicks Apply we REPLACE the primary slot
-        with the new (text-baked) URL, preserving the rest of the carousel. */}
-    {overlayOpen && primaryMediaUrl && (selectedHook?.trim() || caption.trim()) && (
+        with the new (text-baked) URL, preserving the rest of the carousel.
+        Open as long as there's an image; the modal lets you type any text
+        even when hook + caption are still blank on the parent page. */}
+    {overlayOpen && primaryMediaUrl && (
       <HookOverlayEditor
         imageUrl={primaryMediaUrl}
-        // Seed with hook + caption when both are present, separated by a
-        // blank line so the canvas wrap renders them as two visual blocks.
-        // The textarea inside the editor is fully editable + tall, so the
-        // user can see all of it and trim/rewrite as needed. No char cap
-        // here — past complaint was the seed truncated the caption.
+        // Seed with whatever's typed in the parent fields if anything;
+        // otherwise empty so the user can write fresh in the modal.
         initialHookText={
           selectedHook?.trim() && caption.trim()
             ? `${selectedHook}\n\n${caption}`
-            : selectedHook ?? caption
+            : (selectedHook?.trim() || caption.trim() || "")
         }
         onApply={(newUrl) => {
           setMediaUrls((cur) => [newUrl, ...cur.slice(1)]);
