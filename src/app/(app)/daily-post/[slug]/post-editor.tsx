@@ -84,6 +84,14 @@ export default function PostEditor({ post }: { post: DailyPost }) {
     "https://creator-os-delta.vercel.app";
   const fadiaUrl = `${guideOrigin}/guides/${post.slug}`;
 
+  // Ready-to-paste DM reply for ManyChat. Title-cased title + URL + a
+  // short sign-off. Single template kept inline (not editable per-guide)
+  // so the whole 197 set stays consistent without needing another field.
+  const dmTemplate =
+    `Hi! Here's the guide you asked for 👇\n\n` +
+    `${post.title}\n${fadiaUrl}\n\n` +
+    `Let me know if it helps!`;
+
   // Prefill /compose with the caption + hashtags
   const composeUrl =
     "/compose?prefillCaption=" +
@@ -137,24 +145,110 @@ export default function PostEditor({ post }: { post: DailyPost }) {
         </div>
       </div>
 
-      {/* Keyword (ManyChat trigger) */}
-      <Section label="ManyChat keyword" hint="The trigger users comment to get the link">
-        <div className="flex gap-2 items-center">
-          <input
-            value={keyword}
-            onChange={(e) => setKeyword(e.target.value.toUpperCase())}
-            onBlur={() => save({ keyword })}
-            className="flex-1 max-w-xs rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-base font-mono uppercase"
-          />
-          <button
-            type="button"
-            onClick={() => copy(keyword)}
-            className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs hover:bg-[var(--color-surface-hover)]"
-          >
-            Copy
-          </button>
+      {/* ManyChat wiring kit — everything needed to configure ManyChat
+          for this guide in one place. Trigger keyword + DM reply URL +
+          a ready-to-paste DM template. The primary "Copy ManyChat reply"
+          button copies the full DM text so the admin pastes it straight
+          into ManyChat's keyword-reply field. */}
+      <div className="rounded-xl border-2 border-emerald-500/30 bg-emerald-500/5 p-5 space-y-4">
+        <div className="flex items-baseline justify-between gap-3 flex-wrap">
+          <h3 className="font-display text-xl">
+            ManyChat <span className="font-italic-accent text-blush">wiring.</span>
+          </h3>
+          <span className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+            keyword → DM with link → guide page
+          </span>
         </div>
-      </Section>
+
+        {/* 1. Trigger keyword */}
+        <div>
+          <label className="block text-xs font-semibold mb-1.5">
+            1. Trigger keyword
+            <span className="text-[10px] text-[var(--color-muted)] ml-2 font-normal">
+              what users comment under your Reel
+            </span>
+          </label>
+          <div className="flex gap-2 items-center">
+            <input
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value.toUpperCase())}
+              onBlur={() => save({ keyword })}
+              className="flex-1 max-w-xs rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-base font-mono uppercase"
+            />
+            <button
+              type="button"
+              onClick={() => copy(keyword)}
+              className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs hover:bg-[var(--color-surface-hover)]"
+            >
+              Copy keyword
+            </button>
+          </div>
+        </div>
+
+        {/* 2. Public guide URL */}
+        <div>
+          <label className="block text-xs font-semibold mb-1.5">
+            2. Guide URL
+            <span className="text-[10px] text-[var(--color-muted)] ml-2 font-normal">
+              what ManyChat DMs to commenters
+            </span>
+          </label>
+          <div className="flex gap-2 items-center">
+            <input
+              value={fadiaUrl}
+              readOnly
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+              className="flex-1 rounded border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs font-mono"
+            />
+            <button
+              type="button"
+              onClick={() => copy(fadiaUrl)}
+              className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs hover:bg-[var(--color-surface-hover)]"
+            >
+              Copy URL
+            </button>
+            <a
+              href={fadiaUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 px-3 py-2 text-xs hover:bg-emerald-500/20"
+            >
+              Open ↗
+            </a>
+          </div>
+        </div>
+
+        {/* 3. Ready-to-paste DM text */}
+        <div>
+          <label className="block text-xs font-semibold mb-1.5">
+            3. DM reply (paste into ManyChat)
+            <span className="text-[10px] text-[var(--color-muted)] ml-2 font-normal">
+              full message ManyChat sends back
+            </span>
+          </label>
+          <textarea
+            value={dmTemplate}
+            readOnly
+            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+            rows={4}
+            className="w-full rounded border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm font-mono leading-relaxed"
+          />
+          <div className="mt-2 flex gap-2 flex-wrap items-center">
+            <button
+              type="button"
+              onClick={() => copy(dmTemplate)}
+              className="rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/40 px-3 py-1.5 text-xs font-semibold hover:bg-emerald-500/30"
+            >
+              Copy DM reply
+            </button>
+            <span className="text-[10px] text-[var(--color-muted)]">
+              In ManyChat: New Growth Tool → Comment-to-DM → set trigger to{" "}
+              <code className="font-mono">{keyword || "(set keyword above)"}</code>{" "}
+              → paste this text as the DM.
+            </span>
+          </div>
+        </div>
+      </div>
 
       {/* Hook */}
       <Section label="Hook" hint="First 1-2 sentences on camera">
@@ -243,41 +337,6 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-mono"
         />
         <ActionBar onCopy={() => copy(hashtagsRaw)} />
-      </Section>
-
-      {/* ManyChat reply link → your own /guides/<slug> page */}
-      <Section
-        label="ManyChat reply link"
-        hint="Paste into your ManyChat keyword reply — sends commenters straight to this guide on your site"
-      >
-        <div className="flex gap-2 items-center">
-          <input
-            value={fadiaUrl}
-            readOnly
-            onClick={(e) => (e.target as HTMLInputElement).select()}
-            className="flex-1 rounded border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs font-mono"
-          />
-          <button
-            type="button"
-            onClick={() => copy(fadiaUrl)}
-            className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs hover:bg-[var(--color-surface-hover)]"
-          >
-            Copy URL
-          </button>
-          <a
-            href={fadiaUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 px-3 py-2 text-xs hover:bg-emerald-500/20"
-          >
-            Open ↗
-          </a>
-        </div>
-        <div className="mt-2 text-[10px] text-[var(--color-muted)]">
-          Paste this URL into your ManyChat keyword reply for{" "}
-          <code className="font-mono">{keyword || "(no keyword set)"}</code>.
-          When someone comments it on your Reel, they get this link in DM.
-        </div>
       </Section>
 
       {/* Video upload slot */}
