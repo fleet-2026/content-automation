@@ -35,8 +35,15 @@ type NavItem = {
   external?: boolean;
 };
 
+// Daily post is the primary workflow now — it's where the hook, script,
+// caption, hashtags, ManyChat wiring, and media for each guide live in
+// one editor. Promoted to the top of the nav (right under Dashboard) so
+// it's the first thing visible. "View guide" points at our own /guides
+// public site instead of the retired Netlify host.
 const items: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/daily-post", label: "Daily post", icon: Rocket },
+  { href: "/guides", label: "View guide", icon: BookOpen },
   { href: "/posts", label: "Posts", icon: FileText },
   { href: "/hooks", label: "Hooks", icon: Sparkles },
   { href: "/creators", label: "Creators", icon: Eye },
@@ -49,13 +56,6 @@ const items: NavItem[] = [
   { href: "/drafts", label: "Drafts", icon: ClipboardList },
   { href: "/tracker", label: "31-day tracker", icon: ListChecks },
   { href: "/log", label: "Inspo log", icon: ListTodo },
-  { href: "/daily-post", label: "Daily post", icon: Rocket },
-  {
-    href: "https://earnaihub.netlify.app/fadias-guide",
-    label: "View guide",
-    icon: BookOpen,
-    external: true,
-  },
   { href: "/notes", label: "Notes", icon: StickyNote },
   { href: "/schedule", label: "Schedule", icon: CalendarClock },
   { href: "/chat", label: "Chat", icon: MessageSquare },
