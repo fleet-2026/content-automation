@@ -94,49 +94,46 @@ body {
 }
 
 /* ─── /guides public site palette (scoped via wrapper) ────────────────
-   Green + yellow brand-matched theme that only applies inside the
-   public guides shell. CSS custom properties inherit naturally, so
-   overriding them on a wrapper recolors every component that reads
-   from --color-bg / --color-surface / --color-text / --color-blush /
-   etc. without touching dashboard styles.
+   Plum + sand + mustard + olive brand palette — pulled from the user's
+   EarnWithAI OpenArt prompts dashboard reference. CSS custom properties
+   inherit naturally, so overriding them on a wrapper recolors every
+   component that reads from --color-bg / --color-surface / --color-text
+   / --color-blush / etc. without touching dashboard styles.
 
-   Tokens map intentionally:
-     bg          → warm cream with yellow undertone
-     surface     → near-white cream card surface
-     surface-2   → deeper yellow tint for filled inputs
-     text        → deep forest green (primary copy)
-     muted       → muted forest (secondary copy)
-     accent      → mustard yellow (CTAs)
-     blush*      → re-mapped to yellow so existing .text-blush /
-                   --color-blush-deep utilities recolor without
-                   needing new classes everywhere.
+   Reference palette:
+     sand          #E8DCC0  page background
+     cream         #F5EDDC  card surfaces
+     plum          #5B2C39  italic accents + dark elevated surfaces
+     mustard       #D4AB5F  primary accent / chips
+     mustard-deep  #B8893E  hover state
+     ink           #2A2520  body text
+     olive         #3F422C  muted secondary text
 */
 .guides-theme {
-  --color-bg: #fbf6e0;
-  --color-surface: #fefcf0;
-  --color-surface-2: #f1e9c4;
-  --color-surface-dark: #1f3d2e;
-  --color-border: #d9cf9e;
-  --color-text: #1f3d2e;
-  --color-text-on-dark: #faf6ee;
-  --color-muted: #5a7263;
+  --color-bg: #e8dcc0;
+  --color-surface: #f5eddc;
+  --color-surface-2: #e8dcc0;
+  --color-surface-dark: #5b2c39;
+  --color-border: rgba(42, 37, 32, 0.15);
+  --color-text: #2a2520;
+  --color-text-on-dark: #f5eddc;
+  --color-muted: #3f422c;
 
-  --color-accent: #d4a017;
-  --color-accent-2: #1f3d2e;
-  --color-accent-3: #b8860b;
+  --color-accent: #d4ab5f;
+  --color-accent-2: #5b2c39;
+  --color-accent-3: #b8893e;
 
-  --color-blush: #e6b800;
-  --color-blush-deep: #b8860b;
+  /* Re-map blush tokens so existing .text-blush / --color-blush-deep
+     utilities pick up the new palette without renaming usages:
+       blush         → mustard (chips, small flourishes)
+       blush-deep    → plum    (italic headline accent — "Guides.") */
+  --color-blush: #d4ab5f;
+  --color-blush-deep: #5b2c39;
 
-  /* The wrapper is min-h-screen so its background covers the viewport
-     entirely, painting over the dashboard body gradient that bleeds
-     in from <body>. */
-  background: radial-gradient(
-    circle at top left,
-    #fdfae9 0%,
-    #fbf6e0 40%,
-    #f5edc2 100%
-  );
+  /* Soft top-to-bottom warm gradient from sand into a slightly lighter
+     cream. Wrapper is min-h-screen so its background fills the viewport
+     and overrides the dashboard body gradient that bleeds in from <body>. */
+  background: linear-gradient(to bottom, #e8dcc0 0%, #f0e3c8 60%, #f5eddc 100%);
   background-attachment: fixed;
   color: var(--color-text);
 }
