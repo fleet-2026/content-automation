@@ -60,14 +60,16 @@ export default async function GuideDetailPage({
         ← All guides
       </Link>
 
-      {/* Header */}
+      {/* Header — title in burgundy plum to anchor the page in the
+          brand palette; eyebrow + body type stay quieter so the title
+          reads as the focal point. */}
       <header className="mt-6 mb-8">
         {guide.index != null && (
-          <div className="text-[10px] uppercase tracking-wider text-[var(--color-blush-deep)] font-medium mb-3">
+          <div className="text-[10px] uppercase tracking-[0.18em] text-[var(--color-blush-deep)] font-bold mb-3">
             Day {guide.index}
           </div>
         )}
-        <h1 className="font-display text-4xl sm:text-5xl leading-tight">
+        <h1 className="font-display text-4xl sm:text-5xl leading-tight text-[var(--color-blush-deep)]">
           {guide.title}
         </h1>
         {guide.publishedAt && (
@@ -84,11 +86,16 @@ export default async function GuideDetailPage({
         )}
       </header>
 
-      {/* Hook — pulled into a quoted blockquote so it reads as the
-          "hero line" of the article. Italic Fraunces for visual weight. */}
+      {/* Hook — heavy burgundy left bar + plum quote marks + plum text
+          so the hero line reads as an editorial pullquote rather than
+          a soft aside. The mustard left bar is too pastel for this
+          density of warm background. */}
       {guide.hook && (
-        <blockquote className="border-l-4 border-[var(--color-blush)] pl-6 my-10 font-italic-accent text-2xl sm:text-3xl text-[var(--color-text)] leading-snug">
-          “{guide.hook}”
+        <blockquote className="relative border-l-4 border-[var(--color-blush-deep)] pl-6 my-10 font-italic-accent text-2xl sm:text-3xl text-[var(--color-blush-deep)] leading-snug">
+          <span aria-hidden className="absolute -left-1 top-0 text-5xl text-[var(--color-blush-deep)]/40 font-serif select-none leading-none">
+            “
+          </span>
+          {guide.hook}
         </blockquote>
       )}
 
@@ -113,7 +120,7 @@ export default async function GuideDetailPage({
         </section>
       ) : (
         <section className="prose-section">
-          <h2 className="font-display text-xl mb-4 mt-12 text-[var(--color-muted)]">
+          <h2 className="font-display text-xl mb-4 mt-12 text-[var(--color-blush-deep)] uppercase tracking-wider text-sm font-bold">
             The talking-head script
           </h2>
           <p className="whitespace-pre-wrap leading-relaxed text-[var(--color-text)] text-lg">
@@ -122,13 +129,15 @@ export default async function GuideDetailPage({
         </section>
       )}
 
-      {/* Caption (the actual post text) */}
+      {/* Caption (the actual post text) — burgundy section heading +
+          a thin burgundy left bar on the caption card so it reads as
+          a quote block, not just text in a frame. */}
       {guide.caption && (
         <section className="mt-12">
-          <h2 className="font-display text-xl mb-4 text-[var(--color-muted)]">
+          <h2 className="font-display text-sm mb-4 text-[var(--color-blush-deep)] uppercase tracking-wider font-bold">
             Caption to use
           </h2>
-          <div className="rounded-xl border bg-[var(--color-surface)] p-5 text-sm whitespace-pre-wrap leading-relaxed">
+          <div className="rounded-xl border-l-4 border-[var(--color-blush-deep)] border-r border-y border-r-[var(--color-border)] border-y-[var(--color-border)] bg-[var(--color-surface)] p-5 text-sm whitespace-pre-wrap leading-relaxed">
             {guide.caption}
           </div>
         </section>
@@ -139,14 +148,14 @@ export default async function GuideDetailPage({
         <section className="mt-12 grid grid-cols-1 sm:grid-cols-2 gap-6">
           {guide.hashtags.length > 0 && (
             <div>
-              <h3 className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] mb-2">
+              <h3 className="text-[10px] uppercase tracking-[0.18em] text-[var(--color-blush-deep)] font-bold mb-2">
                 Hashtags
               </h3>
               <div className="flex flex-wrap gap-1.5">
                 {guide.hashtags.map((tag) => (
                   <span
                     key={tag}
-                    className="text-xs px-2 py-1 rounded-md bg-[var(--color-surface-2)] text-[var(--color-text)]"
+                    className="text-xs px-2 py-1 rounded-md bg-[var(--color-blush-deep)]/10 text-[var(--color-blush-deep)] border border-[var(--color-blush-deep)]/20"
                   >
                     #{tag.replace(/^#/, "")}
                   </span>
@@ -156,10 +165,10 @@ export default async function GuideDetailPage({
           )}
           {guide.manychatKeyword && (
             <div>
-              <h3 className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] mb-2">
+              <h3 className="text-[10px] uppercase tracking-[0.18em] text-[var(--color-blush-deep)] font-bold mb-2">
                 ManyChat trigger word
               </h3>
-              <code className="text-sm font-mono px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] inline-block">
+              <code className="text-sm font-mono px-3 py-1.5 rounded-md bg-[var(--color-blush-deep)] text-[var(--color-text-on-dark)] inline-block">
                 {guide.manychatKeyword}
               </code>
             </div>
