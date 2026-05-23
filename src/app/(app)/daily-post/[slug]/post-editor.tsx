@@ -173,13 +173,14 @@ export default function PostEditor({ post }: { post: DailyPost }) {
     "https://creator-os-delta.vercel.app";
   const fadiaUrl = `${guideOrigin}/guides/${post.slug}`;
 
-  // Ready-to-paste DM reply for ManyChat. Title-cased title + URL + a
-  // short sign-off. Single template kept inline (not editable per-guide)
-  // so the whole 197 set stays consistent without needing another field.
-  const dmTemplate =
-    `Hi! Here's the guide you asked for 👇\n\n` +
-    `${post.title}\n${fadiaUrl}\n\n` +
-    `Let me know if it helps!`;
+  // ManyChat reply uses a TEXT body + BUTTON. The text doesn't include
+  // the URL — the URL lives behind a "Get Free Guide" button so the DM
+  // reads as a friendly note, not a raw link drop. The 🤩 (star-struck)
+  // emoji is the "super stare" face the brand voice uses.
+  const dmText =
+    `Here it is! Hope it's SUPER helpful 🤩\n\n` +
+    `If you have any questions, just let me know.`;
+  const dmButtonLabel = "Get Free Guide";
 
   // Prefill /compose with the caption + hashtags
   const composeUrl =
@@ -274,12 +275,63 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           </div>
         </div>
 
-        {/* 2. Public guide URL */}
+        {/* 2. DM text — no URL, friendly note that precedes the button */}
         <div>
           <label className="block text-xs font-semibold mb-1.5">
-            2. Guide URL
+            2. DM text (paste into ManyChat message)
             <span className="text-[10px] text-[var(--color-muted)] ml-2 font-normal">
-              what ManyChat DMs to commenters
+              what they see — the URL is hidden behind the button below
+            </span>
+          </label>
+          <textarea
+            value={dmText}
+            readOnly
+            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
+            rows={3}
+            className="w-full rounded border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm font-mono leading-relaxed"
+          />
+          <div className="mt-2">
+            <button
+              type="button"
+              onClick={() => copy(dmText)}
+              className="rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/40 px-3 py-1.5 text-xs font-semibold hover:bg-emerald-500/30"
+            >
+              Copy DM text
+            </button>
+          </div>
+        </div>
+
+        {/* 3. Button label */}
+        <div>
+          <label className="block text-xs font-semibold mb-1.5">
+            3. Button label
+            <span className="text-[10px] text-[var(--color-muted)] ml-2 font-normal">
+              the text on the ManyChat button under the DM
+            </span>
+          </label>
+          <div className="flex gap-2 items-center">
+            <input
+              value={dmButtonLabel}
+              readOnly
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+              className="flex-1 max-w-xs rounded border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm font-semibold"
+            />
+            <button
+              type="button"
+              onClick={() => copy(dmButtonLabel)}
+              className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs hover:bg-[var(--color-surface-hover)]"
+            >
+              Copy label
+            </button>
+          </div>
+        </div>
+
+        {/* 4. Button URL — the link itself, hidden behind the button */}
+        <div>
+          <label className="block text-xs font-semibold mb-1.5">
+            4. Button URL
+            <span className="text-[10px] text-[var(--color-muted)] ml-2 font-normal">
+              where the button takes them — they never see this URL
             </span>
           </label>
           <div className="flex gap-2 items-center">
@@ -302,40 +354,21 @@ export default function PostEditor({ post }: { post: DailyPost }) {
               rel="noreferrer"
               className="rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 px-3 py-2 text-xs hover:bg-emerald-500/20"
             >
-              Open ↗
+              Preview ↗
             </a>
           </div>
         </div>
 
-        {/* 3. Ready-to-paste DM text */}
-        <div>
-          <label className="block text-xs font-semibold mb-1.5">
-            3. DM reply (paste into ManyChat)
-            <span className="text-[10px] text-[var(--color-muted)] ml-2 font-normal">
-              full message ManyChat sends back
-            </span>
-          </label>
-          <textarea
-            value={dmTemplate}
-            readOnly
-            onClick={(e) => (e.target as HTMLTextAreaElement).select()}
-            rows={4}
-            className="w-full rounded border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm font-mono leading-relaxed"
-          />
-          <div className="mt-2 flex gap-2 flex-wrap items-center">
-            <button
-              type="button"
-              onClick={() => copy(dmTemplate)}
-              className="rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/40 px-3 py-1.5 text-xs font-semibold hover:bg-emerald-500/30"
-            >
-              Copy DM reply
-            </button>
-            <span className="text-[10px] text-[var(--color-muted)]">
-              In ManyChat: New Growth Tool → Comment-to-DM → set trigger to{" "}
-              <code className="font-mono">{keyword || "(set keyword above)"}</code>{" "}
-              → paste this text as the DM.
-            </span>
-          </div>
+        {/* ManyChat setup hint — explains the assembly without becoming
+            a wall of text. The keyword name is interpolated so the
+            instruction reads as concrete for this guide. */}
+        <div className="rounded border border-emerald-500/20 bg-emerald-500/5 px-3 py-2.5 text-[11px] text-[var(--color-muted)] leading-relaxed">
+          <strong className="text-[var(--color-text)]">In ManyChat:</strong>{" "}
+          New Growth Tool → Comment-to-DM → trigger ={" "}
+          <code className="font-mono">{keyword || "(set keyword above)"}</code>.
+          Set the DM message text from step 2, then add a Button (type: URL)
+          with the label from step 3 and the URL from step 4. The recipient
+          sees a friendly note and a "{dmButtonLabel}" button — never the raw link.
         </div>
       </div>
 
