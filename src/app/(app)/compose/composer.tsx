@@ -56,18 +56,58 @@ export function Composer({
     return stripped;
   }
 
-  const [topic, setTopic] = useState("");
+  // ─── Cross-navigation persistence ─────────────────────────────
+  // Save the working draft to localStorage on every change so the user
+  // can leave /compose to grab info elsewhere and come back without
+  // losing what they typed. Loaded once on mount via the lazy state
+  // initializers below; cleared after a successful publish. Drops
+  // anything older than 24h so a forgotten browser doesn't surface a
+  // week-old half-draft.
+  const PERSIST_KEY = "compose:state-v1";
+  type PersistedState = Partial<{
+    topic: string;
+    caption: string;
+    hashtagsRaw: string;
+    hooks: Hook[];
+    selectedHook: string | null;
+    mediaUrls: string[];
+    musicUrl: string | null;
+    platforms: Platform[];
+    scheduledFor: string;
+    savedAt: number;
+  }>;
+  const [persisted] = useState<PersistedState>(() => {
+    if (typeof window === "undefined") return {};
+    try {
+      const raw = window.localStorage.getItem(PERSIST_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as PersistedState;
+      if (
+        parsed.savedAt &&
+        Date.now() - parsed.savedAt > 24 * 60 * 60 * 1000
+      ) {
+        return {};
+      }
+      return parsed;
+    } catch {
+      return {};
+    }
+  });
+
+  const [topic, setTopic] = useState(persisted.topic ?? "");
   const [caption, setCaption] = useState(() => {
+    if (persisted.caption !== undefined) return persisted.caption;
     if (initialDraft) return captionWithoutHook(initialDraft.caption, initialDraft.selectedHook);
     if (initialCaptionPrefill) return initialCaptionPrefill;
     return "";
   });
-  const [hashtagsRaw, setHashtagsRaw] = useState(() =>
-    initialDraft ? initialDraft.hashtags.map((h) => `#${h}`).join(" ") : "",
-  );
-  const [hooks, setHooks] = useState<Hook[]>(() => initialDraft?.hookOptions ?? []);
+  const [hashtagsRaw, setHashtagsRaw] = useState(() => {
+    if (persisted.hashtagsRaw !== undefined) return persisted.hashtagsRaw;
+    return initialDraft ? initialDraft.hashtags.map((h) => `#${h}`).join(" ") : "";
+  });
+  const [hooks, setHooks] = useState<Hook[]>(() => persisted.hooks ?? initialDraft?.hookOptions ?? []);
   const [selectedHook, setSelectedHook] = useState<string | null>(
-    initialDraft?.selectedHook ?? null,
+    persisted.selectedHook !== undefined ? persisted.selectedHook : initialDraft?.selectedHook ?? null,
   );
   // Multi-image state. Backed by a packed string on the Draft.mediaUrl field
   // (newline-separated URLs) until a proper schema migration lands. The first
@@ -75,6 +115,7 @@ export function Composer({
   // and single-platform publishing fallback (TikTok/YouTube can only post
   // one media; Instagram supports up to 10 in a carousel).
   const [mediaUrls, setMediaUrls] = useState<string[]>(() => {
+    if (persisted.mediaUrls) return persisted.mediaUrls;
     if (initialDraft) return parseMediaUrls(initialDraft.mediaUrl);
     if (initialMediaUrl) return [initialMediaUrl];
     return [];
@@ -85,15 +126,43 @@ export function Composer({
   // `audio::` prefix. See src/lib/media-urls.ts. We display it separately
   // from visual media in the UI, but it travels with the draft.
   const [musicUrl, setMusicUrl] = useState<string | null>(() => {
+    if (persisted.musicUrl !== undefined) return persisted.musicUrl;
     if (initialDraft) return parseMusicUrl(initialDraft.mediaUrl);
     return null;
   });
   const [musicUploading, setMusicUploading] = useState(false);
   const [platforms, setPlatforms] = useState<Platform[]>(
-    initialDraft?.platforms.length ? initialDraft.platforms : connectedPlatforms,
+    persisted.platforms ?? (initialDraft?.platforms.length ? initialDraft.platforms : connectedPlatforms),
   );
-  const [scheduledFor, setScheduledFor] = useState<string>(initialDraft?.scheduledFor ?? "");
+  const [scheduledFor, setScheduledFor] = useState<string>(
+    persisted.scheduledFor ?? initialDraft?.scheduledFor ?? "",
+  );
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
+
+  // Save to localStorage whenever the tracked state changes. Cheap —
+  // it's a JSON.stringify of ~10 small fields, runs once per render
+  // when any of them flips. No debounce because it's already cheap.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const state: PersistedState = {
+        topic,
+        caption,
+        hashtagsRaw,
+        hooks,
+        selectedHook,
+        mediaUrls,
+        musicUrl,
+        platforms,
+        scheduledFor,
+        savedAt: Date.now(),
+      };
+      window.localStorage.setItem(PERSIST_KEY, JSON.stringify(state));
+    } catch {
+      // Quota exceeded / private mode — silent. User will lose state
+      // on navigate but the page itself still works.
+    }
+  }, [topic, caption, hashtagsRaw, hooks, selectedHook, mediaUrls, musicUrl, platforms, scheduledFor]);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   // Schedule popover state. Replaces the dynamic Publish/Schedule label
@@ -153,12 +222,11 @@ export function Composer({
     });
   }
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    // Allow picking multiple files at once — we upload them sequentially
-    // (the API only accepts one file per request) and append each new URL
-    // to the carousel list. Cap at 10 since Instagram's carousel API has
-    // that hard limit; the other platforms only consume the first item.
-    const files = Array.from(e.target.files ?? []);
+  /** Core upload routine — accepts a raw File[] so it can be called from
+   *  either the <input type=file> change event OR the drop zone's
+   *  drop event. Sequential POSTs to /api/upload (one file per request);
+   *  Instagram carousel cap = 10 attachments. */
+  async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
     setErr(null);
     setUploading(true);
@@ -184,9 +252,43 @@ export function Composer({
       setErr(e2 instanceof Error ? e2.message : String(e2));
     } finally {
       setUploading(false);
-      // reset input so picking the same file again still triggers onChange
-      e.target.value = "";
     }
+  }
+
+  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files ?? []);
+    await uploadFiles(files);
+    // reset input so picking the same file again still triggers onChange
+    e.target.value = "";
+  }
+
+  // ─── Drag-and-drop image upload ──────────────────────────────
+  // The media slot below is wrapped in a div that listens for dragover
+  // / dragleave / drop. We only accept image+video files; if the user
+  // drops e.g. a folder or unsupported type, the API call surfaces the
+  // error inline (same path as the file picker).
+  const [isDragging, setIsDragging] = useState(false);
+  function onDragOver(e: React.DragEvent<HTMLDivElement>) {
+    if (!e.dataTransfer.types.includes("Files")) return;
+    e.preventDefault();
+    setIsDragging(true);
+  }
+  function onDragLeave(e: React.DragEvent<HTMLDivElement>) {
+    // Only clear when leaving the wrapper, not when entering a child.
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+    setIsDragging(false);
+  }
+  async function onDrop(e: React.DragEvent<HTMLDivElement>) {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files ?? []).filter((f) =>
+      /^(image|video)\//.test(f.type),
+    );
+    if (files.length === 0) {
+      setErr("Drop image or video files only.");
+      return;
+    }
+    await uploadFiles(files);
   }
 
   function removeMedia(idx: number) {
@@ -276,6 +378,11 @@ export function Composer({
           setDraftId(id);
         }
         await publishDraftNow(id);
+        // Clear the persisted draft now that it's gone live so the
+        // next visit to /compose starts blank.
+        try {
+          window.localStorage.removeItem(PERSIST_KEY);
+        } catch {}
         router.push("/drafts");
         router.refresh();
       } catch (e) {
@@ -305,6 +412,12 @@ export function Composer({
         } else {
           await scheduleDraft(id, scheduledFor);
         }
+        // Same cleanup as publish — the working draft has been
+        // committed to the schedule, so the autosave snapshot is no
+        // longer relevant.
+        try {
+          window.localStorage.removeItem(PERSIST_KEY);
+        } catch {}
         router.push("/drafts");
         router.refresh();
       } catch (e) {
@@ -373,13 +486,32 @@ export function Composer({
               : "Media (single image, video, or carousel up to 10)"
           }
         >
+          {/* Drop-zone wrapper. dragover/leave/drop are handled at this
+              level so the whole media area is a target — the user can
+              drop on any blank space inside the slot, not just the
+              button. Visual feedback via dashed border + accent tint. */}
+          <div
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            className={`rounded-lg p-3 transition border-2 ${
+              isDragging
+                ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10 border-dashed"
+                : "border-dashed border-transparent"
+            }`}
+          >
+          {isDragging && (
+            <div className="mb-2 text-center text-sm font-medium text-[var(--color-accent)]">
+              Drop image or video to upload
+            </div>
+          )}
           <div className="flex items-center gap-3 flex-wrap">
             <label className="cursor-pointer flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] text-sm">
               {mediaUrls.length === 0 ? <Upload className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
               {uploading
                 ? "Uploading…"
                 : mediaUrls.length === 0
-                  ? "Upload image or video"
+                  ? "Upload (or drag & drop here)"
                   : "Add more"}
               <input
                 type="file"
@@ -609,6 +741,7 @@ export function Composer({
               Add text on image (hook / caption)
             </button>
           )}
+          </div>{/* /drop zone wrapper */}
         </Field>
 
         <Field label="Platforms">
