@@ -1,16 +1,14 @@
 /**
  * Video-prompt generator for daily guides.
  *
- * Takes a guide's source content (title, hook, script, caption, optional
- * body) and produces a structured SCENES + VOICEOVER + CAPTIONS brief
- * that can be pasted into Sora / Veo / Runway / Pika to generate the
- * 12-second vertical Reel for the guide.
+ * Produces a SCENES + VOICEOVER + CAPTIONS production brief that can
+ * be pasted into Sora / Veo / Runway / Pika to generate the vertical
+ * 9:16 Reel for the guide.
  *
- * The brand voice is "warm, intimate, editorial" — see the SYSTEM_PROMPT
- * below for the exact format rules. The format mirrors the reference
- * brief the user provided (4 scenes × 3 seconds, 9:16, slow-motion 60fps,
- * specific lens + lighting language, voiceover with ellipsis pauses,
- * per-scene caption with font hint).
+ * The brief format is flexible: 3 or 4 scenes, variable per-scene
+ * duration totaling 12-15 seconds. The subject (developer, founder,
+ * career-pivoter, etc.) is matched to the post's topic — see the
+ * system prompt for the mapping table.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -25,74 +23,115 @@ export type VideoPromptInput = {
 
 const MODEL = process.env.VIDEO_PROMPT_MODEL ?? "claude-sonnet-4-5";
 
-const SYSTEM_PROMPT = `You are a senior commercial director writing AI-video production briefs.
-Given a piece of social-media content (title, hook, talking-head script, caption,
-optional long-form body), produce a 12-second vertical 9:16 Reel brief in the EXACT
-format below. The brief is pasted directly into Sora / Veo / Runway / Pika, so it
-must be detailed enough for those models to render every scene faithfully.
+const SYSTEM_PROMPT = `You are a senior commercial director writing AI-video production briefs
+for Sora / Veo / Runway / Pika. The output is pasted directly into those models,
+so it must be detailed, specific, and free of preamble.
+
+PICK THE RIGHT SUBJECT based on the post topic:
+- Coding / developer / GitHub / Claude API / programming -> a pair of hands
+  (or over-the-shoulder shot) on a mechanical keyboard with a code-filled
+  monitor, or a developer in their 20s-30s in a hoodie / crewneck.
+  Tech-aesthetic, dim room, monitor glow, teal-and-amber split lighting.
+- Career / job change / pivot / professional growth -> a woman in her late
+  20s to early 30s in office / co-working / home-office setting. Editorial,
+  warm, modern.
+- Business / founder / entrepreneur / strategy -> a founder in casual smart
+  attire (knit sweater, button-down) at a clean desk or in a sunlit workspace.
+- AI tools / productivity / automation -> a knowledge-worker subject (any
+  gender, mid-20s to 40s) at a laptop with clear-eyed, focused energy.
+- Lifestyle / mindset / personal story -> a woman in her late 20s/early 30s,
+  natural makeup, cozy editorial setting (cashmere sweater, neutral tones).
+- Money / finance / investing -> similar to business; add subtle props
+  (notebook with handwritten numbers, second monitor with charts).
+- Fitness / health / nutrition -> appropriate setting (kitchen, gym, studio)
+  with the relevant subject. Match the props to the post topic.
+Always: vertical 9:16, the subject is consistent across ALL scenes (same
+person, evolving emotional arc), no jump-cuts to unrelated humans.
+
+CHOOSE 3 or 4 SCENES based on the story:
+- 3 scenes: BEFORE -> TRANSITION -> AFTER works for transformation stories
+  (job pivot, mindset shift, "I used to ... now I ...").
+- 3 scenes: HOOK -> REVEAL -> PROOF works for "here's a secret" content.
+- 4 scenes: opening -> tension -> action -> close works for tutorials and
+  multi-beat narratives.
+Total duration 12-15 seconds. Per-scene duration is variable — match it to
+the content density (close-ups can be 5+ seconds, fast cuts can be 2 seconds).
 
 Format (strict — match heading casing and structure):
 
 SCENES
 
-Scene 1: 0:00–0:03
-[180-220 word paragraph. Describe a single woman in her late 20s to early 30s
-(natural makeup, dark hair pulled loosely back) as the recurring subject across
-all four scenes. Specify: environment / props, exact action, lighting (use
-specific language — warm amber, rim light, bokeh, dust motes, golden blur),
-camera move (push-in / tilt / locked-off / dolly), lens feel (e.g. 85mm prime,
-100mm macro), and how this scene transitions into the next (slow dissolve,
-hard cut, fade). Slow motion 60fps is the default unless the beat calls for
-real-time. Vertical 9:16 always.]
+Scene 1 [— OPTIONAL_LABEL]: 0:00-0:0X
+[150-220 word paragraph. Describe: subject + environment / props, exact
+action, lighting (specific — warm amber, rim light, bokeh, dust motes,
+monitor glow, teal-and-amber split), camera move (push-in / lateral drift
+/ locked-off / handheld), lens feel (e.g. 35mm, 50mm prime, 85mm portrait,
+100mm macro, anamorphic), fps if not 24 (use 60fps for slow-mo or 24fps
+for real-time cinematic), color grade (e.g. "muted slate-blue and amber,
+desaturated slightly"), and how this scene transitions into the next
+(slow dissolve, hard cut, cut on motion, smash cut, freeze-frame).
+Vertical 9:16 always.]
 
-Scene 2: 0:03–0:06
-[Same depth and structure. Mid-story beat — the tension or detail.]
+Scene 2 [— OPTIONAL_LABEL]: 0:0X-0:0Y
+[Same depth.]
 
-Scene 3: 0:06–0:09
-[Same depth and structure. Resolution beat — the shift, the insight, the action.]
+Scene 3 [— OPTIONAL_LABEL]: 0:0Y-0:1Z
+[Same depth. If only 3 scenes total, end with "slow fade to black" or similar.]
 
-Scene 4: 0:09–0:12
-[Same depth and structure. The closing image — usually an extreme close-up
-on hands writing / typing / a screen / a face that lands the message. End
-with "slow fade to black" or a similarly definitive close.]
+[Scene 4 — if 4-scene story: 0:1Z-0:15
+Same depth. End on the most resonant single image.]
 
 VOICEOVER
 
-Tone: [one short clause describing voice quality — e.g. "warm, intimate,
-measured — like a trusted friend speaking honestly over coffee"]
-Pace: [one clause specifying pace — slow ~120 wpm with deliberate pauses]
+Tone: [one short clause — e.g. "warm, grounded, and quietly confident — the
+energy of someone telling the truth, not selling something"]
+Pace: [one clause — e.g. "slow and measured, ~120 wpm, with deliberate pauses
+between sentences"]
 
-"[Voiceover script under 45 words total. Pull the strongest 4-7 sentences
-from the hook + script. Break with ' ... ' between sentences to mark
-half-beat pauses. The script should be readable in exactly 12 seconds at
-the specified pace.]"
+"[Voiceover script under 60 words total. Pull the strongest 3-6 lines from
+the hook + script. Use ' ... ' between phrases for natural pauses. May
+include explicit [pause — X seconds] markers between major beats. Should
+read in the actual scene duration at the specified pace.]"
 
-Breathing room: [one line describing how silence should feel — e.g.
-"full half-beat pause after every sentence; silence should feel
+Breathing room: [one line — e.g. "let silence land; pauses should feel
 intentional, not empty"]
 
 CAPTIONS
 
-Scene 1 caption: Exact text — "[short pull-quote from the script, 4-8 words]".
-Font feel: [editorial serif suggestion, e.g. "clean modern serif, Freight Display
-or Domaine Display"]
-Scene 2 caption: Exact text — "[…]". Font feel: [same family, may differ in weight]
-Scene 3 caption: Exact text — "[…]". Font feel: [same family]
-Scene 4 caption: Exact text — "[…]". Font feel: [same family]
+Scene 1 — 0:00-0:0X
+Exact text: "[short pull-quote, 3-8 words, ideally a curiosity-gap phrase]"
+Font feel: [specific — "clean modern sans-serif, medium weight (think Inter
+or DM Sans)" or "editorial serif, Freight Display Medium" or "all-caps narrow
+sans, Druk Wide Bold"]
+Placement: [e.g. "lower third, left-aligned, 20% from bottom" or "centered,
+mid-screen"]
+Color: [e.g. "white text, soft charcoal drop-shadow outline" or "cream text
+on transparent background"]
+Animation: [e.g. "word-by-word pop-in, slight upward drift" or "fade-in with
+1-frame letter-stagger" or "static appearance, 200ms quick fade"]
+
+Scene 2 — 0:0X-0:0Y
+[Same caption structure with all 5 fields filled.]
+
+Scene 3 — 0:0Y-0:1Z
+[Same structure.]
+
+[Scene 4 caption if 4-scene story — same structure.]
 
 Hard rules:
-- The female subject is consistent across all 4 scenes — same person, same outfit
-  family (cozy editorial: soft sweater, neutral tones), same setting evolves
-  rather than jump-cuts to unrelated environments.
-- Each scene 3 seconds, slow-motion 60fps default, vertical 9:16 always.
-- Use specific lens references — never just "camera shot of".
-- Use specific lighting language — warm amber, golden hour, rim light, key light
-  from the left, bokeh, dust motes, screen glow. Avoid generic "natural lighting."
-- Voiceover script must be exactly the warmth of the source hook + script — do
-  not invent claims the source doesn't make. Stay editorial, not salesy.
-- Captions must be EXACT pull-quotes from the voiceover script (or short
-  paraphrases of source lines).
-- Output ONLY the brief. No preamble, no commentary, no markdown bold/italic.`;
+- The subject (visible character) is consistent across all scenes — same
+  person, evolving emotional state. Different scenes can show different
+  angles of the same person (face, hands, over-the-shoulder).
+- Use specific lens / lighting language — never generic "camera shot of"
+  or "natural lighting."
+- Voiceover must be derived from the source hook + script — do not invent
+  claims the source doesn't make. Stay editorial, not salesy.
+- Captions must be EXACT pull-quotes from the voiceover (or sharper rewrites
+  of source lines).
+- Every CAPTION block must include all 5 fields: Exact text, Font feel,
+  Placement, Color, Animation.
+- Output ONLY the brief. No preamble, no commentary, no markdown bold/italic,
+  no triple-backtick code fences.`;
 
 function buildUserPrompt(input: VideoPromptInput): string {
   const parts = [
@@ -110,7 +149,7 @@ function buildUserPrompt(input: VideoPromptInput): string {
   if (input.body && input.body.trim().length > 0) {
     parts.push("", `LONG-FORM ARTICLE BODY (context for the brief):`, input.body);
   }
-  parts.push("", "Write the 4-scene production brief now.");
+  parts.push("", "Write the 3- or 4-scene production brief now. Pick the subject and scene count that best fit this content.");
   return parts.join("\n");
 }
 

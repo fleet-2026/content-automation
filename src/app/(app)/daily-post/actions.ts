@@ -9,6 +9,7 @@ import {
   updateGuide,
 } from "@/lib/guides";
 import { generateVideoPromptText } from "@/lib/ai/video-prompt";
+import { rateHookForVirality, type HookRating } from "@/lib/ai/rate-hook";
 import { requireUser } from "@/lib/auth-helpers";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -134,6 +135,67 @@ export async function generateVideoPrompt(slug: string): Promise<{
   } catch (e) {
     return { ok: false, error: (e as Error).message };
   }
+}
+
+/** Rate the guide's hook for virality and return rewrites the admin
+ *  can swap in if the score is weak. No DB persistence — this is a
+ *  pure analysis tool, called on-demand from the "Rate this post"
+ *  button in the editor. */
+export async function rateHook(slug: string): Promise<{
+  ok: boolean;
+  rating?: HookRating;
+  error?: string;
+}> {
+  let userId: string;
+  try {
+    userId = await requireUser();
+  } catch {
+    return { ok: false, error: "unauthenticated" };
+  }
+  const rl = await rateLimit(`rate-hook:${userId}`, {
+    max: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!rl.allowed) {
+    return {
+      ok: false,
+      error: `Rate limit hit — try again in ${rl.retryAfterSec}s`,
+    };
+  }
+  const guide = await prisma.dailyGuide.findUnique({
+    where: { slug },
+    select: { title: true, hook: true, script: true, caption: true },
+  });
+  if (!guide) return { ok: false, error: "guide_not_found" };
+  if (!guide.hook.trim()) {
+    return { ok: false, error: "No hook to rate — fill in the Hook field first" };
+  }
+  try {
+    const rating = await rateHookForVirality({
+      title: guide.title,
+      hook: guide.hook,
+      script: guide.script,
+      caption: guide.caption,
+    });
+    return { ok: true, rating };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+}
+
+/** Replace the guide's hook (one-click "Use this rewrite" from the
+ *  rating panel). Saves to DailyGuide.hook + revalidates. */
+export async function replaceHook(slug: string, newHook: string) {
+  try {
+    await requireUser();
+  } catch {
+    return { ok: false };
+  }
+  if (!newHook.trim()) return { ok: false };
+  const ok = await updateGuide(slug, { hook: newHook.trim() });
+  revalidatePath(`/daily-post/${slug}`);
+  revalidatePath(`/guides/${slug}`);
+  return { ok };
 }
 
 /** Manual save for the video-prompt textarea (after the admin edits the

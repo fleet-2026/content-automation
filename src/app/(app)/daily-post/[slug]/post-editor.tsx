@@ -7,8 +7,25 @@ import {
   setMedia,
   generateVideoPrompt,
   saveVideoPrompt,
+  rateHook,
+  replaceHook,
 } from "../actions";
 import type { DailyPost } from "../data";
+
+type HookRating = {
+  overallScore: number;
+  verdict: string;
+  scores: {
+    curiosityGap: number;
+    specificity: number;
+    patternInterrupt: number;
+    clarity: number;
+    relevance: number;
+  };
+  strengths: string[];
+  weaknesses: string[];
+  rewrites: string[];
+};
 
 export default function PostEditor({ post }: { post: DailyPost }) {
   const g = post.generated;
@@ -33,6 +50,37 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const [videoPrompt, setVideoPromptText] = useState<string>(post.videoPrompt ?? "");
   const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
   const [promptError, setPromptError] = useState<string | null>(null);
+
+  // Hook rating panel state — populated on demand by the "Rate this
+  // post" button. Includes 3 alternate hook rewrites the admin can
+  // swap in with one click.
+  const [hookRating, setHookRating] = useState<HookRating | null>(null);
+  const [isRating, setIsRating] = useState(false);
+  const [ratingError, setRatingError] = useState<string | null>(null);
+
+  const runRateHook = async () => {
+    setRatingError(null);
+    setIsRating(true);
+    try {
+      // Persist any pending hook edit before rating so the score reflects
+      // what's currently typed, not whatever last auto-saved.
+      await updatePost(post.slug, { hook });
+      const res = await rateHook(post.slug);
+      if (!res.ok || !res.rating) throw new Error(res.error ?? "Rating failed");
+      setHookRating(res.rating);
+    } catch (e) {
+      setRatingError((e as Error).message);
+    } finally {
+      setIsRating(false);
+    }
+  };
+
+  const useRewrite = async (rewrite: string) => {
+    setHook(rewrite);
+    await replaceHook(post.slug, rewrite);
+    // Re-rate automatically so the admin sees the new score immediately.
+    setHookRating(null);
+  };
 
   const runGeneratePrompt = async () => {
     setPromptError(null);
@@ -404,7 +452,8 @@ export default function PostEditor({ post }: { post: DailyPost }) {
         </div>
       </div>
 
-      {/* Hook */}
+      {/* Hook — with a "Rate this post" button that scores virality
+          and offers 3 rewrites. */}
       <Section label="Hook" hint="First 1-2 sentences on camera">
         <textarea
           value={hook}
@@ -413,7 +462,41 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           rows={3}
           className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm leading-relaxed"
         />
-        <ActionBar onCopy={() => copy(hook)} />
+        <div className="mt-1.5 flex gap-2 flex-wrap items-center">
+          <button
+            type="button"
+            onClick={() => copy(hook)}
+            className="text-[11px] rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-2 py-1 hover:bg-[var(--color-surface-hover)]"
+          >
+            Copy
+          </button>
+          <button
+            type="button"
+            onClick={runRateHook}
+            disabled={isRating || !hook.trim()}
+            className="text-[11px] rounded bg-purple-500/20 text-purple-200 border border-purple-500/40 px-2 py-1 font-semibold hover:bg-purple-500/30 disabled:opacity-50"
+          >
+            {isRating ? "Rating…" : "Rate this post"}
+          </button>
+          <span className="text-[10px] text-[var(--color-muted)] self-center">
+            edits auto-save on blur
+          </span>
+        </div>
+
+        {ratingError && (
+          <div className="mt-3 rounded border border-red-500/30 bg-red-500/5 p-2 text-xs text-red-300">
+            {ratingError}
+          </div>
+        )}
+
+        {hookRating && (
+          <HookRatingPanel
+            rating={hookRating}
+            onUseRewrite={useRewrite}
+            onCopy={copy}
+            onDismiss={() => setHookRating(null)}
+          />
+        )}
       </Section>
 
       {/* Talking-head script */}
@@ -712,6 +795,146 @@ function Section({
         {hint && <span className="text-[10px] text-[var(--color-muted)]">{hint}</span>}
       </div>
       {children}
+    </div>
+  );
+}
+
+/** Inline panel that renders the AI hook rating + 3 rewrite suggestions.
+ *  Sits under the Hook textarea after "Rate this post" returns. */
+function HookRatingPanel({
+  rating,
+  onUseRewrite,
+  onCopy,
+  onDismiss,
+}: {
+  rating: HookRating;
+  onUseRewrite: (text: string) => void;
+  onCopy: (text: string) => void;
+  onDismiss: () => void;
+}) {
+  // Color the headline score by tier — green ≥8, yellow 6-7, red <6.
+  const scoreColor =
+    rating.overallScore >= 8
+      ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/30"
+      : rating.overallScore >= 6
+      ? "text-amber-300 bg-amber-500/10 border-amber-500/30"
+      : "text-red-300 bg-red-500/10 border-red-500/30";
+
+  const dims = [
+    { label: "Curiosity gap", value: rating.scores.curiosityGap },
+    { label: "Specificity", value: rating.scores.specificity },
+    { label: "Pattern interrupt", value: rating.scores.patternInterrupt },
+    { label: "Clarity", value: rating.scores.clarity },
+    { label: "Relevance", value: rating.scores.relevance },
+  ];
+
+  return (
+    <div className="mt-4 rounded-xl border-2 border-purple-500/30 bg-purple-500/5 p-4 space-y-4">
+      {/* Header with score + dismiss */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div
+            className={`rounded-lg border-2 px-3 py-1.5 text-2xl font-bold leading-none ${scoreColor}`}
+          >
+            {rating.overallScore}<span className="text-sm opacity-60">/10</span>
+          </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-purple-300 font-semibold">
+              Virality score
+            </div>
+            <div className="text-sm mt-0.5">{rating.verdict}</div>
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] px-2"
+          title="Close panel"
+        >
+          ✕
+        </button>
+      </div>
+
+      {/* Per-dimension scores */}
+      <div className="grid grid-cols-5 gap-2">
+        {dims.map((d) => (
+          <div key={d.label} className="text-center">
+            <div
+              className={`text-base font-bold ${
+                d.value >= 8 ? "text-emerald-300" : d.value >= 6 ? "text-amber-300" : "text-red-300"
+              }`}
+            >
+              {d.value}
+            </div>
+            <div className="text-[9px] uppercase tracking-wider text-[var(--color-muted)] leading-tight mt-0.5">
+              {d.label}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Strengths + weaknesses */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+        {rating.strengths.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold mb-1">
+              ✓ Working
+            </div>
+            <ul className="space-y-1 list-disc list-inside text-[var(--color-text)]">
+              {rating.strengths.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {rating.weaknesses.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-amber-300 font-semibold mb-1">
+              ✗ Could be stronger
+            </div>
+            <ul className="space-y-1 list-disc list-inside text-[var(--color-text)]">
+              {rating.weaknesses.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* 3 rewrites with one-click Use button */}
+      {rating.rewrites.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-purple-300 font-semibold mb-2">
+            Try one of these
+          </div>
+          <div className="space-y-2">
+            {rating.rewrites.map((r, i) => (
+              <div
+                key={i}
+                className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+              >
+                <div className="text-sm leading-relaxed mb-2">{r}</div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onUseRewrite(r)}
+                    className="rounded bg-purple-500/20 text-purple-200 border border-purple-500/40 px-3 py-1 text-xs font-semibold hover:bg-purple-500/30"
+                  >
+                    Use this hook
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onCopy(r)}
+                    className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1 text-xs hover:bg-[var(--color-surface-hover)]"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
