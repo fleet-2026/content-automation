@@ -730,14 +730,29 @@ export function Composer({
               Previously this button was gated on having hook OR caption
               already filled in, which made it look broken. Now: image
               present = button works. */}
-          {primaryMediaUrl && isImageUrl(primaryMediaUrl) && (
+          {/* Always render some state for this slot so the user knows
+              why the button isn't clickable:
+                - no media yet     → hint + greyed button
+                - video uploaded   → "text on image" not applicable note
+                - image uploaded   → live button */}
+          {!primaryMediaUrl ? (
+            <div className="mt-3 text-xs text-[var(--color-muted)] italic">
+              Upload an image first, then you can write text directly on it
+              with the next button.
+            </div>
+          ) : !isImageUrl(primaryMediaUrl) ? (
+            <div className="mt-3 text-xs text-[var(--color-muted)] italic">
+              &quot;Add text on image&quot; only works for images. Your primary
+              attachment is a video.
+            </div>
+          ) : (
             <button
               type="button"
               onClick={() => setOverlayOpen(true)}
               title="Open editor to write text directly on the image"
-              className="mt-3 flex items-center gap-2 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium"
+              className="mt-3 inline-flex items-center gap-2 text-sm px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] hover:opacity-90 font-semibold"
             >
-              <Type className="w-3.5 h-3.5" />
+              <Type className="w-4 h-4" />
               Add text on image (hook / caption)
             </button>
           )}

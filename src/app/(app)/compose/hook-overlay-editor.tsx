@@ -320,13 +320,14 @@ export function HookOverlayEditor({
 
           {/* Controls */}
           <div className="space-y-4">
-            <Field label="Hook / caption text">
+            <Field label="Text to put on image">
               <textarea
+                autoFocus
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 rows={8}
-                placeholder="Type or paste any text — hook, caption, both, or something custom. Edits here update the preview live; the original draft fields aren't touched."
-                className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)] text-sm resize-y min-h-[120px]"
+                placeholder="Type the caption you want shown on the image. You can type anything — the preview on the left updates live."
+                className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border-2 border-[var(--color-border)] outline-none focus:border-[var(--color-accent)] text-sm resize-y min-h-[140px]"
               />
               <p className="mt-1 text-[10px] text-[var(--color-muted)]">
                 {text.length} chars · Tip: long text needs a smaller font size
