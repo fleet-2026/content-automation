@@ -59,6 +59,36 @@ export async function listAvatars(): Promise<HeygenAvatar[]> {
   return (j?.data?.avatars ?? []) as HeygenAvatar[];
 }
 
+/** Fetch the user's Photo Avatars from a specific group. These are the
+ *  photo IDs returned by /v2/avatar_group/{groupId}/avatars — passed as
+ *  `talking_photo_id` in the video_inputs[].character payload, NOT as
+ *  `avatar_id`. */
+export type GroupPhotoAvatar = {
+  id: string;
+  name: string;
+  image_url: string;
+  status: string;
+  default_voice_id: string | null;
+};
+
+export async function listGroupPhotoAvatars(
+  groupId: string,
+): Promise<GroupPhotoAvatar[]> {
+  const r = await fetch(
+    `${BASE}/v2/avatar_group/${groupId}/avatars`,
+    { headers: authHeaders() },
+  );
+  if (!r.ok) {
+    throw new Error(`HeyGen group avatars ${r.status}: ${(await r.text()).slice(0, 300)}`);
+  }
+  const j = (await r.json()) as {
+    error: null | string;
+    data: { avatar_list: GroupPhotoAvatar[] };
+  };
+  if (j.error) throw new Error(`HeyGen group avatars: ${j.error}`);
+  return (j.data.avatar_list ?? []).filter((a) => a.status === "completed");
+}
+
 export async function listVoices(): Promise<HeygenVoice[]> {
   const r = await fetch(`${BASE}/v2/voices`, {
     headers: authHeaders(),
@@ -113,21 +143,30 @@ async function createAvatarJob({
   avatarId,
   voiceId,
   aspect,
+  characterType = "avatar",
 }: {
   script: string;
   avatarId: string;
   voiceId: string;
   aspect: HeygenAspect;
+  /** "avatar" = HeyGen stock or custom Instant Avatar (uses avatar_id).
+   *  "talking_photo" = Photo Avatar / look from your trained group
+   *  (uses talking_photo_id). Pick based on where the ID came from:
+   *  /v2/avatars        -> "avatar"
+   *  /v2/avatar_group   -> "talking_photo" */
+  characterType?: "avatar" | "talking_photo";
 }): Promise<string> {
   const dims = DIMS[aspect];
+  // HeyGen accepts two character shapes — the field name and the
+  // accompanying type differ. Photo Avatars don't have "avatar_style".
+  const character =
+    characterType === "talking_photo"
+      ? { type: "talking_photo", talking_photo_id: avatarId }
+      : { type: "avatar", avatar_id: avatarId, avatar_style: "normal" };
   const body = {
     video_inputs: [
       {
-        character: {
-          type: "avatar",
-          avatar_id: avatarId,
-          avatar_style: "normal",
-        },
+        character,
         voice: {
           type: "text",
           input_text: script,
@@ -154,6 +193,111 @@ async function createAvatarJob({
   const id = j.data?.video_id;
   if (!id) throw new Error("HeyGen returned no video_id.");
   return id;
+}
+
+/** Multi-scene Photo Avatar video. Each scene gets its own photo +
+ *  its own portion of the voiceover. HeyGen stitches them into one
+ *  MP4 with cuts between looks. */
+export async function createMultiScenePhotoJob({
+  scenes,
+  voiceId,
+  aspect,
+  caption = true,
+}: {
+  scenes: { photoId: string; scriptPart: string }[];
+  voiceId: string;
+  aspect: HeygenAspect;
+  caption?: boolean;
+}): Promise<string> {
+  if (scenes.length === 0) throw new Error("Need at least one scene.");
+  const dims = DIMS[aspect];
+  const body = {
+    video_inputs: scenes.map((s) => ({
+      character: {
+        type: "talking_photo",
+        talking_photo_id: s.photoId,
+      },
+      voice: {
+        type: "text",
+        input_text: s.scriptPart,
+        voice_id: voiceId,
+      },
+    })),
+    dimension: dims,
+    caption,
+  };
+  const r = await fetch(`${BASE}/v2/video/generate`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!r.ok) {
+    throw new Error(`HeyGen multi-scene generate ${r.status}: ${(await r.text()).slice(0, 500)}`);
+  }
+  const j = (await r.json()) as GenerateResponse;
+  if (j.error) throw new Error(`HeyGen: ${j.error.message ?? "unknown"}`);
+  const id = j.data?.video_id;
+  if (!id) throw new Error("HeyGen returned no video_id.");
+  return id;
+}
+
+/** Wait for a HeyGen job to finish and download the resulting MP4 to
+ *  R2. Used by both single-avatar and multi-scene flows. */
+export async function waitAndStorePhotoVideo({
+  videoId,
+  userId,
+  pollMs = 5000,
+  timeoutMs = 12 * 60 * 1000,
+}: {
+  videoId: string;
+  userId: string;
+  pollMs?: number;
+  timeoutMs?: number;
+}): Promise<GeneratedAvatarVideo> {
+  const deadline = Date.now() + timeoutMs;
+  let videoUrl: string | undefined;
+  let duration: number | undefined;
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    if (Date.now() > deadline) {
+      throw new Error(
+        `HeyGen job ${videoId} did not finish within ${timeoutMs / 1000}s.`,
+      );
+    }
+    await new Promise((r) => setTimeout(r, pollMs));
+    const data = await getStatus(videoId);
+    if (data?.status === "completed") {
+      videoUrl = data.video_url;
+      duration = data.duration;
+      break;
+    }
+    if (data?.status === "failed") {
+      throw new Error(`HeyGen failed: ${data?.error?.message ?? "unknown"}`);
+    }
+  }
+  if (!videoUrl) throw new Error("No video URL.");
+  // HeyGen videos can be 20-100MB depending on length/dimension. The
+  // default safeFetch cap is 8MB — bump it for trusted HeyGen URLs.
+  // safeFetch returns { buffer, contentType, status, finalUrl }, not a
+  // standard Response — buffer is the raw bytes.
+  const res = await safeFetch(videoUrl, { maxBytes: 200 * 1024 * 1024 });
+  const buf = res.buffer;
+  const key = `studio/${userId}/avatar-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.mp4`;
+  const url = await uploadToR2(key, buf, "video/mp4");
+  return {
+    url,
+    width: 720,
+    height: 1280,
+    durationSec: duration ?? null,
+    costCents: 0,
+    // Echo the source job + asset IDs for any caller that wants to log
+    // them. Used by studio's MediaAsset pipeline; the bulk script just
+    // ignores these fields.
+    prompt: "",
+    remoteId: videoId,
+    avatarId: "",
+    voiceId: "",
+  };
 }
 
 async function getStatus(videoId: string): Promise<StatusResponse["data"]> {
@@ -185,6 +329,7 @@ export async function generateAvatarVideo({
   aspect = "9:16",
   pollMs = 5000,
   timeoutMs = 8 * 60 * 1000,
+  characterType = "avatar",
 }: {
   userId: string;
   script: string;
@@ -193,6 +338,10 @@ export async function generateAvatarVideo({
   aspect?: HeygenAspect;
   pollMs?: number;
   timeoutMs?: number;
+  /** Pass "talking_photo" when avatarId is a Photo Avatar look from
+   *  /v2/avatar_group/<gid>/avatars. Defaults to "avatar" for stock /
+   *  Instant Avatars from /v2/avatars. */
+  characterType?: "avatar" | "talking_photo";
 }): Promise<GeneratedAvatarVideo> {
   if (!script.trim()) throw new Error("Script is required.");
   if (!avatarId) throw new Error("Pick an avatar.");
@@ -203,6 +352,7 @@ export async function generateAvatarVideo({
     avatarId,
     voiceId,
     aspect,
+    characterType,
   });
 
   const deadline = Date.now() + timeoutMs;
