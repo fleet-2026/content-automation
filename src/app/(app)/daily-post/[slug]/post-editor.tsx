@@ -74,9 +74,15 @@ export default function PostEditor({ post }: { post: DailyPost }) {
     );
   }
 
-  // Your Netlify-hosted guide page — this is what ManyChat sends to users.
-  // Anchor jumps straight to the card for this guide.
-  const fadiaUrl = `https://earnaihub.netlify.app/fadias-guide#guide-${post.slug}`;
+  // Your own deployed /guides/<slug> page — this is what ManyChat sends
+  // to people who comment the trigger keyword. Hosted on the same domain
+  // as the dashboard so we own the click + the read. NEXT_PUBLIC_APP_URL
+  // is the canonical origin (set in Vercel + .env); fall back to the
+  // current production deployment if it's missing in dev.
+  const guideOrigin =
+    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ??
+    "https://creator-os-delta.vercel.app";
+  const fadiaUrl = `${guideOrigin}/guides/${post.slug}`;
 
   // Prefill /compose with the caption + hashtags
   const composeUrl =
@@ -239,10 +245,10 @@ export default function PostEditor({ post }: { post: DailyPost }) {
         <ActionBar onCopy={() => copy(hashtagsRaw)} />
       </Section>
 
-      {/* ManyChat reply link → YOUR Netlify-hosted guide */}
+      {/* ManyChat reply link → your own /guides/<slug> page */}
       <Section
         label="ManyChat reply link"
-        hint="What ManyChat sends when someone comments the keyword — points to YOUR site"
+        hint="Paste into your ManyChat keyword reply — sends commenters straight to this guide on your site"
       >
         <div className="flex gap-2 items-center">
           <input
@@ -268,15 +274,9 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           </a>
         </div>
         <div className="mt-2 text-[10px] text-[var(--color-muted)]">
-          Original source (Mariah):{" "}
-          <a
-            href={post.url}
-            target="_blank"
-            rel="noreferrer"
-            className="underline"
-          >
-            {post.url}
-          </a>
+          Paste this URL into your ManyChat keyword reply for{" "}
+          <code className="font-mono">{keyword || "(no keyword set)"}</code>.
+          When someone comments it on your Reel, they get this link in DM.
         </div>
       </Section>
 
