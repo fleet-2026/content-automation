@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { savePost, type GeneratedFields } from "./data";
+import { listAllGuidesAdmin, setGuidePublished } from "@/lib/guides";
 
 export async function updatePost(slug: string, patch: Partial<GeneratedFields>) {
   // Normalize hashtags if provided as a string
@@ -19,4 +20,52 @@ export async function updatePost(slug: string, patch: Partial<GeneratedFields>) 
   revalidatePath(`/daily-post/${slug}`);
   revalidatePath(`/daily-post`);
   return { ok };
+}
+
+/** Single-guide publish/unpublish — used by the per-post editor toggle. */
+export async function setPublished(slug: string, published: boolean) {
+  const ok = await setGuidePublished(slug, published);
+  revalidatePath(`/daily-post/${slug}`);
+  revalidatePath(`/daily-post`);
+  revalidatePath(`/guides`);
+  revalidatePath(`/guides/${slug}`);
+  revalidatePath(`/sitemap.xml`);
+  return { ok };
+}
+
+/** Bulk publish — flips every guide with a non-empty script to isPublished=true.
+ *  Skips rows that are missing the script field (still placeholder content)
+ *  so the public site doesn't show empty cards. */
+export async function publishAllReady() {
+  const all = await listAllGuidesAdmin();
+  let published = 0;
+  let skipped = 0;
+  for (const g of all) {
+    if (g.isPublished) continue;
+    if (!g.script || !g.script.trim()) {
+      skipped++;
+      continue;
+    }
+    await setGuidePublished(g.slug, true);
+    published++;
+  }
+  revalidatePath(`/daily-post`);
+  revalidatePath(`/guides`);
+  revalidatePath(`/sitemap.xml`);
+  return { ok: true, published, skipped };
+}
+
+/** Bulk unpublish — flips every published guide back to draft. */
+export async function unpublishAll() {
+  const all = await listAllGuidesAdmin();
+  let unpublished = 0;
+  for (const g of all) {
+    if (!g.isPublished) continue;
+    await setGuidePublished(g.slug, false);
+    unpublished++;
+  }
+  revalidatePath(`/daily-post`);
+  revalidatePath(`/guides`);
+  revalidatePath(`/sitemap.xml`);
+  return { ok: true, unpublished };
 }

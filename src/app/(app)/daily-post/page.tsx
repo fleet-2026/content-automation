@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { tryGetUser } from "@/lib/auth-helpers";
-import { listPosts, POSTS_DIR } from "./data";
+import { listPosts } from "./data";
+import BulkPublishBar from "./bulk-publish-bar";
 
 export const metadata: Metadata = {
   title: "Daily Post — Creator OS",
@@ -18,6 +19,8 @@ export default async function DailyPostIndexPage() {
 
   const posts = await listPosts();
   const ready = posts.filter((p) => !!p.generated?.script).length;
+  const publishedCount = posts.filter((p) => p.isPublished).length;
+  const draftCount = posts.length - publishedCount;
 
   return (
     <div className="px-8 py-10 max-w-7xl">
@@ -26,15 +29,18 @@ export default async function DailyPostIndexPage() {
           Daily <span className="font-italic-accent text-blush">post.</span>
         </h1>
         <p className="text-sm text-[var(--color-muted)] mt-1">
-          {posts.length} guides · {ready} ready to post (hook + script + caption + hashtags) ·
-          source: <code className="text-xs">{POSTS_DIR}</code>
+          {posts.length} guides · {ready} ready to post (hook + script + caption + hashtags)
         </p>
       </div>
+
+      <BulkPublishBar totalDrafts={draftCount} totalPublished={publishedCount} />
 
       <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-200 leading-relaxed">
         <strong>How this works.</strong> Each card is a guide with a hook,
         talking-head script, caption, hashtags, and ManyChat keyword already
-        generated. Click any card → record your talking head → hit Post.
+        generated. Flip the <em>Publish</em> toggle on each (or use the
+        bulk-publish button above) to push it live on the public{" "}
+        <code>/guides</code> site.
       </div>
 
       {posts.length === 0 ? (
@@ -47,7 +53,7 @@ export default async function DailyPostIndexPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {posts.map((p) => {
             const g = p.generated;
-            const status = g?.script ? "ready" : "pending";
+            const ready = !!g?.script;
             return (
               <Link
                 key={p.slug}
@@ -58,15 +64,21 @@ export default async function DailyPostIndexPage() {
                   <span className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
                     #{p.index ?? "?"}
                   </span>
-                  <span
-                    className={`text-[10px] rounded border px-1.5 py-0.5 uppercase font-semibold ${
-                      status === "ready"
-                        ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
-                        : "bg-zinc-500/10 text-zinc-400 border-zinc-500/30"
-                    }`}
-                  >
-                    {status}
-                  </span>
+                  <div className="flex items-center gap-1">
+                    {p.isPublished ? (
+                      <span className="text-[10px] rounded border px-1.5 py-0.5 uppercase font-semibold bg-emerald-500/10 text-emerald-300 border-emerald-500/30">
+                        live
+                      </span>
+                    ) : ready ? (
+                      <span className="text-[10px] rounded border px-1.5 py-0.5 uppercase font-semibold bg-amber-500/10 text-amber-300 border-amber-500/30">
+                        draft
+                      </span>
+                    ) : (
+                      <span className="text-[10px] rounded border px-1.5 py-0.5 uppercase font-semibold bg-zinc-500/10 text-zinc-400 border-zinc-500/30">
+                        pending
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <div className="font-semibold leading-snug mb-2">{p.title}</div>
                 {g?.hook && (
