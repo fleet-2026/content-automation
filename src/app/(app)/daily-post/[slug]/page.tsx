@@ -36,14 +36,14 @@ export default async function PostDetailPage({
         {post.title}
       </h1>
       <p className="text-sm text-[var(--color-muted)] mt-1">
-        Source:{" "}
+        Public guide:{" "}
         <a
-          href={post.url}
+          href={`/guides/${post.slug}`}
           target="_blank"
           rel="noreferrer"
           className="underline"
         >
-          {post.url}
+          /guides/{post.slug} ↗
         </a>
       </p>
 
