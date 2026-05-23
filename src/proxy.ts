@@ -30,6 +30,14 @@ const PUBLIC_PATHS = [
   "/api/connect", // OAuth flows (start + callback). State is HMAC-signed.
   "/_next",
   "/favicon.ico",
+  // Public content site — /guides is the SEO-facing daily AI guides
+  // microsite. Anonymous visitors must be able to read /guides + every
+  // /guides/<slug> without hitting the auth wall. The admin manages
+  // these via /daily-post (still auth-gated).
+  "/guides",
+  // Sitemap + robots so crawlers can discover the public guides.
+  "/sitemap.xml",
+  "/robots.txt",
 ];
 
 // The shared-password gate page lives at /access (we serve it directly from

@@ -1,5 +1,20 @@
-import { promises as fs } from "fs";
-import path from "path";
+/**
+ * Shim that keeps the existing /daily-post admin page importing from this
+ * file but now backs onto the new `daily_guides` Prisma table via
+ * src/lib/guides.ts. The filesystem-JSON code path is gone — production
+ * (Vercel) can't read C:/Users/serka/namaha/data/posts and the JSON files
+ * were always a brittle source of truth.
+ *
+ * The shape exported here matches what /daily-post/page.tsx + /daily-post/
+ * [slug]/post-editor.tsx expect, so the admin UI keeps working unchanged.
+ * To backfill from JSON, run: npx tsx scripts/import-daily-guides.ts.
+ */
+
+import {
+  listAllGuidesAdmin,
+  getGuideAdmin,
+  updateGuide,
+} from "@/lib/guides";
 
 export type GeneratedFields = {
   hook: string;
@@ -18,59 +33,62 @@ export type DailyPost = {
   generated?: GeneratedFields;
   generated_at?: string;
   model?: string;
+  // New fields surfaced by the DB-backed source (used by the admin UI's
+  // Publish toggle — render conditional on `isPublished`).
+  isPublished?: boolean;
+  publishedAt?: string | null;
 };
 
-// Where generate_post_content.py writes its output.
-// Override with FADIA_POSTS_DIR env var if your path differs.
+// Kept as an exported constant so the existing /daily-post page can still
+// reference it for the "source:" hint. With the DB migration that hint
+// now lives in the import script's logs, but keeping the export avoids a
+// breaking import in admin code paths we haven't audited.
 export const POSTS_DIR =
   process.env.FADIA_POSTS_DIR ?? "C:/Users/serka/namaha/data/posts";
 
 export async function listPosts(): Promise<DailyPost[]> {
-  let entries: string[] = [];
-  try {
-    entries = await fs.readdir(POSTS_DIR);
-  } catch {
-    return [];
-  }
-  const posts: DailyPost[] = [];
-  for (const name of entries) {
-    if (!name.endsWith(".json")) continue;
-    try {
-      const raw = await fs.readFile(path.join(POSTS_DIR, name), "utf8");
-      posts.push(JSON.parse(raw));
-    } catch {
-      // skip bad files
-    }
-  }
-  posts.sort((a, b) => (a.index ?? 999) - (b.index ?? 999));
-  return posts;
+  const guides = await listAllGuidesAdmin();
+  return guides.map(toDailyPost);
 }
 
 export async function getPost(slug: string): Promise<DailyPost | null> {
-  const safe = slug.replace(/[^a-z0-9_-]/gi, "");
-  if (!safe) return null;
-  const p = path.join(POSTS_DIR, `${safe}.json`);
-  try {
-    const raw = await fs.readFile(p, "utf8");
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
+  const g = await getGuideAdmin(slug);
+  return g ? toDailyPost(g) : null;
 }
 
-export async function savePost(slug: string, patch: Partial<GeneratedFields>): Promise<boolean> {
-  const post = await getPost(slug);
-  if (!post) return false;
-  post.generated = {
-    hook: post.generated?.hook ?? "",
-    script: post.generated?.script ?? "",
-    caption: post.generated?.caption ?? "",
-    hashtags: post.generated?.hashtags ?? [],
-    keyword: post.generated?.keyword ?? "",
-    ...patch,
+export async function savePost(
+  slug: string,
+  patch: Partial<GeneratedFields>,
+): Promise<boolean> {
+  // The old shape lumped everything under `generated`. The DB stores
+  // each field at the top level, so we translate. `keyword` → `manychatKeyword`.
+  return updateGuide(slug, {
+    hook: patch.hook,
+    script: patch.script,
+    caption: patch.caption,
+    hashtags: patch.hashtags,
+    manychatKeyword: patch.keyword,
+  });
+}
+
+// ─── shape translation ───────────────────────────────────────────
+
+type GuideAdminShape = Awaited<ReturnType<typeof listAllGuidesAdmin>>[number];
+
+function toDailyPost(g: GuideAdminShape): DailyPost {
+  return {
+    slug: g.slug,
+    title: g.title,
+    url: g.sourceUrl ?? "", // sourceUrl plays the role of the legacy "url"
+    index: g.index ?? undefined,
+    generated: {
+      hook: g.hook,
+      script: g.script,
+      caption: g.caption,
+      hashtags: g.hashtags,
+      keyword: g.manychatKeyword,
+    },
+    isPublished: g.isPublished,
+    publishedAt: g.publishedAt ? g.publishedAt.toISOString() : null,
   };
-  const safe = slug.replace(/[^a-z0-9_-]/gi, "");
-  const p = path.join(POSTS_DIR, `${safe}.json`);
-  await fs.writeFile(p, JSON.stringify(post, null, 2), "utf8");
-  return true;
 }

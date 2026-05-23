@@ -454,6 +454,45 @@ model Note {
   @@map("notes")
 }
 
+// ─── DAILY GUIDES (public content site at /guides) ───────
+// The "daily post" admin in the dashboard creates each row here. Public
+// visitors at /guides + /guides/<slug> read these directly. Source-of-
+// truth lives in the DB now rather than scattered JSON files on the
+// user's local machine — those still get imported by
+// scripts/import-daily-guides.ts on initial backfill.
+
+model DailyGuide {
+  id              String    @id @default(cuid())
+  slug            String    @unique // URL identifier, used in /guides/<slug>
+  title           String    @db.Text // human-readable headline
+  index           Int? // original ordering ("day 1, day 2…"), null = unordered
+
+  // Content fields — every guide is a Reel/TikTok talking-head template
+  hook            String    @db.Text // first 8-12 words to stop the scroll
+  script          String    @db.Text // full talking-head script for the reel
+  caption         String    @db.Text // Instagram/TikTok caption text
+  hashtags        String[]  @default([])
+  manychatKeyword String    @db.Text // ManyChat trigger word for DM automation
+  /// Permalink to the live post on social once it's published. Null while still
+  /// in draft state — once the user publishes, /daily-post writes the URL here.
+  sourceUrl       String?   @db.Text
+
+  // Lifecycle / publishing
+  /// `false` keeps the guide off /guides even after import. Flip to true when
+  /// it's ready for SEO. Lets the admin draft + iterate without exposing
+  /// incomplete pages publicly.
+  isPublished     Boolean   @default(false)
+  publishedAt     DateTime? // set when isPublished flips true
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  // Fast index lookups for the public page (filter by published + sort by index)
+  // and for slug-based fetches (already covered by @unique on slug).
+  @@index([isPublished, publishedAt])
+  @@index([index])
+  @@map("daily_guides")
+}
+
 // ─── AUDIT LOG ────────────────────────────────────────────
 
 model AuditLog {
