@@ -61,7 +61,21 @@ const STATUS_COLORS: Record<string, string> = {
   FAILED: "bg-red-100 text-red-800",
 };
 
-export function DraftCard({ draft }: { draft: DraftCardData }) {
+/** Account state snapshot per platform — passed in from the server so
+ *  we can tell whether a "token expired" error from a prior publish
+ *  is now stale (account reconnected since), and adjust the message. */
+export type AccountStateMap = Record<
+  string,
+  { tokenExpiry: Date | null; updatedAt: Date }
+>;
+
+export function DraftCard({
+  draft,
+  accountStateByPlatform,
+}: {
+  draft: DraftCardData;
+  accountStateByPlatform?: AccountStateMap;
+}) {
   const router = useRouter();
   const [publishing, startPub] = useTransition();
   const [deleting, startDel] = useTransition();
@@ -105,20 +119,43 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
   // expiry messages to a friendlier "Reconnect Instagram" hint instead of
   // showing the raw "Unsupported state or unable to authenticate data"
   // string the user saw in the screenshot.
+  // Helper: detect if the user reconnected this platform's account
+  // SINCE the failed publish was recorded. If SocialAccount.updatedAt
+  // is after draft.updatedAt, the OAuth was refreshed and the "expired
+  // token" error from publishResults is stale.
+  function platformReconnectedSinceFailure(platform: string): boolean {
+    const acct = accountStateByPlatform?.[platform];
+    if (!acct) return false;
+    // The draft's updatedAt is the publish-attempt timestamp.
+    if (acct.updatedAt.getTime() <= draft.updatedAt.getTime()) return false;
+    // Also confirm the token isn't already expired again — fresh
+    // reconnect should have set tokenExpiry to a future date.
+    if (acct.tokenExpiry && acct.tokenExpiry.getTime() < Date.now()) return false;
+    return true;
+  }
+
   function classifyError(platform: string, raw: string | undefined): {
     friendly: string;
     needsReconnect: boolean;
   } {
     if (!raw) return { friendly: "", needsReconnect: false };
     const lower = raw.toLowerCase();
-    if (
+    const tokenError =
       lower.includes("unsupported state") ||
       lower.includes("authenticate data") ||
       lower.includes("token") ||
       lower.includes("expired") ||
       lower.includes("invalid_token") ||
-      lower.includes("oauthexception")
-    ) {
+      lower.includes("oauthexception");
+    if (tokenError) {
+      // If the user has reconnected since the failure, the error is stale.
+      // Tell them to just hit Publish — no second reconnect needed.
+      if (platformReconnectedSinceFailure(platform)) {
+        return {
+          friendly: `${platform} reconnected — click Publish now to retry.`,
+          needsReconnect: false,
+        };
+      }
       return {
         friendly: `${platform} access token expired — reconnect to publish.`,
         needsReconnect: true,
@@ -133,6 +170,12 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
       lower.includes("scope not authorized") ||
       lower.includes("did not authorize the scope")
     ) {
+      if (platformReconnectedSinceFailure(platform)) {
+        return {
+          friendly: `${platform} reconnected — click Publish now to retry.`,
+          needsReconnect: false,
+        };
+      }
       return {
         friendly: `${platform} is missing the video-upload permission — reconnect to grant it.`,
         needsReconnect: true,
@@ -153,8 +196,14 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
       };
     }
     if (lower.includes("delivered_to_inbox")) {
+      // TikTok requires a manual finalize-in-app step for the inbox
+      // upload flow (the only one we have scope for; full direct-post
+      // needs TikTok-approved `video.publish` scope from their audit).
+      // Make the next step painfully explicit so the user knows the
+      // upload IS in their TikTok app, they just need to tap Post.
       return {
-        friendly: "Delivered to TikTok inbox — finalize inside the app.",
+        friendly:
+          "Uploaded to your TikTok inbox. Open TikTok app → tap your profile → drafts → tap the new video → tap Post.",
         needsReconnect: false,
       };
     }
@@ -295,6 +344,14 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
                         >
                           view post <ExternalLink className="w-3 h-3" />
                         </a>
+                      ) : cls.friendly ? (
+                        // ok=true WITH a friendly note (e.g. TikTok's
+                        // "delivered to inbox" — finalize-in-app step).
+                        // Show the message so the user knows the next
+                        // action instead of just seeing "posted".
+                        <span className="text-xs text-emerald-700">
+                          — {cls.friendly}
+                        </span>
                       ) : (
                         <span className="text-xs text-emerald-700">posted</span>
                       )
@@ -365,14 +422,42 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
             {stripHookPrefix(draft.caption, draft.selectedHook)}
           </p>
           <div className="flex flex-wrap items-center gap-3 mt-3 text-xs text-[var(--color-muted)]">
-            <span
-              className={
-                "text-[10px] px-2 py-0.5 rounded uppercase tracking-wider " +
-                (STATUS_COLORS[draft.status] ?? "")
+            {/* Derived status label: if status==FAILED but some visible
+                platforms actually succeeded, call it "partial" — that's
+                what's true. If ALL visible platforms succeeded but the
+                row is FAILED (because a disabled platform like YouTube
+                "failed"), just call it "posted". The raw enum is kept
+                in the DB; this is presentation only. */}
+            {(() => {
+              const visibleResults = (draft.publishResults ?? []).filter((r) =>
+                isPlatformVisible(r.platform),
+              );
+              const visibleOks = visibleResults.filter((r) => r.ok).length;
+              const visibleFails = visibleResults.filter((r) => !r.ok).length;
+              let label: string = draft.status.toLowerCase();
+              let cls = STATUS_COLORS[draft.status] ?? "";
+              if (draft.status === "FAILED" && visibleOks > 0 && visibleFails > 0) {
+                label = "partial";
+                cls = "bg-amber-100 text-amber-800";
+              } else if (
+                draft.status === "FAILED" &&
+                visibleOks > 0 &&
+                visibleFails === 0
+              ) {
+                label = "posted";
+                cls = STATUS_COLORS["PUBLISHED"] ?? "bg-emerald-100 text-emerald-800";
               }
-            >
-              {draft.status.toLowerCase()}
-            </span>
+              return (
+                <span
+                  className={
+                    "text-[10px] px-2 py-0.5 rounded uppercase tracking-wider " +
+                    cls
+                  }
+                >
+                  {label}
+                </span>
+              );
+            })()}
             {draft.platforms.filter(isPlatformVisible).map((p) => (
               <span key={p}>{p.toLowerCase()}</span>
             ))}

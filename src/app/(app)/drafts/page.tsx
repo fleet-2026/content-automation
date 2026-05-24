@@ -14,7 +14,7 @@ export default async function DraftsPage() {
   // image gen creates a MediaAsset even when no Draft is attached), so the
   // user wants to see "what was generated yesterday" regardless of whether
   // a Draft is wrapped around it yet.
-  const [drafts, recentMedia] = userId
+  const [drafts, recentMedia, socialAccounts] = userId
     ? await Promise.all([
         safe(
           () =>
@@ -44,8 +44,30 @@ export default async function DraftsPage() {
             }),
           [],
         ),
+        // Social accounts so the DraftCard can detect when a token has
+        // been reconnected since a failed publish — turns stale "expired"
+        // errors into actionable "ready to retry" hints.
+        safe(
+          () =>
+            prisma.socialAccount.findMany({
+              where: { userId, isActive: true },
+              select: { platform: true, tokenExpiry: true, updatedAt: true },
+            }),
+          [],
+        ),
       ])
-    : [[], []];
+    : [[], [], []];
+
+  // Build a map: platform → { tokenExpiry, updatedAt } for fast lookup
+  // in DraftCard. Lets the card decide whether a "token expired" error
+  // is still accurate or if the user has since reconnected.
+  const accountStateByPlatform: Record<string, { tokenExpiry: Date | null; updatedAt: Date }> = {};
+  for (const a of socialAccounts) {
+    accountStateByPlatform[a.platform] = {
+      tokenExpiry: a.tokenExpiry,
+      updatedAt: a.updatedAt,
+    };
+  }
 
   return (
     <div className="px-8 py-10 max-w-5xl">
@@ -164,7 +186,13 @@ export default async function DraftsPage() {
                 ? (d.publishResults as DraftCardData["publishResults"])
                 : null,
             };
-            return <DraftCard key={d.id} draft={cardData} />;
+            return (
+              <DraftCard
+                key={d.id}
+                draft={cardData}
+                accountStateByPlatform={accountStateByPlatform}
+              />
+            );
           })}
         </div>
       )}
