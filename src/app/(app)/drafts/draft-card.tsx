@@ -9,6 +9,16 @@ import { publishDraftNow, deleteDraft, saveDraft } from "../compose/actions";
 import { parseMediaUrls, parseMusicUrl } from "@/lib/media-urls";
 import { stripHookPrefix } from "@/lib/captions";
 import { MediaPreviewModal } from "@/components/media-preview-modal";
+import { PLATFORM_INFO } from "@/lib/platform-info";
+
+// Hide disabled platforms (e.g. YouTube, when user has turned it off
+// in PLATFORM_INFO) from all UI surfaces in this card — both the
+// platform pills row AND the publishResults breakdown. Old drafts
+// were saved with those platforms in their arrays, so client-side
+// filtering is the cleanest fix without a destructive DB migration.
+function isPlatformVisible(p: Platform): boolean {
+  return PLATFORM_INFO[p]?.enabled !== false;
+}
 
 // `publishResults` is stored as `Json?` in Prisma. Each entry came from
 // publishDraft() in src/lib/publish.ts and matches PublishResult.
@@ -84,7 +94,12 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
   // result. We render a prominent "Posted ✓" banner at the top of the card
   // when this is true, with quick view links to each platform's live post.
   const isPosted = draft.status === "PUBLISHED";
-  const successfulPosts = (draft.publishResults ?? []).filter((r) => r.ok);
+  // Filter to visible (enabled) platforms only — successful posts to
+  // disabled platforms (e.g. YouTube after the user turned it off)
+  // shouldn't show up in the "Posted" banner.
+  const successfulPosts = (draft.publishResults ?? []).filter(
+    (r) => r.ok && isPlatformVisible(r.platform),
+  );
 
   // Per-platform error classifier. Maps Meta/Instagram-specific token-
   // expiry messages to a friendlier "Reconnect Instagram" hint instead of
@@ -227,8 +242,12 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
           the same data, but this modal stays prominent so the user
           gets a clear "what just happened" snapshot). */}
       {recentPublish && recentPublish.length > 0 && (() => {
-        const oks = recentPublish.filter((r) => r.ok);
-        const fails = recentPublish.filter((r) => !r.ok);
+        // Hide disabled platforms from the just-published modal — same
+        // policy as the rest of the card.
+        const visiblePublish = recentPublish.filter((r) => isPlatformVisible(r.platform));
+        if (visiblePublish.length === 0) return null;
+        const oks = visiblePublish.filter((r) => r.ok);
+        const fails = visiblePublish.filter((r) => !r.ok);
         const headerColor =
           fails.length === 0
             ? "bg-emerald-50 border-emerald-300 text-emerald-900"
@@ -256,7 +275,7 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
               </button>
             </div>
             <ul className="px-4 py-3 space-y-1.5 text-sm">
-              {recentPublish.map((r) => {
+              {visiblePublish.map((r) => {
                 const cls = classifyError(r.platform, r.error);
                 return (
                   <li key={r.platform} className="flex items-center gap-2 flex-wrap">
@@ -354,7 +373,7 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
             >
               {draft.status.toLowerCase()}
             </span>
-            {draft.platforms.map((p) => (
+            {draft.platforms.filter(isPlatformVisible).map((p) => (
               <span key={p}>{p.toLowerCase()}</span>
             ))}
             {draft.scheduledFor && (
@@ -371,9 +390,9 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
               classifyError() to produce friendlier messages + surface a
               "Reconnect" CTA when the failure looks like an expired or
               invalid OAuth token (the IG "Unsupported state" case). */}
-          {draft.publishResults && draft.publishResults.length > 0 && (
+          {draft.publishResults && draft.publishResults.filter((r) => isPlatformVisible(r.platform)).length > 0 && (
             <ul className="mt-3 space-y-1 text-xs">
-              {draft.publishResults.map((r) => {
+              {draft.publishResults.filter((r) => isPlatformVisible(r.platform)).map((r) => {
                 const cls = classifyError(r.platform, r.error);
                 return (
                   <li key={r.platform} className="flex items-center gap-2 flex-wrap">
