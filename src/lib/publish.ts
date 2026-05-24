@@ -43,8 +43,30 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
     },
   });
 
+  // Retry-aware platform selection: if this is a re-publish on a draft
+  // that already has prior results, SKIP any platform that succeeded
+  // last time so we don't post duplicates. Failed platforms get retried.
+  // The TikTok "delivered_to_inbox_finish_in_app" sentinel counts as a
+  // success — the video is already in the user's TikTok app.
+  const previousResults = (draft.publishResults ?? []) as unknown as PublishResult[];
+  const previousOkPlatforms = new Set(
+    Array.isArray(previousResults)
+      ? previousResults.filter((r) => r && r.ok).map((r) => r.platform)
+      : [],
+  );
+  const platformsToTry = draft.platforms.filter(
+    (p) => !previousOkPlatforms.has(p),
+  );
+
+  // Build the carry-over results for skipped (already-ok) platforms so
+  // the returned PublishResult[] still describes ALL platforms, not just
+  // the ones we just attempted. Lets the UI show the full picture.
+  const carryOver: PublishResult[] = (previousResults ?? []).filter(
+    (r) => r && r.ok && draft.platforms.includes(r.platform),
+  );
+
   const results = await Promise.all(
-    draft.platforms.map(async (platform): Promise<PublishResult> => {
+    platformsToTry.map(async (platform): Promise<PublishResult> => {
       const account = accounts.find((a) => a.platform === platform);
       if (!account) {
         return { platform, ok: false, error: "no_connected_account" };
@@ -158,19 +180,25 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
     }),
   );
 
-  const allOk = results.every((r) => r.ok);
+  // Combine: previously-successful platforms (carried over, untouched)
+  // + just-attempted platforms (this run's results). The merged array
+  // describes every platform in the draft so the UI can render the
+  // full picture without losing the prior wins.
+  const merged: PublishResult[] = [...carryOver, ...results];
+  const allOk = merged.length > 0 && merged.every((r) => r.ok);
   await prisma.draft.update({
     where: { id: draftId },
     data: {
       status: allOk ? "PUBLISHED" : "FAILED",
-      publishResults: results as unknown as object,
+      publishResults: merged as unknown as object,
     },
   });
 
   // Insert as first-class Posts so they show up in /posts immediately.
-  // Store the PRIMARY URL on Post.mediaUrl so single-URL renderers (analytics,
-  // post grids) keep working; the rest of the carousel lives only on the
-  // originating Draft until we have a proper schema for multi-media Posts.
+  // Only iterate over the JUST-attempted results — carry-over platforms
+  // already had their Post rows created in a previous run, so doing it
+  // again would either be a no-op (upsert) or create dupes if the
+  // postId differs (it won't on a true retry, but defensive).
   for (const r of results) {
     if (!r.ok || !r.postId) continue;
     const account = accounts.find((a) => a.platform === r.platform);
@@ -195,7 +223,7 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
     });
   }
 
-  return results;
+  return merged;
 }
 
 function combineCaption(d: Pick<Draft, "caption" | "hashtags">) {
