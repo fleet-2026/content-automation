@@ -28,28 +28,38 @@ export async function deletePost(
 
   const post = await prisma.post.findFirst({
     where: { id: postId, userId },
-    include: { socialAccount: true },
   });
   if (!post) return { ok: false, error: "post_not_found" };
+
+  // Post -> SocialAccount is a foreign-key reference, not a Prisma
+  // relation field. Look up the account separately so we can decrypt
+  // the access token.
+  const account = await prisma.socialAccount.findUnique({
+    where: { id: post.socialAccountId },
+  });
 
   let platformDeleteErr: string | undefined;
 
   if (post.platform === Platform.FACEBOOK) {
-    try {
-      const token = decrypt(post.socialAccount.accessToken);
+    if (!account) {
+      platformDeleteErr = "Connected Facebook account not found locally.";
+    } else {
+      try {
+        const token = decrypt(account.accessToken);
       // Facebook Graph API delete: DELETE /{post-id}
       // The post-id is "{pageId}_{postId}" format — our platformPostId
       // already stores it that way from the publish step.
-      const r = await fetch(
-        `https://graph.facebook.com/v21.0/${post.platformPostId}?access_token=${encodeURIComponent(token)}`,
-        { method: "DELETE" },
-      );
-      if (!r.ok) {
-        const text = await r.text().catch(() => "");
-        platformDeleteErr = `FB delete ${r.status}: ${text.slice(0, 200)}`;
+        const r = await fetch(
+          `https://graph.facebook.com/v21.0/${post.platformPostId}?access_token=${encodeURIComponent(token)}`,
+          { method: "DELETE" },
+        );
+        if (!r.ok) {
+          const text = await r.text().catch(() => "");
+          platformDeleteErr = `FB delete ${r.status}: ${text.slice(0, 200)}`;
+        }
+      } catch (e) {
+        platformDeleteErr = (e as Error).message;
       }
-    } catch (e) {
-      platformDeleteErr = (e as Error).message;
     }
   } else if (post.platform === Platform.INSTAGRAM) {
     // IG Graph API doesn't expose programmatic delete for organic posts
