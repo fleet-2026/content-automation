@@ -16,7 +16,7 @@ export default function robots(): MetadataRoute.Robots {
         userAgent: "*",
         allow: ["/guides", "/guides/"],
         // Everything else on this domain is private dashboard surface.
-        disallow: ["/api/", "/dashboard", "/drafts", "/studio", "/compose", "/schedule", "/trends", "/hooks", "/posts", "/voice", "/creators", "/notes", "/log", "/tracker", "/flip", "/chat", "/browse", "/daily-post", "/access"],
+        disallow: ["/api/", "/dashboard", "/drafts", "/studio", "/compose", "/schedule", "/trends", "/hooks", "/posts", "/voice", "/creators", "/notes", "/log", "/tracker", "/flip", "/chat", "/browse", "/daily-post", "/scripts", "/access"],
       },
     ],
     sitemap: `${base}/sitemap.xml`,
