@@ -63,6 +63,10 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
   const [pubConfirm, setPubConfirm] = useState(false);
   const [delConfirm, setDelConfirm] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Result modal — populated after a Publish-now action finishes so the
+  // user gets explicit per-platform success/fail confirmation instead of
+  // just seeing the card silently update.
+  const [recentPublish, setRecentPublish] = useState<PublishResult[] | null>(null);
 
   // mediaUrl may contain a newline-packed list of URLs when the draft is a
   // carousel. Pull out the primary for the thumbnail and keep the count so
@@ -179,7 +183,11 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
     setPubConfirm(false);
     startPub(async () => {
       try {
-        await publishDraftNow(draft.id);
+        // Capture the per-platform PublishResult[] returned by the action
+        // so we can surface a clear "Published to X, Y" modal — instead
+        // of relying only on the silent router.refresh() update.
+        const results = await publishDraftNow(draft.id);
+        setRecentPublish(Array.isArray(results) ? results : null);
         router.refresh();
       } catch (e) {
         setErr(String((e as Error).message ?? e));
@@ -212,6 +220,89 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
         (isPosted ? "border-emerald-500/40" : "")
       }
     >
+      {/* Just-published modal — shows immediately after a Publish-now
+          action returns. Lists EVERY platform attempted with explicit
+          ✓ / ✗ + per-platform link or error. Persists until the user
+          dismisses it (router.refresh updates the underlying card with
+          the same data, but this modal stays prominent so the user
+          gets a clear "what just happened" snapshot). */}
+      {recentPublish && recentPublish.length > 0 && (() => {
+        const oks = recentPublish.filter((r) => r.ok);
+        const fails = recentPublish.filter((r) => !r.ok);
+        const headerColor =
+          fails.length === 0
+            ? "bg-emerald-50 border-emerald-300 text-emerald-900"
+            : oks.length === 0
+              ? "bg-red-50 border-red-300 text-red-900"
+              : "bg-amber-50 border-amber-300 text-amber-900";
+        const headerIcon =
+          fails.length === 0 ? "✓ Published" : oks.length === 0 ? "✗ Publish failed" : "⚠ Partial publish";
+        return (
+          <div className={`mb-4 rounded-lg border-2 ${headerColor}`}>
+            <div className="px-4 py-2.5 flex items-center justify-between gap-3 border-b border-current/20">
+              <strong className="text-sm">
+                {headerIcon}{" "}
+                <span className="font-normal text-xs opacity-80">
+                  · {oks.length} succeeded · {fails.length} failed
+                </span>
+              </strong>
+              <button
+                type="button"
+                onClick={() => setRecentPublish(null)}
+                className="text-xs px-2 py-1 rounded hover:bg-black/5 font-medium"
+                aria-label="Dismiss"
+              >
+                Dismiss ✕
+              </button>
+            </div>
+            <ul className="px-4 py-3 space-y-1.5 text-sm">
+              {recentPublish.map((r) => {
+                const cls = classifyError(r.platform, r.error);
+                return (
+                  <li key={r.platform} className="flex items-center gap-2 flex-wrap">
+                    {r.ok ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-700 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-red-700 shrink-0" />
+                    )}
+                    <span className="font-semibold capitalize">{r.platform.toLowerCase()}</span>
+                    {r.ok ? (
+                      r.url ? (
+                        <a
+                          href={r.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs px-2 py-0.5 rounded-md bg-emerald-100 hover:bg-emerald-200 text-emerald-900 font-medium inline-flex items-center gap-1 ml-1"
+                        >
+                          view post <ExternalLink className="w-3 h-3" />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-emerald-700">posted</span>
+                      )
+                    ) : (
+                      <>
+                        <span className="text-xs text-red-700">
+                          — {cls.friendly || r.error || "failed"}
+                        </span>
+                        {cls.needsReconnect && (
+                          <a
+                            href={`/api/connect/${r.platform.toLowerCase()}`}
+                            className="text-xs px-2 py-0.5 rounded bg-amber-100 hover:bg-amber-200 text-amber-900 font-medium inline-flex items-center gap-1 ml-1"
+                          >
+                            <RefreshCw className="w-3 h-3" />
+                            Reconnect
+                          </a>
+                        )}
+                      </>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        );
+      })()}
+
       {/* Posted banner — shown prominently when the draft has been
           successfully published. Quick links to each platform's live post
           on the right side so the user can jump straight to the URL. */}
@@ -395,7 +486,8 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
           canPublish={canPublish}
           canDelete={canDelete}
           onPublish={async () => {
-            await publishDraftNow(draft.id);
+            const results = await publishDraftNow(draft.id);
+            setRecentPublish(Array.isArray(results) ? results : null);
             router.refresh();
           }}
           onDelete={async () => {
