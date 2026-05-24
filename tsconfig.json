@@ -37,6 +37,8 @@
   ],
   "exclude": [
     "node_modules",
-    "scripts"
+    "scripts",
+    "remotion",
+    "src/lib/ai/video-edit.ts"
   ]
 }
