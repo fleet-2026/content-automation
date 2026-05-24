@@ -31,10 +31,19 @@ function safeIgImageUrl(rawUrl: string): string {
     "https://images.weserv.nl/?url=" +
     encodeURIComponent(upstream) +
     // 1080×1350 = Instagram's max-quality 4:5 feed dimension. fit=cover
-    // forces both dimensions to be filled, a=attention picks the focal
-    // point based on entropy + face/skin detection so the subject lands
-    // in the safe center area.
-    "&w=1080&h=1350&fit=cover&a=attention&output=jpg&q=90"
+    // forces both dimensions to be filled.
+    //
+    // a=top anchors the crop to the TOP of the image instead of using
+    // entropy-based focal detection. For portrait / talking-head /
+    // editorial content the face is reliably in the upper half — top
+    // anchor means we cut from the BOTTOM (feet/background) and the
+    // head stays in frame every time.
+    //
+    // Previously used a=attention (entropy-based) which could pick a
+    // "busy" non-face area as the focal point and crop the head off,
+    // which is exactly what happened on the second image of the last
+    // carousel post.
+    "&w=1080&h=1350&fit=cover&a=top&output=jpg&q=90"
   );
 }
 

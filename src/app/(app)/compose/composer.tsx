@@ -78,6 +78,16 @@ export function Composer({
   }>;
   const [persisted] = useState<PersistedState>(() => {
     if (typeof window === "undefined") return {};
+    // When the user clicked "Edit" on a specific draft (/compose?draft=<id>),
+    // initialDraft is non-null. They want THAT draft loaded — not their
+    // last in-progress local-only state. Drop any persisted snapshot and
+    // hydrate fresh from the server data instead.
+    if (initialDraft) {
+      try {
+        window.localStorage.removeItem(PERSIST_KEY);
+      } catch {}
+      return {};
+    }
     try {
       const raw = window.localStorage.getItem(PERSIST_KEY);
       if (!raw) return {};
