@@ -10,6 +10,34 @@
 
 const GRAPH = "https://graph.facebook.com/v21.0";
 
+/** Wrap a public image URL through the weserv.nl smart-crop proxy so
+ *  Instagram receives a 4:5 (1080×1350) feed-safe portrait. Without this,
+ *  9:16 source images (which is what AI image generators and phone-cam
+ *  Reels output) get center-cropped by Instagram itself — chopping the
+ *  top of the face when the subject sits high in the frame.
+ *
+ *  weserv `a=attention` does content/face-aware focal-point selection
+ *  before crop, so the subject stays in frame.
+ *
+ *  Video URLs pass through unchanged (weserv doesn't transcode video). */
+function safeIgImageUrl(rawUrl: string): string {
+  // Skip videos
+  if (/\.(mp4|mov|m4v|webm)(\?|$)/i.test(rawUrl)) return rawUrl;
+  // Skip if already a weserv URL (avoid double-wrapping)
+  if (rawUrl.startsWith("https://images.weserv.nl/")) return rawUrl;
+  // Strip the https:// prefix — weserv wants bare host+path in `?url=`.
+  const upstream = rawUrl.replace(/^https?:\/\//i, "");
+  return (
+    "https://images.weserv.nl/?url=" +
+    encodeURIComponent(upstream) +
+    // 1080×1350 = Instagram's max-quality 4:5 feed dimension. fit=cover
+    // forces both dimensions to be filled, a=attention picks the focal
+    // point based on entropy + face/skin detection so the subject lands
+    // in the safe center area.
+    "&w=1080&h=1350&fit=cover&a=attention&output=jpg&q=90"
+  );
+}
+
 export type IGPublishInput = {
   caption?: string;
   imageUrl?: string;     // for IMAGE
@@ -44,7 +72,10 @@ export async function igPublish(
         childParams.set("media_type", "VIDEO");
         childParams.set("video_url", url);
       } else {
-        childParams.set("image_url", url);
+        // Route the image URL through weserv smart-crop so IG receives a
+        // 4:5 feed-ready portrait with the face / subject centered, not
+        // top-cropped (which is what was happening on the previous post).
+        childParams.set("image_url", safeIgImageUrl(url));
       }
       const r = await fetch(`${GRAPH}/${igBusinessId}/media`, {
         method: "POST",
@@ -118,7 +149,9 @@ export async function igPublish(
     params.set("video_url", input.videoUrl);
     if (input.thumbnailUrl) params.set("thumb_offset", "0");
   } else if (input.imageUrl) {
-    params.set("image_url", input.imageUrl);
+    // Same smart-crop wrap as the carousel path — face stays centered
+    // when IG resizes for the feed.
+    params.set("image_url", safeIgImageUrl(input.imageUrl));
   } else {
     throw new Error("igPublish requires imageUrl, videoUrl, or imageUrls[]");
   }
