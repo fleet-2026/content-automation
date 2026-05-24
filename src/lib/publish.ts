@@ -85,7 +85,23 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
 
         if (platform === Platform.TIKTOK) {
           if (!primaryUrl) return { platform, ok: false, error: "missing_video" };
-          const out = await ttPublishToInbox(accessToken, { videoUrl: primaryUrl });
+          // TikTok's Content Posting API requires the PULL_FROM_URL
+          // source to be from a verified domain (configured in TikTok's
+          // developer console). Our R2 dev URLs (*.r2.dev) aren't
+          // verified, so PULL_FROM_URL returns 403 url_ownership_unverified.
+          //
+          // Fix: download the bytes to a Buffer and use FILE_UPLOAD
+          // instead — TikTok hosts the bytes itself, no domain check.
+          const videoRes = await fetch(primaryUrl);
+          if (!videoRes.ok) {
+            return {
+              platform,
+              ok: false,
+              error: `Failed to fetch video for TikTok upload: ${videoRes.status}`,
+            };
+          }
+          const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+          const out = await ttPublishToInbox(accessToken, { videoBuffer });
           return {
             platform,
             ok: true,

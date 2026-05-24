@@ -119,6 +119,20 @@ export function DraftCard({ draft }: { draft: DraftCardData }) {
         needsReconnect: true,
       };
     }
+    // TikTok-specific: the PULL_FROM_URL source rejects URLs whose
+    // domain isn't on the developer's verified-domain list. We've
+    // switched to FILE_UPLOAD which doesn't have this constraint —
+    // but show a friendly message if it ever leaks through.
+    if (
+      lower.includes("url_ownership_unverified") ||
+      lower.includes("url ownership")
+    ) {
+      return {
+        friendly:
+          "TikTok rejected the source URL. The upload method has been switched — re-publish to try again.",
+        needsReconnect: false,
+      };
+    }
     if (lower.includes("delivered_to_inbox")) {
       return {
         friendly: "Delivered to TikTok inbox — finalize inside the app.",
