@@ -4,10 +4,13 @@ import { tryGetUser } from "@/lib/auth-helpers";
 import { formatNumber } from "@/lib/utils";
 import { DEMO, demoPosts } from "@/lib/demo-data";
 import Link from "next/link";
+import { DeletePostButton } from "./delete-button";
 
 export const dynamic = "force-dynamic";
 
-const platforms = ["all", "INSTAGRAM", "YOUTUBE", "TIKTOK"] as const;
+// YouTube dropped from the filter — user disabled it across the app.
+// Facebook added so duplicate FB posts are visible + deletable here.
+const platforms = ["all", "INSTAGRAM", "TIKTOK", "FACEBOOK"] as const;
 const sorts = ["recent", "engagement", "views"] as const;
 
 export default async function PostsPage({
@@ -57,7 +60,7 @@ export default async function PostsPage({
           where: {
             userId,
             ...(platform !== "all"
-              ? { platform: platform as "INSTAGRAM" | "YOUTUBE" | "TIKTOK" }
+              ? { platform: platform as "INSTAGRAM" | "TIKTOK" | "FACEBOOK" }
               : {}),
           },
           orderBy,
@@ -164,16 +167,25 @@ export default async function PostsPage({
                     value={p.engagementRate != null ? `${p.engagementRate.toFixed(1)}%` : "—"}
                   />
                 </div>
-                {p.url && (
-                  <a
-                    href={p.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs text-[var(--color-accent)] hover:underline mt-3"
-                  >
-                    Open ↗
-                  </a>
-                )}
+                <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
+                  {p.url ? (
+                    <a
+                      href={p.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-xs text-[var(--color-accent)] hover:underline"
+                    >
+                      Open ↗
+                    </a>
+                  ) : (
+                    <span />
+                  )}
+                  {/* Delete: works fully for Facebook (Graph API delete).
+                      IG / TikTok / YouTube can't be deleted via API in
+                      our scopes — button removes the local row and tells
+                      the user to delete from the app itself. */}
+                  <DeletePostButton postId={p.id} platform={p.platform} />
+                </div>
               </div>
             </article>
           ))}

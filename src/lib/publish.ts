@@ -7,6 +7,7 @@ import { ttPublishToInbox } from "@/lib/platforms/tiktok-publish";
 import { fbPublish } from "@/lib/platforms/facebook-publish";
 import { liPublishText } from "@/lib/platforms/linkedin-publish";
 import { primaryMediaUrl } from "@/lib/media-urls";
+import { PLATFORM_INFO } from "@/lib/platform-info";
 
 export type PublishResult = {
   platform: Platform;
@@ -43,6 +44,14 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
     },
   });
 
+  // Drop platforms that have been globally disabled via PLATFORM_INFO
+  // (e.g. YouTube). Old drafts saved with these platforms in their
+  // platforms[] would otherwise keep trying to publish to them on
+  // every retry. The user expressly turned YouTube off — honor it.
+  const enabledPlatforms = draft.platforms.filter(
+    (p) => PLATFORM_INFO[p]?.enabled !== false,
+  );
+
   // Retry-aware platform selection: if this is a re-publish on a draft
   // that already has prior results, SKIP any platform that succeeded
   // last time so we don't post duplicates. Failed platforms get retried.
@@ -54,7 +63,7 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
       ? previousResults.filter((r) => r && r.ok).map((r) => r.platform)
       : [],
   );
-  const platformsToTry = draft.platforms.filter(
+  const platformsToTry = enabledPlatforms.filter(
     (p) => !previousOkPlatforms.has(p),
   );
 
