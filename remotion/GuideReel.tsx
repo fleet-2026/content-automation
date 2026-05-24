@@ -18,7 +18,7 @@
 import React from "react";
 import {
   AbsoluteFill,
-  Video,
+  OffthreadVideo,
   useCurrentFrame,
   useVideoConfig,
   interpolate,
@@ -139,8 +139,16 @@ export const GuideReel: React.FC<GuideReelProps> = ({
              crossed punch-in moments. Talking heads work best when
              they're locked. */}
       <AbsoluteFill>
-        <Video
-          src={videoUrl}
+        <OffthreadVideo
+          src={
+            // The orchestrator prefixes "STATIC:" when the source is a
+            // local file copied into remotion/public/ — staticFile()
+            // turns it into the right bundler URL at runtime. Remote
+            // URLs (http://, https://) pass through unchanged.
+            videoUrl.startsWith("STATIC:")
+              ? staticFile(videoUrl.slice("STATIC:".length))
+              : videoUrl
+          }
           style={{
             width: "100%",
             height: "100%",
@@ -184,61 +192,75 @@ const CaptionLayer: React.FC<{
   height: number;
   width: number;
 }> = ({ captions, t, height, width }) => {
-  // Show ONLY words near the current time — tighter window so captions
-  // don't pile up and re-layout every few frames (the "dancing" effect).
-  // 0.7s window = roughly one short phrase at a time, predictable layout.
-  const WINDOW = 0.7;
-  const visible = captions.filter((c) => {
-    const mid = (c.startSec + c.endSec) / 2;
-    return Math.abs(mid - t) <= WINDOW;
-  });
-  if (visible.length === 0) return null;
+  // Show ONE PHRASE at a time, grouped in fixed chunks of 3 words so
+  // the visible text never reflows mid-chunk. Each chunk holds for
+  // ~0.7s then swaps out for the next 3-word chunk. Container is a
+  // FIXED-HEIGHT box so even when the chunk shrinks/grows, the surrounding
+  // video position doesn't shift.
+  if (captions.length === 0) return null;
+  const CHUNK_SIZE = 3;
+  // Build chunks once — pure derived data; the time-finder below
+  // selects which chunk to render at the current frame.
+  const chunks: { text: string; emphasisAny: boolean; startSec: number; endSec: number }[] = [];
+  for (let i = 0; i < captions.length; i += CHUNK_SIZE) {
+    const slice = captions.slice(i, i + CHUNK_SIZE);
+    if (slice.length === 0) continue;
+    chunks.push({
+      text: slice.map((s) => s.text).join(" "),
+      emphasisAny: slice.some((s) => s.emphasis),
+      startSec: slice[0].startSec,
+      endSec: slice[slice.length - 1].endSec,
+    });
+  }
+  const active = chunks.find((c) => t >= c.startSec && t < c.endSec);
+  // No transition between chunks — just appear/disappear. No fade,
+  // no scale, no slide. The text simply changes.
 
   return (
     <div
       style={{
         position: "absolute",
-        // Mid-chest height — not on face, not at the bottom edge.
-        // 720x1280: y=820 with text-anchored centering covers chest area.
         left: 0,
         right: 0,
-        top: height * 0.62,
+        // Mid-chest height — fixed pixel offset, never moves.
+        top: height * 0.66,
+        // FIXED height so the surrounding container doesn't reflow when
+        // text wraps to a second line or not.
+        height: 180,
         display: "flex",
-        flexWrap: "wrap",
         justifyContent: "center",
-        alignItems: "center",
+        alignItems: "flex-start",
         padding: "0 60px",
-        gap: 14,
+        // Pointer-events none so the canvas-like layer doesn't intercept
+        // anything weird during preview.
+        pointerEvents: "none",
       }}
     >
-      {visible.map((c, i) => {
-        // STATIC: removed the active-word scale bump and the past-word
-        // dim that were making captions "dance" up and down. Words now
-        // just appear, sit still, disappear. Only emphasis words get a
-        // bigger size + mustard color — and that's a static property
-        // of the word, not a per-frame transition.
-        const baseSize = c.emphasis ? 60 : 50;
-        const color = c.emphasis ? "#E8C56B" : "#F5EFE6";
-        return (
-          <span
-            key={`${c.text}-${c.startSec}-${i}`}
-            style={{
-              fontFamily: c.emphasis
-                ? "'Fraunces', 'Playfair Display', Georgia, serif"
-                : "'Inter', system-ui, sans-serif",
-              fontWeight: c.emphasis ? 800 : 700,
-              fontStyle: c.emphasis ? "italic" : "normal",
-              fontSize: baseSize,
-              color,
-              lineHeight: 1.05,
-              textShadow: "0 2px 6px rgba(0,0,0,0.55)",
-              letterSpacing: c.emphasis ? "-0.01em" : "0",
-            }}
-          >
-            {c.text}
-          </span>
-        );
-      })}
+      {active && (
+        <span
+          // Key by chunk index — forces React to render a fresh span on
+          // chunk change, no cross-fade weirdness.
+          key={active.startSec}
+          style={{
+            fontFamily: active.emphasisAny
+              ? "'Fraunces', 'Playfair Display', Georgia, serif"
+              : "'Inter', system-ui, sans-serif",
+            fontWeight: active.emphasisAny ? 800 : 700,
+            fontStyle: active.emphasisAny ? "italic" : "normal",
+            fontSize: active.emphasisAny ? 60 : 52,
+            color: active.emphasisAny ? "#E8C56B" : "#F5EFE6",
+            lineHeight: 1.1,
+            textShadow: "0 2px 8px rgba(0,0,0,0.7)",
+            letterSpacing: active.emphasisAny ? "-0.01em" : "0",
+            textAlign: "center",
+            // Cap width so phrases never run edge-to-edge — keeps line
+            // breaks predictable.
+            maxWidth: width * 0.78,
+          }}
+        >
+          {active.text}
+        </span>
+      )}
     </div>
   );
 };
