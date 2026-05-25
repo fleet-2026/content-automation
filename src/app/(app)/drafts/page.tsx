@@ -46,26 +46,40 @@ export default async function DraftsPage() {
         ),
         // Social accounts so the DraftCard can detect when a token has
         // been reconnected since a failed publish — turns stale "expired"
-        // errors into actionable "ready to retry" hints.
+        // errors into actionable "ready to retry" hints. Also drives the
+        // green-tick connection-health indicator next to each platform.
         safe(
           () =>
             prisma.socialAccount.findMany({
               where: { userId, isActive: true },
-              select: { platform: true, tokenExpiry: true, updatedAt: true },
+              select: {
+                platform: true,
+                tokenExpiry: true,
+                updatedAt: true,
+                lastError: true,
+              },
             }),
           [],
         ),
       ])
     : [[], [], []];
 
-  // Build a map: platform → { tokenExpiry, updatedAt } for fast lookup
-  // in DraftCard. Lets the card decide whether a "token expired" error
-  // is still accurate or if the user has since reconnected.
-  const accountStateByPlatform: Record<string, { tokenExpiry: Date | null; updatedAt: Date }> = {};
+  // Build a map: platform → connection-state for fast lookup in DraftCard.
+  // Drives BOTH the stale-error detection AND the green-tick health
+  // indicator next to each platform toggle.
+  const accountStateByPlatform: Record<
+    string,
+    {
+      tokenExpiry: Date | null;
+      updatedAt: Date;
+      lastError: string | null;
+    }
+  > = {};
   for (const a of socialAccounts) {
     accountStateByPlatform[a.platform] = {
       tokenExpiry: a.tokenExpiry,
       updatedAt: a.updatedAt,
+      lastError: a.lastError,
     };
   }
 

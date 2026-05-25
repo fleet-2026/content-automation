@@ -118,11 +118,57 @@ const STATUS_COLORS: Record<string, string> = {
 
 /** Account state snapshot per platform — passed in from the server so
  *  we can tell whether a "token expired" error from a prior publish
- *  is now stale (account reconnected since), and adjust the message. */
+ *  is now stale (account reconnected since), and adjust the message.
+ *  Also drives the green-tick connection-health indicator on the
+ *  platform toggle chips. */
 export type AccountStateMap = Record<
   string,
-  { tokenExpiry: Date | null; updatedAt: Date }
+  {
+    tokenExpiry: Date | null;
+    updatedAt: Date;
+    lastError?: string | null;
+  }
 >;
+
+/** Per-platform connection health for the green-tick UI.
+ *  - 'ready'      → green ✓ — account connected + token fresh + no errors
+ *  - 'warn'       → amber ⚠ — token expires in <7 days
+ *  - 'broken'     → red ✗  — token expired or last publish had auth error
+ *  - 'disconnected' → grey ○ — no account row found */
+export type Health = "ready" | "warn" | "broken" | "disconnected";
+
+function computeHealth(
+  platform: Platform,
+  acctState?: { tokenExpiry: Date | null; lastError?: string | null },
+): { state: Health; reason: string } {
+  if (!acctState) {
+    return { state: "disconnected", reason: `${platform} not connected — click Reconnect` };
+  }
+  const exp = acctState.tokenExpiry?.getTime();
+  const now = Date.now();
+  if (exp != null && exp < now) {
+    return { state: "broken", reason: `${platform} access token expired — reconnect to publish` };
+  }
+  // Look at lastError for auth-flavored failures from the last sync run.
+  const err = (acctState.lastError ?? "").toLowerCase();
+  if (
+    err.includes("token") ||
+    err.includes("expired") ||
+    err.includes("unauthorized") ||
+    err.includes("oauthexception")
+  ) {
+    return { state: "broken", reason: `${platform} last call failed with an auth error — reconnect to publish` };
+  }
+  // Tokens expiring within 7 days → warn but allow publish
+  if (exp != null && exp - now < 7 * 24 * 60 * 60 * 1000) {
+    const days = Math.max(0, Math.round((exp - now) / (24 * 60 * 60 * 1000)));
+    return {
+      state: "warn",
+      reason: `${platform} token expires in ${days}d — reconnect soon to avoid interruption`,
+    };
+  }
+  return { state: "ready", reason: `${platform} connected and ready` };
+}
 
 export function DraftCard({
   draft,
@@ -578,6 +624,18 @@ export function DraftCard({
                 const previouslyOk = (draft.publishResults ?? []).some(
                   (r) => r.platform === p && r.ok,
                 );
+                const health = computeHealth(p, accountStateByPlatform?.[p]);
+                // Color of the leading status dot on the chip — visible
+                // at a glance so the user knows BEFORE publishing which
+                // platforms are ready vs need reconnect.
+                const dotColor =
+                  health.state === "ready"
+                    ? "bg-emerald-500"
+                    : health.state === "warn"
+                      ? "bg-amber-500"
+                      : health.state === "broken"
+                        ? "bg-red-500"
+                        : "bg-zinc-400";
                 return (
                   <button
                     key={p}
@@ -585,11 +643,11 @@ export function DraftCard({
                     onClick={() => togglePlatform(p)}
                     title={
                       previouslyOk
-                        ? `${p.toLowerCase()} already posted last time — toggle off to skip on retry`
-                        : `Click to ${selected ? "exclude" : "include"} ${p.toLowerCase()}`
+                        ? `Already posted last time — toggle off to skip on retry. ${health.reason}`
+                        : `${health.reason}. Click to ${selected ? "exclude" : "include"} on next publish.`
                     }
                     className={
-                      "text-[10px] px-2 py-0.5 rounded-full border transition uppercase tracking-wider " +
+                      "inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border transition uppercase tracking-wider " +
                       (selected
                         ? previouslyOk
                           ? "bg-emerald-100 border-emerald-300 text-emerald-900"
@@ -597,7 +655,7 @@ export function DraftCard({
                         : "bg-transparent border-[var(--color-border)] text-[var(--color-muted)] line-through opacity-60")
                     }
                   >
-                    {selected ? "✓ " : "✕ "}
+                    <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
                     {p.toLowerCase()}
                   </button>
                 );
@@ -791,24 +849,88 @@ export function DraftCard({
           Edit
         </Link>
 
-        {canPublish && (
+        {canPublish && (() => {
+          // Compute health for every CURRENTLY-SELECTED platform on the
+          // draft. Any 'broken' or 'disconnected' blocks the Publish-now
+          // button until the user fixes it — surfaces a clear "click
+          // Reconnect on X first" message right next to the button.
+          const selectedHealth = selectedPlatforms
+            .filter(isPlatformVisible)
+            .map((p) => ({
+              platform: p,
+              ...computeHealth(p, accountStateByPlatform?.[p]),
+            }));
+          const blocked = selectedHealth.filter(
+            (h) => h.state === "broken" || h.state === "disconnected",
+          );
+          const warns = selectedHealth.filter((h) => h.state === "warn");
+          const allReady = selectedHealth.length > 0 && blocked.length === 0;
+          const noSelection = selectedPlatforms.filter(isPlatformVisible).length === 0;
+          return (
           <>
+            {/* Pre-publish status badge — green tick when everything is
+                ready, red banner when something is broken. User sees
+                this BEFORE clicking Publish so there are no surprises. */}
+            {!publishing && !noSelection && (
+              <div
+                className={
+                  "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md mr-1 " +
+                  (allReady
+                    ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    : blocked.length > 0
+                      ? "bg-red-50 text-red-800 border border-red-200"
+                      : "bg-amber-50 text-amber-800 border border-amber-200")
+                }
+                title={
+                  blocked.length > 0
+                    ? blocked.map((b) => b.reason).join(" · ")
+                    : warns.length > 0
+                      ? warns.map((w) => w.reason).join(" · ")
+                      : "All selected platforms ready"
+                }
+              >
+                {allReady ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    All {selectedHealth.length} ready
+                  </>
+                ) : blocked.length > 0 ? (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    {blocked.length} need{blocked.length === 1 ? "s" : ""} reconnect:{" "}
+                    {blocked.map((b) => b.platform.toLowerCase()).join(", ")}
+                  </>
+                ) : (
+                  <>
+                    <AlertTriangle className="w-3.5 h-3.5" />
+                    {warns.length} expir{warns.length === 1 ? "es" : "e"} soon
+                  </>
+                )}
+              </div>
+            )}
             <button
               type="button"
               onClick={onPublishClick}
-              disabled={publishing}
+              disabled={publishing || (blocked.length > 0 && !pubConfirm) || noSelection}
               className={
                 "flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed " +
                 (pubConfirm
                   ? "bg-amber-600 text-white hover:bg-amber-700"
                   : "bg-[var(--color-accent)] text-[var(--color-text-on-dark)] hover:opacity-90")
               }
+              title={
+                blocked.length > 0
+                  ? `Reconnect first: ${blocked.map((b) => b.platform.toLowerCase()).join(", ")}`
+                  : noSelection
+                    ? "Select at least one platform"
+                    : undefined
+              }
             >
               {pubConfirm ? <AlertTriangle className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
               {publishing
                 ? "Publishing…"
                 : pubConfirm
-                  ? `Confirm: post to ${draft.platforms.join(" + ").toLowerCase()}`
+                  ? `Confirm: post to ${selectedPlatforms.filter(isPlatformVisible).join(" + ").toLowerCase()}`
                   : "Publish now"}
             </button>
             {pubConfirm && !publishing && (
@@ -821,7 +943,8 @@ export function DraftCard({
               </button>
             )}
           </>
-        )}
+        );
+        })()}
 
         {canDelete && (
           <>
