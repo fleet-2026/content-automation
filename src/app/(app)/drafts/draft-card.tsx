@@ -20,6 +20,61 @@ function isPlatformVisible(p: Platform): boolean {
   return PLATFORM_INFO[p]?.enabled !== false;
 }
 
+/** Build the full caption text (hook + body + hashtags) the way it'd
+ *  appear under a published post — used for the TikTok "Copy caption"
+ *  button since TikTok's inbox API doesn't accept a caption param. */
+function buildShareableCaption(draft: {
+  caption: string;
+  selectedHook: string | null;
+  hashtags: string[];
+}): string {
+  const parts: string[] = [];
+  // Hook lives at the top — saveDraft prepends it onto caption too,
+  // so strip duplicate if present.
+  const body = stripHookPrefix(draft.caption, draft.selectedHook);
+  if (draft.selectedHook && body.trim()) {
+    parts.push(`${draft.selectedHook}\n\n${body}`);
+  } else if (draft.selectedHook) {
+    parts.push(draft.selectedHook);
+  } else {
+    parts.push(body);
+  }
+  if (draft.hashtags?.length) {
+    parts.push("");
+    parts.push(draft.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" "));
+  }
+  return parts.join("\n").trim();
+}
+
+/** Tiny inline button — copies the given text to clipboard and shows
+ *  a ✓ flash for a moment. Used for "Copy caption for TikTok". */
+function CopyCaptionButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(text);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1400);
+        } catch {
+          /* ignore — older browsers without clipboard API */
+        }
+      }}
+      className={
+        "text-xs px-2 py-0.5 rounded font-medium inline-flex items-center gap-1 ml-1 transition " +
+        (copied
+          ? "bg-emerald-200 text-emerald-900"
+          : "bg-emerald-100 hover:bg-emerald-200 text-emerald-900")
+      }
+      title="Copy the full caption (hook + body + hashtags) — paste it into the TikTok app"
+    >
+      {copied ? "✓ Copied" : label}
+    </button>
+  );
+}
+
 // `publishResults` is stored as `Json?` in Prisma. Each entry came from
 // publishDraft() in src/lib/publish.ts and matches PublishResult.
 type PublishResult = {
@@ -232,14 +287,15 @@ export function DraftCard({
       };
     }
     if (lower.includes("delivered_to_inbox")) {
-      // TikTok requires a manual finalize-in-app step for the inbox
-      // upload flow (the only one we have scope for; full direct-post
-      // needs TikTok-approved `video.publish` scope from their audit).
-      // Make the next step painfully explicit so the user knows the
-      // upload IS in their TikTok app, they just need to tap Post.
+      // TikTok's inbox API doesn't accept a caption/title — the video
+      // arrives in the TikTok app with no text, and the user has to
+      // type or paste it manually. (Full direct-post with pre-filled
+      // caption requires `video.publish` scope, which needs TikTok
+      // audit approval.) The card surfaces a "Copy caption" button
+      // separately so the paste is one tap.
       return {
         friendly:
-          "Uploaded to your TikTok inbox. Open TikTok app → tap your profile → drafts → tap the new video → tap Post.",
+          "Uploaded to your TikTok inbox (no caption — TikTok API limit). Open TikTok app → profile → drafts → tap the video → paste the caption → tap Post.",
         needsReconnect: false,
       };
     }
@@ -383,11 +439,21 @@ export function DraftCard({
                       ) : cls.friendly ? (
                         // ok=true WITH a friendly note (e.g. TikTok's
                         // "delivered to inbox" — finalize-in-app step).
-                        // Show the message so the user knows the next
-                        // action instead of just seeing "posted".
-                        <span className="text-xs text-emerald-700">
-                          — {cls.friendly}
-                        </span>
+                        // Show the message + a Copy-caption button so
+                        // the user can paste the caption into TikTok in
+                        // one tap (TikTok inbox doesn't accept caption
+                        // via API).
+                        <>
+                          <span className="text-xs text-emerald-700">
+                            — {cls.friendly}
+                          </span>
+                          {r.platform === "TIKTOK" && (
+                            <CopyCaptionButton
+                              text={buildShareableCaption(draft)}
+                              label="Copy caption for TikTok"
+                            />
+                          )}
+                        </>
                       ) : (
                         <span className="text-xs text-emerald-700">posted</span>
                       )
@@ -585,6 +651,15 @@ export function DraftCard({
                         <RefreshCw className="w-3 h-3" />
                         Reconnect
                       </a>
+                    )}
+                    {/* TikTok inbox uploads arrive with NO caption (API
+                        limitation). One-tap copy button so the user
+                        can paste the caption into TikTok app. */}
+                    {r.platform === "TIKTOK" && r.ok && cls.friendly && (
+                      <CopyCaptionButton
+                        text={buildShareableCaption(draft)}
+                        label="Copy caption"
+                      />
                     )}
                   </li>
                 );
