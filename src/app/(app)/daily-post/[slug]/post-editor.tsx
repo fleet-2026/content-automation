@@ -234,13 +234,13 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   // Upload a file to R2 via Server Action.
   // Max 100 MB (bodySizeLimit in next.config.ts). Page has maxDuration=60
   // to allow enough time for large video uploads.
-  const MAX_UPLOAD = 100 * 1024 * 1024;
+  const MAX_UPLOAD = 200 * 1024 * 1024;
 
   const uploadOne = async (file: File): Promise<string> => {
     if (file.size > MAX_UPLOAD) {
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
       throw new Error(
-        `File is ${sizeMB} MB — max upload size is 100 MB. ` +
+        `File is ${sizeMB} MB — max upload size is 200 MB. ` +
         `Compress the video first (e.g. HandBrake, CapCut export at lower quality).`
       );
     }
@@ -975,7 +975,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                     : "Click or drag video here"}
                 </div>
                 <div className="text-xs text-[var(--color-muted)] mt-1">
-                  MP4 / MOV · max 100 MB
+                  MP4 / MOV · max 200 MB
                 </div>
               </div>
             )}
@@ -1082,7 +1082,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                     : "Add more (click or drag)"}
                 </div>
                 <div className="text-[10px] text-[var(--color-muted)] mt-0.5">
-                  JPEG / PNG / WebP · max 100 MB each
+                  JPEG / PNG / WebP · max 200 MB each
                 </div>
               </div>
             </div>
