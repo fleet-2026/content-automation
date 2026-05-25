@@ -10,7 +10,9 @@ import {
   saveVideoPrompt,
   rateHook,
   replaceHook,
+  publishToSocial,
 } from "../actions";
+import type { Platform } from "@prisma/client";
 import {
   createAvatarVideo,
   pollAsset,
@@ -230,6 +232,42 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const [videoDragOver, setVideoDragOver] = useState(false);
   const [imageDragOver, setImageDragOver] = useState(false);
+
+  // Social publish state — platform toggles + per-platform results.
+  const AVAILABLE_PLATFORMS: { key: Platform; label: string; color: string }[] = [
+    { key: "INSTAGRAM", label: "Instagram", color: "#E1306C" },
+    { key: "TIKTOK", label: "TikTok", color: "#000000" },
+    { key: "FACEBOOK", label: "Facebook", color: "#1877F2" },
+  ];
+  const [selectedPlatforms, setSelectedPlatforms] = useState<Platform[]>([
+    "INSTAGRAM", "TIKTOK", "FACEBOOK",
+  ]);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishResults, setPublishResults] = useState<
+    { platform: string; ok: boolean; url?: string; error?: string }[] | null
+  >(null);
+
+  const togglePlatform = (p: Platform) => {
+    setSelectedPlatforms((prev) =>
+      prev.includes(p) ? prev.filter((x) => x !== p) : [...prev, p],
+    );
+  };
+
+  const runPublishToSocial = async () => {
+    setPublishError(null);
+    setPublishResults(null);
+    setIsPublishing(true);
+    try {
+      const res = await publishToSocial(post.slug, selectedPlatforms);
+      if (!res.ok) throw new Error(res.error ?? "Publish failed");
+      setPublishResults(res.results ?? []);
+    } catch (e) {
+      setPublishError((e as Error).message);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
 
   // Upload a file to R2.
   // Small files (≤ 4 MB): Server Action (no CORS needed).
@@ -1134,19 +1172,100 @@ export default function PostEditor({ post }: { post: DailyPost }) {
         </div>
       </Section>
 
-      {/* Action bar — post to all */}
-      <div className="sticky bottom-4 mt-8 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)]/95 backdrop-blur p-4 flex flex-wrap items-center gap-3 shadow-lg">
-        <div className="text-sm">
-          Ready to publish? Click <strong>Open Compose</strong> to use your
-          existing posting pipeline with caption + hashtags prefilled.
+      {/* Publish to social platforms */}
+      <div className="sticky bottom-4 mt-8 rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-surface)]/95 backdrop-blur p-5 shadow-lg space-y-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <h3 className="font-display text-lg">
+            Publish to <span className="font-italic-accent text-blush">socials.</span>
+          </h3>
+          <a
+            href={composeUrl}
+            className="text-[11px] text-[var(--color-muted)] hover:text-[var(--color-text)] underline"
+          >
+            or open Compose →
+          </a>
         </div>
-        <div className="flex-1" />
-        <a
-          href={composeUrl}
-          className="rounded bg-[var(--color-text)] text-[var(--color-text-on-dark)] px-4 py-2 text-sm font-semibold hover:opacity-90"
-        >
-          Open Compose →
-        </a>
+
+        {/* Platform toggles */}
+        <div className="flex gap-2 flex-wrap">
+          {AVAILABLE_PLATFORMS.map((p) => {
+            const active = selectedPlatforms.includes(p.key);
+            return (
+              <button
+                key={p.key}
+                type="button"
+                onClick={() => togglePlatform(p.key)}
+                disabled={isPublishing}
+                className={
+                  "rounded-full px-4 py-1.5 text-xs font-semibold border transition disabled:opacity-50 " +
+                  (active
+                    ? "text-white border-transparent"
+                    : "text-[var(--color-muted)] border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text)]/30")
+                }
+                style={active ? { backgroundColor: p.color } : undefined}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Publish button + status */}
+        <div className="flex items-center gap-3 flex-wrap">
+          <button
+            type="button"
+            onClick={runPublishToSocial}
+            disabled={isPublishing || selectedPlatforms.length === 0 || !caption.trim()}
+            className="rounded bg-[var(--color-text)] text-[var(--color-text-on-dark)] px-5 py-2.5 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+          >
+            {isPublishing ? "Publishing…" : `Publish to ${selectedPlatforms.length} platform${selectedPlatforms.length !== 1 ? "s" : ""}`}
+          </button>
+          {!caption.trim() && (
+            <span className="text-xs text-amber-300">Caption is empty</span>
+          )}
+          {!videoUrl && imageUrls.length === 0 && (
+            <span className="text-xs text-amber-300">No media uploaded</span>
+          )}
+        </div>
+
+        {publishError && (
+          <div className="rounded border border-red-500/30 bg-red-500/5 p-2.5 text-xs text-red-300">
+            {publishError}
+          </div>
+        )}
+
+        {publishResults && (
+          <div className="space-y-1.5">
+            {publishResults.map((r) => (
+              <div
+                key={r.platform}
+                className={
+                  "flex items-center gap-2 rounded border px-3 py-2 text-xs " +
+                  (r.ok
+                    ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
+                    : "border-red-500/30 bg-red-500/5 text-red-300")
+                }
+              >
+                <span className="font-semibold">
+                  {r.ok ? "✓" : "✕"} {r.platform}
+                </span>
+                {r.url && (
+                  <a
+                    href={r.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="underline ml-auto"
+                  >
+                    View post ↗
+                  </a>
+                )}
+                {r.error && (
+                  <span className="ml-auto truncate max-w-xs">{r.error}</span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {isPending && (

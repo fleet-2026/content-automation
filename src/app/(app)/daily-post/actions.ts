@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import crypto from "node:crypto";
+import { Platform, DraftStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { savePost, type GeneratedFields } from "./data";
 import {
@@ -11,6 +12,8 @@ import {
 } from "@/lib/guides";
 import { generateVideoPromptText } from "@/lib/ai/video-prompt";
 import { rateHookForVirality, type HookRating } from "@/lib/ai/rate-hook";
+import { publishDraft } from "@/lib/publish";
+import type { PublishResult } from "@/lib/publish";
 import { requireUser } from "@/lib/auth-helpers";
 import { rateLimit } from "@/lib/rate-limit";
 import { uploadToR2 } from "@/lib/r2";
@@ -272,6 +275,104 @@ export async function uploadMedia(
   } catch (e) {
     console.error("[uploadMedia] failed:", e);
     return { ok: false, error: (e as Error)?.message ?? String(e) };
+  }
+}
+
+/** Publish to social platforms (Instagram, TikTok, Facebook) directly
+ *  from the daily-post editor. Creates a Draft from the DailyGuide data,
+ *  publishes it, and returns per-platform results.
+ *
+ *  The user picks which platforms to target. The guide must have a caption
+ *  and at least a video or image to publish. */
+export async function publishToSocial(
+  slug: string,
+  platforms: Platform[],
+): Promise<{
+  ok: boolean;
+  results?: PublishResult[];
+  error?: string;
+}> {
+  let userId: string;
+  try {
+    userId = await requireUser();
+  } catch {
+    return { ok: false, error: "unauthenticated" };
+  }
+
+  const rl = await rateLimit(`social-publish:${userId}`, {
+    max: 30,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!rl.allowed) {
+    return { ok: false, error: `Rate limit hit — try again in ${rl.retryAfterSec}s` };
+  }
+
+  if (!platforms.length) {
+    return { ok: false, error: "Pick at least one platform" };
+  }
+
+  const guide = await prisma.dailyGuide.findUnique({
+    where: { slug },
+    select: {
+      title: true,
+      caption: true,
+      hashtags: true,
+      hook: true,
+      videoUrl: true,
+      imageUrls: true,
+    },
+  });
+  if (!guide) return { ok: false, error: "guide_not_found" };
+  if (!guide.caption.trim()) {
+    return { ok: false, error: "Caption is empty — fill it in first" };
+  }
+
+  // Build mediaUrl: video takes priority. If no video, newline-join
+  // image URLs for carousel support. Draft.mediaUrl is a single string
+  // with newlines for multi-image.
+  let mediaUrl: string | null = null;
+  if (guide.videoUrl) {
+    mediaUrl = guide.videoUrl;
+  } else if (guide.imageUrls.length > 0) {
+    mediaUrl = guide.imageUrls.join("\n");
+  }
+
+  // Strip leading # from hashtags — Draft model stores bare tags,
+  // combineCaption() in publish.ts re-adds the # prefix.
+  const hashtags = guide.hashtags.map((h) =>
+    h.startsWith("#") ? h.slice(1) : h,
+  );
+
+  try {
+    // Create a Draft record that the publish pipeline expects.
+    const draft = await prisma.draft.create({
+      data: {
+        userId,
+        caption: guide.caption,
+        hashtags,
+        selectedHook: guide.hook || null,
+        mediaUrl,
+        platforms,
+        status: DraftStatus.PUBLISHING,
+      },
+    });
+
+    const results = await publishDraft(draft.id);
+
+    // Check if all targeted platforms succeeded.
+    const allOk = results.every((r) => r.ok);
+    if (!allOk) {
+      await prisma.draft.update({
+        where: { id: draft.id },
+        data: { status: DraftStatus.FAILED },
+      });
+    }
+
+    revalidatePath(`/daily-post/${slug}`);
+    revalidatePath(`/drafts`);
+    return { ok: true, results };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
   }
 }
 
