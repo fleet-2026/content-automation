@@ -11,6 +11,8 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
+// Allow up to 60s for Server Action uploads (video files need time)
+export const maxDuration = 60;
 
 export default async function PostDetailPage({
   params,

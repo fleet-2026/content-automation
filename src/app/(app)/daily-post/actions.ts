@@ -256,8 +256,8 @@ export async function uploadMedia(
   if (file.size === 0) {
     return { ok: false, error: "empty_file" };
   }
-  if (file.size > 200 * 1024 * 1024) {
-    return { ok: false, error: "file_too_large (max 200 MB)" };
+  if (file.size > 20 * 1024 * 1024) {
+    return { ok: false, error: "file_too_large (max 20 MB)" };
   }
 
   try {

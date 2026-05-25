@@ -231,66 +231,24 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const [videoDragOver, setVideoDragOver] = useState(false);
   const [imageDragOver, setImageDragOver] = useState(false);
 
-  // Upload a file to R2.
-  // Videos always use presigned URLs (direct browser → R2) because even
-  // small videos can timeout on Vercel serverless functions.
-  // Images ≤ 4 MB use the Server Action. Images > 4 MB use presigned URLs.
+  // Upload a file to R2 via Server Action.
+  // Max 20 MB (bodySizeLimit in next.config.ts). Page has maxDuration=60
+  // to allow enough time for large video uploads.
+  const MAX_UPLOAD = 20 * 1024 * 1024;
+
   const uploadOne = async (file: File): Promise<string> => {
-    const isVideo = file.type.startsWith("video/");
-    if (!isVideo && file.size <= 4 * 1024 * 1024) {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await uploadMedia(form);
-      if (!res.ok) throw new Error(res.error ?? "Upload failed");
-      return res.url;
-    }
-    return uploadViaPresign(file);
-  };
-
-  /** Presigned direct-to-R2 upload. The /api/upload/presign endpoint
-   *  auto-configures CORS on the bucket before returning the URL. */
-  const uploadViaPresign = async (file: File): Promise<string> => {
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp4";
-    const contentType = file.type || "application/octet-stream";
-
-    let presignRes: Response;
-    try {
-      presignRes = await fetch("/api/upload/presign", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ext, contentType }),
-      });
-    } catch (e) {
-      throw new Error(`Network error getting upload URL: ${(e as Error).message}`);
-    }
-    if (!presignRes.ok) {
-      const j = (await presignRes.json().catch(() => ({}))) as { message?: string; error?: string };
-      throw new Error(j.message ?? j.error ?? `Presign failed (${presignRes.status})`);
-    }
-    const { uploadUrl, publicUrl } = (await presignRes.json()) as {
-      uploadUrl: string;
-      publicUrl: string;
-    };
-
-    let putRes: Response;
-    try {
-      putRes = await fetch(uploadUrl, {
-        method: "PUT",
-        headers: { "Content-Type": contentType },
-        body: file,
-      });
-    } catch (e) {
-      // CORS or network error — show detailed message
+    if (file.size > MAX_UPLOAD) {
+      const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
       throw new Error(
-        `Upload to storage failed: ${(e as Error).message}. ` +
-        `If this persists, check R2 CORS settings in Cloudflare dashboard.`
+        `File is ${sizeMB} MB — max upload size is 20 MB. ` +
+        `Compress the video first (e.g. HandBrake, CapCut export at lower quality).`
       );
     }
-    if (!putRes.ok) {
-      const text = await putRes.text().catch(() => "");
-      throw new Error(`Storage returned ${putRes.status}: ${text.slice(0, 200)}`);
-    }
-    return publicUrl;
+    const form = new FormData();
+    form.append("file", file);
+    const res = await uploadMedia(form);
+    if (!res.ok) throw new Error(res.error ?? "Upload failed");
+    return res.url;
   };
 
   const handleVideoSelected = async (file: File | null) => {
@@ -1017,7 +975,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                     : "Click or drag video here"}
                 </div>
                 <div className="text-xs text-[var(--color-muted)] mt-1">
-                  MP4 / MOV · max 200 MB
+                  MP4 / MOV · max 20 MB
                 </div>
               </div>
             )}
@@ -1124,7 +1082,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                     : "Add more (click or drag)"}
                 </div>
                 <div className="text-[10px] text-[var(--color-muted)] mt-0.5">
-                  JPEG / PNG / WebP · max 200 MB each
+                  JPEG / PNG / WebP · max 20 MB each
                 </div>
               </div>
             </div>
