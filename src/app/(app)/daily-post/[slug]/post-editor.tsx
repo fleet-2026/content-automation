@@ -342,13 +342,43 @@ export default function PostEditor({ post }: { post: DailyPost }) {
 
   const copy = async (text: string) => {
     try {
-      await navigator.clipboard.writeText(text);
-      setStatus("copied");
+      // Primary: modern Clipboard API (requires secure context + focus)
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // Fallback: textarea + execCommand for older browsers / edge cases
+        fallbackCopy(text);
+      }
+      setStatus("copied ✓");
       setTimeout(() => setStatus(null), 1200);
     } catch {
-      /* ignore */
+      // Clipboard API can throw even in secure context (permission denied,
+      // document not focused). Fall back to the textarea method.
+      try {
+        fallbackCopy(text);
+        setStatus("copied ✓");
+        setTimeout(() => setStatus(null), 1200);
+      } catch {
+        setStatus("copy failed — select & Ctrl+C");
+        setTimeout(() => setStatus(null), 3000);
+      }
     }
   };
+
+  /** Fallback copy using a hidden textarea + document.execCommand. Works in
+   *  cases where the Clipboard API throws (permission, focus, iframe). */
+  function fallbackCopy(text: string) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  }
 
   if (!g) {
     return (
@@ -1179,14 +1209,37 @@ function CopyScriptBar({
     else if (kind === "hook") text = hook;
     else text = `${hook}\n\n${script}`;
     try {
-      await navigator.clipboard.writeText(text);
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        fbCopy(text);
+      }
       setCopied(kind);
-      onCopy(text); // also fire the parent status
       setTimeout(() => setCopied(null), 1400);
     } catch {
-      /* clipboard not available */
+      try {
+        fbCopy(text);
+        setCopied(kind);
+        setTimeout(() => setCopied(null), 1400);
+      } catch {
+        setCopied(null);
+      }
     }
   };
+
+  /** Fallback copy for environments where Clipboard API throws */
+  function fbCopy(text: string) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "-9999px";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+  }
 
   const wordCount = script.trim().split(/\s+/).filter(Boolean).length;
   const estSec = Math.round((wordCount / 150) * 60);
