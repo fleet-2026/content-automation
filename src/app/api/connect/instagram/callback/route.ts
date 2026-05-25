@@ -35,11 +35,51 @@ export async function GET(req: Request) {
   const redirectUri = `${env("NEXT_PUBLIC_APP_URL")}/api/connect/instagram/callback`;
   try {
     const { accessToken: userAccessToken, expiresAt } = await instagramExchangeCode(code, redirectUri);
+
+    // ── Diagnostic: log raw /me/accounts so we can see WHY IG fails ──
+    // This is the critical call — if a Page has instagram_business_account
+    // the connection works. If not, we need to know what Meta returned.
+    const diagRes = await fetch(
+      `https://graph.facebook.com/v21.0/me/accounts?fields=id,name,instagram_business_account&access_token=${userAccessToken}`,
+    );
+    const diagJson = diagRes.ok ? await diagRes.json() : null;
+    console.log(
+      "[connect/instagram] /me/accounts raw response:",
+      JSON.stringify(diagJson, null, 2),
+    );
+
+    // Also check what scopes the token actually has
+    const debugRes = await fetch(
+      `https://graph.facebook.com/v21.0/debug_token?input_token=${userAccessToken}&access_token=${userAccessToken}`,
+    );
+    const debugJson = debugRes.ok ? await debugRes.json() : null;
+    console.log(
+      "[connect/instagram] token debug_info:",
+      JSON.stringify(debugJson?.data?.scopes ?? debugJson, null, 2),
+    );
+
     const accounts = await instagramListConnectedAccounts(userAccessToken);
     if (!accounts.length) {
+      // Build a more specific error message
+      const pages = (diagJson as { data?: Array<{ id: string; name: string; instagram_business_account?: unknown }> })?.data ?? [];
+      const pagesCount = pages.length;
+      const pagesWithIg = pages.filter((p) => !!p.instagram_business_account).length;
+      const scopes = (debugJson as { data?: { scopes?: string[] } })?.data?.scopes ?? [];
+
+      const detail = pagesCount === 0
+        ? "no_pages_returned"
+        : pagesWithIg === 0
+        ? `${pagesCount}_pages_but_none_have_ig_linked`
+        : "unknown";
+
+      console.error(
+        `[connect/instagram] FAILED: ${detail}`,
+        { pagesCount, pagesWithIg, scopes, pageNames: pages.map((p) => p.name) },
+      );
+
       home.searchParams.set(
         "connect_error",
-        "no_ig_business_account_linked_to_facebook_page",
+        `ig_${detail}__scopes_${scopes.join("+")}__pages_${pagesCount}`,
       );
       return NextResponse.redirect(home);
     }

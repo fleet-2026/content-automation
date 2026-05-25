@@ -167,8 +167,9 @@ export default async function DashboardPage({
         </div>
       )}
       {sp.connect_error && (
-        <div className="mb-6 px-4 py-3 rounded-lg bg-red-100 border border-red-300 text-red-800 text-sm">
-          Connection failed: {sp.connect_error}
+        <div className="mb-6 px-4 py-3 rounded-lg bg-red-100 border border-red-300 text-red-800 text-sm space-y-1">
+          <div className="font-semibold">Connection failed</div>
+          <div className="font-mono text-xs break-all">{sp.connect_error}</div>
         </div>
       )}
 
