@@ -910,13 +910,19 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                 </div>
               </div>
             ) : (
-              <label
+              <div
+                role="button"
+                tabIndex={0}
                 className={
-                  "block cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition " +
+                  "block cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition select-none " +
                   (videoDragOver
                     ? "border-emerald-400 bg-emerald-50/10"
                     : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text)]/30")
                 }
+                onClick={() => videoInputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") videoInputRef.current?.click();
+                }}
                 onDragOver={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -962,7 +968,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                 <div className="text-xs text-[var(--color-muted)] mt-1">
                   MP4 / MOV · max 200 MB
                 </div>
-              </label>
+              </div>
             )}
           </div>
 
@@ -1001,13 +1007,19 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                 </div>
               )}
 
-              <label
+              <div
+                role="button"
+                tabIndex={0}
                 className={
-                  "block cursor-pointer rounded border-2 border-dashed py-4 text-center transition " +
+                  "block cursor-pointer rounded border-2 border-dashed py-4 text-center transition select-none " +
                   (imageDragOver
                     ? "border-emerald-400 bg-emerald-50/10"
                     : "border-[var(--color-border)] hover:border-[var(--color-text)]/30")
                 }
+                onClick={() => imageInputRef.current?.click()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") imageInputRef.current?.click();
+                }}
                 onDragOver={(e) => {
                   e.preventDefault();
                   e.stopPropagation();
@@ -1063,7 +1075,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                 <div className="text-[10px] text-[var(--color-muted)] mt-0.5">
                   JPEG / PNG / WebP · max 200 MB each
                 </div>
-              </label>
+              </div>
             </div>
           </div>
         </div>
