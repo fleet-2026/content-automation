@@ -268,6 +268,13 @@ export function DraftCard({
       cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p],
     );
   }
+  // Per-publish snapshot of which platforms were carry-overs (not
+  // freshly attempted). Lets the result modal mark them clearly so
+  // the user sees "1 newly attempted, 2 carried over" instead of an
+  // ambiguous "3 succeeded".
+  const [lastCarriedOver, setLastCarriedOver] = useState<Set<Platform>>(
+    new Set(),
+  );
 
   // mediaUrl may contain a newline-packed list of URLs when the draft is a
   // carousel. Pull out the primary for the thumbnail and keep the count so
@@ -443,6 +450,15 @@ export function DraftCard({
       return;
     }
     setPubConfirm(false);
+    // Snapshot platforms that were already-ok BEFORE this publish, so
+    // the result modal can label them as "(skipped — already posted)"
+    // instead of pretending they were just attempted.
+    const carriedOverSnapshot = new Set(
+      (draft.publishResults ?? [])
+        .filter((r) => r.ok && !forceRetryPlatforms.includes(r.platform))
+        .map((r) => r.platform),
+    );
+    setLastCarriedOver(carriedOverSnapshot);
     startPub(async () => {
       try {
         // Capture the per-platform PublishResult[] returned by the action
@@ -498,8 +514,14 @@ export function DraftCard({
         // policy as the rest of the card.
         const visiblePublish = recentPublish.filter((r) => isPlatformVisible(r.platform));
         if (visiblePublish.length === 0) return null;
-        const oks = visiblePublish.filter((r) => r.ok);
-        const fails = visiblePublish.filter((r) => !r.ok);
+        // Split into "freshly attempted" vs "carried over from prior
+        // successful publish" so the user sees the TRUTH about what
+        // just happened — only the newly-attempted platforms got new
+        // API calls; carry-overs are unchanged from before.
+        const fresh = visiblePublish.filter((r) => !lastCarriedOver.has(r.platform));
+        const carried = visiblePublish.filter((r) => lastCarriedOver.has(r.platform));
+        const oks = fresh.filter((r) => r.ok);
+        const fails = fresh.filter((r) => !r.ok);
         const headerColor =
           fails.length === 0
             ? "bg-emerald-50 border-emerald-300 text-emerald-900"
@@ -514,7 +536,8 @@ export function DraftCard({
               <strong className="text-sm">
                 {headerIcon}{" "}
                 <span className="font-normal text-xs opacity-80">
-                  · {oks.length} succeeded · {fails.length} failed
+                  · {oks.length + fails.length} attempted this time
+                  {carried.length > 0 ? ` · ${carried.length} skipped (already posted)` : ""}
                 </span>
               </strong>
               <button
@@ -529,6 +552,7 @@ export function DraftCard({
             <ul className="px-4 py-3 space-y-1.5 text-sm">
               {visiblePublish.map((r) => {
                 const cls = classifyError(r.platform, r.error);
+                const isCarryOver = lastCarriedOver.has(r.platform);
                 return (
                   <li key={r.platform} className="flex items-center gap-2 flex-wrap">
                     {r.ok ? (
@@ -537,6 +561,14 @@ export function DraftCard({
                       <AlertTriangle className="w-4 h-4 text-red-700 shrink-0" />
                     )}
                     <span className="font-semibold capitalize">{r.platform.toLowerCase()}</span>
+                    {isCarryOver && (
+                      <span
+                        className="text-[10px] uppercase tracking-wider rounded px-1.5 py-0.5 bg-zinc-100 text-zinc-700 border border-zinc-200 font-medium"
+                        title="This platform was NOT attempted this time — it succeeded in a previous publish and was auto-skipped to prevent duplicate posts. Click ↻ on the chip to force a retry."
+                      >
+                        skipped — already posted
+                      </span>
+                    )}
                     {r.ok ? (
                       r.url ? (
                         <a
