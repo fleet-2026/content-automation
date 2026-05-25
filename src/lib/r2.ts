@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { S3Client, PutObjectCommand, PutBucketCorsCommand, GetBucketCorsCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "@/lib/env";
 
@@ -47,6 +47,39 @@ export async function uploadToR2(
   if (base) return `${base}/${key}`;
   const accountId = env("R2_ACCOUNT_ID") ?? "";
   return `https://${bucket}.${accountId}.r2.cloudflarestorage.com/${key}`;
+}
+
+/** Ensure the R2 bucket has CORS rules allowing browser PUT uploads.
+ *  Called lazily on first presign request — idempotent, safe to call
+ *  repeatedly. Cloudflare R2 supports S3-compatible PutBucketCors. */
+let _corsConfigured = false;
+export async function ensureR2Cors(): Promise<void> {
+  if (_corsConfigured) return;
+  const bucket = env("R2_BUCKET") || "creator-os";
+  const appUrl = env("NEXT_PUBLIC_APP_URL") ?? "https://creator-os-delta.vercel.app";
+  try {
+    await r2().send(
+      new PutBucketCorsCommand({
+        Bucket: bucket,
+        CORSConfiguration: {
+          CORSRules: [
+            {
+              AllowedOrigins: [appUrl, "http://localhost:3000"],
+              AllowedMethods: ["PUT", "GET", "HEAD"],
+              AllowedHeaders: ["*"],
+              ExposeHeaders: ["ETag"],
+              MaxAgeSeconds: 3600,
+            },
+          ],
+        },
+      }),
+    );
+    _corsConfigured = true;
+    console.log("[r2] CORS configured for bucket", bucket);
+  } catch (e) {
+    // Log but don't throw — upload can still work via server-side proxy
+    console.warn("[r2] Failed to set CORS (non-fatal):", (e as Error).message);
+  }
 }
 
 /** Generate a presigned PUT URL so the browser can upload directly to R2,

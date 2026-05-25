@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { requireUser } from "@/lib/auth-helpers";
-import { presignR2Upload } from "@/lib/r2";
+import { presignR2Upload, ensureR2Cors } from "@/lib/r2";
 import { rateLimit } from "@/lib/rate-limit";
 
 /**
@@ -58,6 +58,9 @@ export async function POST(req: Request) {
   const key = `uploads/${userId}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${ext}`;
 
   try {
+    // Ensure R2 bucket has CORS rules allowing browser PUT uploads.
+    // Idempotent — only runs once per cold start.
+    await ensureR2Cors();
     const { uploadUrl, publicUrl } = await presignR2Upload(key, contentType);
     return NextResponse.json({ uploadUrl, publicUrl });
   } catch (e) {
