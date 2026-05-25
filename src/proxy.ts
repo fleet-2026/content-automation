@@ -38,6 +38,10 @@ const PUBLIC_PATHS = [
   // Sitemap + robots so crawlers can discover the public guides.
   "/sitemap.xml",
   "/robots.txt",
+  // Legal pages — must be reachable by TikTok / Meta audit crawlers
+  // (they 404-check Privacy + Terms URLs before approving scopes).
+  "/privacy",
+  "/terms",
 ];
 
 // The shared-password gate page lives at /access (we serve it directly from

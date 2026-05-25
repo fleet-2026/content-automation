@@ -14,7 +14,9 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/guides", "/guides/"],
+        // /privacy + /terms are public legal pages (required for TikTok
+        // / Meta API audit). Everything else is private dashboard.
+        allow: ["/guides", "/guides/", "/privacy", "/terms"],
         // Everything else on this domain is private dashboard surface.
         disallow: ["/api/", "/dashboard", "/drafts", "/studio", "/compose", "/schedule", "/trends", "/hooks", "/posts", "/voice", "/creators", "/notes", "/log", "/tracker", "/flip", "/chat", "/browse", "/daily-post", "/scripts", "/access"],
       },
