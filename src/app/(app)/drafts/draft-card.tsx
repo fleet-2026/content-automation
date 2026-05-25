@@ -22,16 +22,51 @@ function isPlatformVisible(p: Platform): boolean {
 
 /** Build the full caption text (hook + body + hashtags) the way it'd
  *  appear under a published post — used for the TikTok "Copy caption"
- *  button since TikTok's inbox API doesn't accept a caption param. */
-function buildShareableCaption(draft: {
-  caption: string;
-  selectedHook: string | null;
-  hashtags: string[];
-}): string {
+ *  button since TikTok's inbox API doesn't accept a caption param.
+ *
+ *  TikTok-specific tweak: replaces any ManyChat "comment X to get the
+ *  link" CTA with a "link in bio" CTA because TikTok doesn't have a
+ *  reliable comment-to-DM bot for non-pre-approved business accounts.
+ *  The keyword stays in the CTA so the user knows which guide page
+ *  to find when they tap the bio link.
+ */
+/** Best-effort keyword extraction from a "Comment XYZ" ManyChat-style
+ *  CTA in the caption body. Returns null if nothing matches. */
+function extractKeyword(caption: string): string | null {
+  // Match: "Comment X", "Type X in", "Drop X below", with X being an
+  // uppercase word ≥3 chars (typical ManyChat keyword format).
+  const re = /(?:comment|type|drop)\s+["']?([A-Z][A-Z0-9_-]{2,})["']?/i;
+  const m = caption.match(re);
+  return m ? m[1].toUpperCase() : null;
+}
+
+function buildShareableCaption(
+  draft: {
+    caption: string;
+    selectedHook: string | null;
+    hashtags: string[];
+    publishResults: PublishResult[] | null;
+  },
+  opts?: { forTikTok?: boolean; tiktokKeyword?: string },
+): string {
   const parts: string[] = [];
   // Hook lives at the top — saveDraft prepends it onto caption too,
   // so strip duplicate if present.
-  const body = stripHookPrefix(draft.caption, draft.selectedHook);
+  let body = stripHookPrefix(draft.caption, draft.selectedHook);
+
+  // Strip ManyChat-style "comment X" instructions when generating the
+  // TikTok variant — they don't work on TikTok and confuse viewers.
+  if (opts?.forTikTok) {
+    // Common patterns the user (or AI) might use for ManyChat CTAs:
+    //   "Comment KEYWORD to..."
+    //   "Comment 'KEYWORD' for..."
+    //   "Type KEYWORD in the comments..."
+    body = body.replace(
+      /(?:\n\s*)?(?:type|comment|drop)\s+["']?[A-Z][A-Z0-9_-]{2,}["']?[^.\n]*\.?/gi,
+      "",
+    ).trim();
+  }
+
   if (draft.selectedHook && body.trim()) {
     parts.push(`${draft.selectedHook}\n\n${body}`);
   } else if (draft.selectedHook) {
@@ -39,6 +74,19 @@ function buildShareableCaption(draft: {
   } else {
     parts.push(body);
   }
+
+  // TikTok-specific CTA: "link in bio". Add the keyword if we have one
+  // so viewers know exactly which guide page to tap on the bio link.
+  if (opts?.forTikTok) {
+    const kw = opts.tiktokKeyword?.trim().toUpperCase();
+    parts.push("");
+    parts.push(
+      kw
+        ? `📌 Full guide → link in bio → tap ${kw}`
+        : "📌 Full guide → link in bio",
+    );
+  }
+
   if (draft.hashtags?.length) {
     parts.push("");
     parts.push(draft.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" "));
@@ -347,11 +395,13 @@ export function DraftCard({
       // arrives in the TikTok app with no text, and the user has to
       // type or paste it manually. (Full direct-post with pre-filled
       // caption requires `video.publish` scope, which needs TikTok
-      // audit approval.) The card surfaces a "Copy caption" button
-      // separately so the paste is one tap.
+      // audit approval.) The card surfaces a "Copy TikTok caption"
+      // button — it generates a TikTok-flavored version that uses
+      // "link in bio" instead of ManyChat "Comment X" (which doesn't
+      // work on TikTok for most accounts).
       return {
         friendly:
-          "Uploaded to your TikTok inbox (no caption — TikTok API limit). Open TikTok app → profile → drafts → tap the video → paste the caption → tap Post.",
+          "Uploaded to your TikTok inbox. Set your TikTok bio link to /guides, then: open TikTok app → drafts → paste the caption (use the green button →) → Post.",
         needsReconnect: false,
       };
     }
@@ -510,7 +560,11 @@ export function DraftCard({
                           </span>
                           {r.platform === "TIKTOK" && (
                             <CopyCaptionButton
-                              text={buildShareableCaption(draft)}
+                              text={buildShareableCaption(draft, {
+                                forTikTok: true,
+                                tiktokKeyword:
+                                  extractKeyword(draft.caption) ?? undefined,
+                              })}
                               label="Copy caption for TikTok"
                             />
                           )}
@@ -768,8 +822,12 @@ export function DraftCard({
                         can paste the caption into TikTok app. */}
                     {r.platform === "TIKTOK" && r.ok && cls.friendly && (
                       <CopyCaptionButton
-                        text={buildShareableCaption(draft)}
-                        label="Copy caption"
+                        text={buildShareableCaption(draft, {
+                          forTikTok: true,
+                          tiktokKeyword:
+                            extractKeyword(draft.caption) ?? undefined,
+                        })}
+                        label="Copy TikTok caption"
                       />
                     )}
                   </li>
