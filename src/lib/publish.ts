@@ -1,11 +1,12 @@
 import { Platform, PostStatus, MediaType, type Draft } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { decrypt } from "@/lib/crypto";
+import { decrypt, encrypt } from "@/lib/crypto";
 import { igPublish } from "@/lib/platforms/instagram-publish";
 import { ytPublish } from "@/lib/platforms/youtube-publish";
 import { ttPublishToInbox } from "@/lib/platforms/tiktok-publish";
 import { fbPublish } from "@/lib/platforms/facebook-publish";
 import { liPublishText } from "@/lib/platforms/linkedin-publish";
+import { tiktokRefresh } from "@/lib/platforms/tiktok";
 import { primaryMediaUrl } from "@/lib/media-urls";
 import { PLATFORM_INFO } from "@/lib/platform-info";
 
@@ -133,6 +134,27 @@ export async function publishDraft(
 
         if (platform === Platform.TIKTOK) {
           if (!primaryUrl) return { platform, ok: false, error: "missing_video" };
+          // Auto-refresh TikTok token if it's expired or about to expire.
+          // TikTok access tokens only last ~24h; without this the user
+          // has to manually reconnect before every publish.
+          let ttAccessToken = accessToken;
+          const expiry = account.tokenExpiry?.getTime();
+          if (refreshToken && (!expiry || expiry < Date.now() + 60_000)) {
+            try {
+              const fresh = await tiktokRefresh(refreshToken);
+              ttAccessToken = fresh.accessToken;
+              await prisma.socialAccount.update({
+                where: { id: account.id },
+                data: {
+                  accessToken: encrypt(fresh.accessToken),
+                  refreshToken: fresh.refreshToken ? encrypt(fresh.refreshToken) : account.refreshToken,
+                  tokenExpiry: fresh.expiresAt,
+                },
+              });
+            } catch (refreshErr) {
+              console.warn("[publish] TikTok token refresh failed, trying with existing token:", refreshErr);
+            }
+          }
           // TikTok's Content Posting API requires the PULL_FROM_URL
           // source to be from a verified domain (configured in TikTok's
           // developer console). Our R2 dev URLs (*.r2.dev) aren't
@@ -149,7 +171,7 @@ export async function publishDraft(
             };
           }
           const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
-          const out = await ttPublishToInbox(accessToken, { videoBuffer });
+          const out = await ttPublishToInbox(ttAccessToken, { videoBuffer });
           return {
             platform,
             ok: true,
