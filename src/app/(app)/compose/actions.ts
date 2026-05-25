@@ -56,11 +56,18 @@ export async function saveDraft(input: {
   return prisma.draft.create({ data: { ...data, userId } });
 }
 
-export async function publishDraftNow(draftId: string) {
+export async function publishDraftNow(
+  draftId: string,
+  /** Optional: platforms to force-retry even if they succeeded last time.
+   *  Used when the user deleted the previous post (e.g. a duplicate FB
+   *  post) and wants to republish from this draft. Without this list,
+   *  publish.ts auto-skips platforms with ok=true in publishResults. */
+  forceRetryPlatforms?: Platform[],
+) {
   const userId = await requireUser();
   await ownedDraft(userId, draftId);
   await prisma.draft.update({ where: { id: draftId }, data: { status: DraftStatus.PUBLISHING } });
-  return publishNow(draftId);
+  return publishNow(draftId, forceRetryPlatforms);
 }
 
 export async function scheduleDraft(draftId: string, when: string) {

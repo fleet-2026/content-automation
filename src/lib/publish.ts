@@ -21,7 +21,14 @@ export type PublishResult = {
  * Publishes a Draft to all selected platforms in parallel.
  * Returns a per-platform result list and updates the draft.publishResults JSON.
  */
-export async function publishDraft(draftId: string): Promise<PublishResult[]> {
+export async function publishDraft(
+  draftId: string,
+  /** Override the auto-skip behavior for these specific platforms.
+   *  If a platform appears here, it gets retried even if it previously
+   *  succeeded. Used when the user deleted the prior post and wants
+   *  to republish from scratch. */
+  forceRetryPlatforms?: Platform[],
+): Promise<PublishResult[]> {
   const draft = await prisma.draft.findUniqueOrThrow({ where: { id: draftId } });
   // Draft.mediaUrl may be newline-packed (carousel). The publishing layer is
   // currently single-media per platform — pull the primary URL and use that
@@ -63,15 +70,25 @@ export async function publishDraft(draftId: string): Promise<PublishResult[]> {
       ? previousResults.filter((r) => r && r.ok).map((r) => r.platform)
       : [],
   );
+  // Force-retry list: subtract these from the previousOk set so they
+  // get attempted again. Lets the user republish to a platform after
+  // they manually deleted the prior post on that platform.
+  const forceSet = new Set(forceRetryPlatforms ?? []);
   const platformsToTry = enabledPlatforms.filter(
-    (p) => !previousOkPlatforms.has(p),
+    (p) => !previousOkPlatforms.has(p) || forceSet.has(p),
   );
 
   // Build the carry-over results for skipped (already-ok) platforms so
   // the returned PublishResult[] still describes ALL platforms, not just
   // the ones we just attempted. Lets the UI show the full picture.
+  // Exclude force-retried platforms from carry-over — their new result
+  // takes the place of the old one.
   const carryOver: PublishResult[] = (previousResults ?? []).filter(
-    (r) => r && r.ok && draft.platforms.includes(r.platform),
+    (r) =>
+      r &&
+      r.ok &&
+      draft.platforms.includes(r.platform) &&
+      !forceSet.has(r.platform),
   );
 
   const results = await Promise.all(

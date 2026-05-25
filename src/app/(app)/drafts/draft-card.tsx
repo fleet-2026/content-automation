@@ -200,6 +200,11 @@ export function DraftCard({
   const [selectedPlatforms, setSelectedPlatformsLocal] = useState<Platform[]>(
     draft.platforms,
   );
+  // Force-retry list — per-platform opt-in to bypass the skip-on-success
+  // logic. Used when the user deleted the prior post on a platform (e.g.
+  // a duplicate FB post) and wants to republish from this draft.
+  // Session-local only (not persisted) — fresh choice every visit.
+  const [forceRetryPlatforms, setForceRetryPlatforms] = useState<Platform[]>([]);
   function togglePlatform(p: Platform) {
     const next = selectedPlatforms.includes(p)
       ? selectedPlatforms.filter((x) => x !== p)
@@ -209,6 +214,11 @@ export function DraftCard({
     // action sync is non-blocking. If it fails (network blip) the next
     // Publish-now call falls back to the optimistically-set list anyway.
     void setDraftPlatforms(draft.id, next).catch(() => {});
+  }
+  function toggleForceRetry(p: Platform) {
+    setForceRetryPlatforms((cur) =>
+      cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p],
+    );
   }
 
   // mediaUrl may contain a newline-packed list of URLs when the draft is a
@@ -388,8 +398,13 @@ export function DraftCard({
         // Capture the per-platform PublishResult[] returned by the action
         // so we can surface a clear "Published to X, Y" modal — instead
         // of relying only on the silent router.refresh() update.
-        const results = await publishDraftNow(draft.id);
+        // Pass forceRetryPlatforms so previously-ok platforms the user
+        // ticked ↻ on get re-attempted instead of auto-skipped.
+        const results = await publishDraftNow(draft.id, forceRetryPlatforms);
         setRecentPublish(Array.isArray(results) ? results : null);
+        // Clear the force list after publish so it doesn't accidentally
+        // apply to a future publish on the same card.
+        setForceRetryPlatforms([]);
         router.refresh();
       } catch (e) {
         setErr(String((e as Error).message ?? e));
@@ -624,10 +639,8 @@ export function DraftCard({
                 const previouslyOk = (draft.publishResults ?? []).some(
                   (r) => r.platform === p && r.ok,
                 );
+                const forceRetry = forceRetryPlatforms.includes(p);
                 const health = computeHealth(p, accountStateByPlatform?.[p]);
-                // Color of the leading status dot on the chip — visible
-                // at a glance so the user knows BEFORE publishing which
-                // platforms are ready vs need reconnect.
                 const dotColor =
                   health.state === "ready"
                     ? "bg-emerald-500"
@@ -636,28 +649,68 @@ export function DraftCard({
                       : health.state === "broken"
                         ? "bg-red-500"
                         : "bg-zinc-400";
+                // Visual states:
+                //   not selected   → strike-through grey
+                //   selected + already-ok + force-retry → AMBER (will retry)
+                //   selected + already-ok                → emerald (will skip)
+                //   selected (fresh / failed before)     → cream
+                const chipBg = !selected
+                  ? "bg-transparent border-[var(--color-border)] text-[var(--color-muted)] line-through opacity-60"
+                  : previouslyOk && forceRetry
+                    ? "bg-amber-100 border-amber-300 text-amber-900"
+                    : previouslyOk
+                      ? "bg-emerald-100 border-emerald-300 text-emerald-900"
+                      : "bg-[var(--color-surface-2)] border-[var(--color-border)] text-[var(--color-text)]";
                 return (
-                  <button
+                  <span
                     key={p}
-                    type="button"
-                    onClick={() => togglePlatform(p)}
-                    title={
-                      previouslyOk
-                        ? `Already posted last time — toggle off to skip on retry. ${health.reason}`
-                        : `${health.reason}. Click to ${selected ? "exclude" : "include"} on next publish.`
-                    }
-                    className={
-                      "inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-full border transition uppercase tracking-wider " +
-                      (selected
-                        ? previouslyOk
-                          ? "bg-emerald-100 border-emerald-300 text-emerald-900"
-                          : "bg-[var(--color-surface-2)] border-[var(--color-border)] text-[var(--color-text)]"
-                        : "bg-transparent border-[var(--color-border)] text-[var(--color-muted)] line-through opacity-60")
-                    }
+                    className="inline-flex items-center gap-0.5"
                   >
-                    <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
-                    {p.toLowerCase()}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => togglePlatform(p)}
+                      title={
+                        previouslyOk
+                          ? forceRetry
+                            ? "Will RE-POST to this platform even though it already succeeded. Click ↻ to undo, or this chip to deselect."
+                            : `Already posted last time — will be skipped on retry. ${health.reason}`
+                          : `${health.reason}. Click to ${selected ? "exclude" : "include"} on next publish.`
+                      }
+                      className={
+                        "inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded-l-full border transition uppercase tracking-wider " +
+                        chipBg
+                      }
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
+                      {p.toLowerCase()}
+                      {forceRetry && (
+                        <span className="text-[9px] font-bold ml-0.5">↻ force</span>
+                      )}
+                    </button>
+                    {/* Force-retry mini-button — only shown for platforms
+                        that previously succeeded. Lets the user override
+                        the auto-skip when they've manually deleted the
+                        prior post and want to republish fresh. */}
+                    {previouslyOk && selected && (
+                      <button
+                        type="button"
+                        onClick={() => toggleForceRetry(p)}
+                        title={
+                          forceRetry
+                            ? `Cancel force-retry on ${p.toLowerCase()}`
+                            : `Force retry on ${p.toLowerCase()} (use only if you deleted the previous post)`
+                        }
+                        className={
+                          "text-[10px] px-1.5 py-0.5 rounded-r-full border-y border-r transition uppercase tracking-wider " +
+                          (forceRetry
+                            ? "bg-amber-200 border-amber-300 text-amber-900 hover:bg-amber-300"
+                            : "bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-muted)] hover:bg-[var(--color-surface-2)]")
+                        }
+                      >
+                        ↻
+                      </button>
+                    )}
+                  </span>
                 );
               });
             })()}
@@ -799,8 +852,9 @@ export function DraftCard({
           canPublish={canPublish}
           canDelete={canDelete}
           onPublish={async () => {
-            const results = await publishDraftNow(draft.id);
+            const results = await publishDraftNow(draft.id, forceRetryPlatforms);
             setRecentPublish(Array.isArray(results) ? results : null);
+            setForceRetryPlatforms([]);
             router.refresh();
           }}
           onDelete={async () => {
@@ -868,17 +922,18 @@ export function DraftCard({
           const noSelection = selectedPlatforms.filter(isPlatformVisible).length === 0;
           // Platforms that ACTUALLY get attempted on next Publish: the
           // backend skips any platform that previously succeeded (no
-          // duplicate posts). Confirm message + button label reflect
-          // this so the user knows exactly what will happen.
+          // duplicate posts) UNLESS the user explicitly opts in via
+          // the per-platform ↻ force button.
           const previouslyOkPlatforms = new Set(
             (draft.publishResults ?? []).filter((r) => r.ok).map((r) => r.platform),
           );
+          const forceSet = new Set(forceRetryPlatforms);
           const platformsWillRetry = selectedPlatforms
             .filter(isPlatformVisible)
-            .filter((p) => !previouslyOkPlatforms.has(p));
+            .filter((p) => !previouslyOkPlatforms.has(p) || forceSet.has(p));
           const platformsSkipped = selectedPlatforms
             .filter(isPlatformVisible)
-            .filter((p) => previouslyOkPlatforms.has(p));
+            .filter((p) => previouslyOkPlatforms.has(p) && !forceSet.has(p));
           return (
           <>
             {/* Pre-publish status badge — green tick when everything is
