@@ -228,8 +228,16 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const videoInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
 
-  // POST to /api/upload — returns the R2 URL.
+  // Upload a file to R2.
+  // Files >4 MB use a presigned URL (browser → R2 direct) to avoid
+  // Vercel's 4.5 MB serverless body limit. Smaller files use the
+  // original /api/upload route which also handles type-sniffing.
+  const PRESIGN_THRESHOLD = 4 * 1024 * 1024; // 4 MB
+
   const uploadOne = async (file: File): Promise<string> => {
+    if (file.size > PRESIGN_THRESHOLD) {
+      return uploadViaPresign(file);
+    }
     const form = new FormData();
     form.append("file", file);
     const res = await fetch("/api/upload", { method: "POST", body: form });
@@ -239,6 +247,39 @@ export default function PostEditor({ post }: { post: DailyPost }) {
     }
     const j = (await res.json()) as { url: string };
     return j.url;
+  };
+
+  /** Presigned direct-to-R2 upload — bypasses Vercel body limit. */
+  const uploadViaPresign = async (file: File): Promise<string> => {
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp4";
+    const contentType = file.type || "application/octet-stream";
+
+    // 1. Get presigned URL from our API (tiny JSON request, no file data)
+    const presignRes = await fetch("/api/upload/presign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ext, contentType }),
+    });
+    if (!presignRes.ok) {
+      const j = (await presignRes.json().catch(() => ({}))) as { message?: string; error?: string };
+      throw new Error(j.message ?? j.error ?? `Presign failed (${presignRes.status})`);
+    }
+    const { uploadUrl, publicUrl } = (await presignRes.json()) as {
+      uploadUrl: string;
+      publicUrl: string;
+    };
+
+    // 2. PUT the file directly to R2 (no Vercel in the path)
+    const putRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: file,
+    });
+    if (!putRes.ok) {
+      throw new Error(`Direct upload failed (${putRes.status})`);
+    }
+
+    return publicUrl;
   };
 
   const handleVideoSelected = async (file: File | null) => {

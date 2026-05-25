@@ -1,4 +1,5 @@
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { env } from "@/lib/env";
 
 // IMPORTANT: read every R2 env via the BOM-stripping helper. A previous
@@ -46,4 +47,25 @@ export async function uploadToR2(
   if (base) return `${base}/${key}`;
   const accountId = env("R2_ACCOUNT_ID") ?? "";
   return `https://${bucket}.${accountId}.r2.cloudflarestorage.com/${key}`;
+}
+
+/** Generate a presigned PUT URL so the browser can upload directly to R2,
+ *  bypassing Vercel's 4.5 MB body limit. Expires after 10 minutes. */
+export async function presignR2Upload(
+  key: string,
+  contentType: string,
+): Promise<{ uploadUrl: string; publicUrl: string }> {
+  const bucket = env("R2_BUCKET") || "creator-os";
+  const cmd = new PutObjectCommand({
+    Bucket: bucket,
+    Key: key,
+    ContentType: contentType,
+  });
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const uploadUrl = await getSignedUrl(r2() as any, cmd, { expiresIn: 600 });
+  const base = env("R2_PUBLIC_URL")?.replace(/\/$/, "");
+  const publicUrl = base
+    ? `${base}/${key}`
+    : `https://${bucket}.${env("R2_ACCOUNT_ID") ?? ""}.r2.cloudflarestorage.com/${key}`;
+  return { uploadUrl, publicUrl };
 }
