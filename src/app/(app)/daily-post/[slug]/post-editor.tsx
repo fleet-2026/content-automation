@@ -625,7 +625,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           rows={14}
           className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm leading-relaxed font-mono"
         />
-        <ActionBar onCopy={() => copy(script)} />
+        <CopyScriptBar script={script} hook={hook} onCopy={copy} />
       </Section>
 
       {/* Long-form article body — the "full guide" shown on /guides/<slug>.
@@ -1155,6 +1155,71 @@ function ActionBar({ onCopy }: { onCopy: () => void }) {
       </button>
       <span className="text-[10px] text-[var(--color-muted)] self-center">
         edits auto-save on blur
+      </span>
+    </div>
+  );
+}
+
+/** Prominent copy bar for the talking-head script section.
+ *  Three buttons with inline ✓ feedback — no need to look at the page header. */
+function CopyScriptBar({
+  script,
+  hook,
+  onCopy,
+}: {
+  script: string;
+  hook: string;
+  onCopy: (text: string) => void;
+}) {
+  const [copied, setCopied] = useState<null | "script" | "hook" | "both">(null);
+
+  const doCopy = async (kind: "script" | "hook" | "both") => {
+    let text = "";
+    if (kind === "script") text = script;
+    else if (kind === "hook") text = hook;
+    else text = `${hook}\n\n${script}`;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(kind);
+      onCopy(text); // also fire the parent status
+      setTimeout(() => setCopied(null), 1400);
+    } catch {
+      /* clipboard not available */
+    }
+  };
+
+  const wordCount = script.trim().split(/\s+/).filter(Boolean).length;
+  const estSec = Math.round((wordCount / 150) * 60);
+
+  return (
+    <div className="mt-2 flex items-center gap-2 flex-wrap">
+      <button
+        type="button"
+        onClick={() => doCopy("script")}
+        className="rounded bg-[var(--color-text)] text-[var(--color-text-on-dark)] px-3 py-1.5 text-xs font-semibold hover:opacity-90"
+      >
+        {copied === "script" ? "✓ Copied" : "Copy script"}
+      </button>
+      {hook.trim() && (
+        <button
+          type="button"
+          onClick={() => doCopy("hook")}
+          className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs hover:bg-[var(--color-surface-hover)]"
+        >
+          {copied === "hook" ? "✓ Copied" : "Copy hook only"}
+        </button>
+      )}
+      {hook.trim() && (
+        <button
+          type="button"
+          onClick={() => doCopy("both")}
+          className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs hover:bg-[var(--color-surface-hover)]"
+        >
+          {copied === "both" ? "✓ Copied" : "Hook + script"}
+        </button>
+      )}
+      <span className="text-[10px] text-[var(--color-muted)] self-center ml-auto">
+        {wordCount} words · ~{estSec}s · auto-saves on blur
       </span>
     </div>
   );
