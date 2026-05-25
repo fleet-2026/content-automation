@@ -377,6 +377,12 @@ export function DraftCard({
       lower.includes("error_subcode\":33") ||
       lower.includes("error_subcode\":2069008")
     ) {
+      if (platformReconnectedSinceFailure(platform)) {
+        return {
+          friendly: `${platform} reconnected — click Publish now to retry.`,
+          needsReconnect: false,
+        };
+      }
       return {
         friendly:
           "Instagram Business account isn't linked to the Page. Open Meta Business Suite → Settings → Connected Accounts → re-link IG Business → then disconnect + reconnect IG here.",
