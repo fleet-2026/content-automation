@@ -1172,10 +1172,10 @@ export default function PostEditor({ post }: { post: DailyPost }) {
         </div>
       </Section>
 
-      {/* Publish to social platforms */}
-      <div className="sticky bottom-4 mt-8 rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-surface)]/95 backdrop-blur p-5 shadow-lg space-y-3">
+      {/* Publish to social platforms — with full preview */}
+      <div className="mt-8 rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-surface)] p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
-          <h3 className="font-display text-lg">
+          <h3 className="font-display text-xl">
             Publish to <span className="font-italic-accent text-blush">socials.</span>
           </h3>
           <a
@@ -1184,6 +1184,77 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           >
             or open Compose →
           </a>
+        </div>
+
+        {/* Post preview — shows exactly what will be published */}
+        <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-bg)] p-4 space-y-3">
+          <div className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] font-semibold">
+            Post preview
+          </div>
+
+          {/* Media preview */}
+          <div className="flex gap-3 items-start">
+            {videoUrl ? (
+              <video
+                src={videoUrl}
+                className="w-28 h-28 rounded-lg object-cover bg-black flex-shrink-0"
+                muted
+              />
+            ) : imageUrls.length > 0 ? (
+              <div className="flex gap-1.5 flex-shrink-0">
+                {imageUrls.slice(0, 3).map((url, i) => (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    key={url + i}
+                    src={url}
+                    alt={`Image ${i + 1}`}
+                    className="w-28 h-28 rounded-lg object-cover border border-[var(--color-border)]"
+                  />
+                ))}
+                {imageUrls.length > 3 && (
+                  <div className="w-28 h-28 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] flex items-center justify-center text-xs text-[var(--color-muted)]">
+                    +{imageUrls.length - 3} more
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="w-28 h-28 rounded-lg border-2 border-dashed border-amber-500/30 bg-amber-500/5 flex items-center justify-center text-xs text-amber-300 flex-shrink-0">
+                No media
+              </div>
+            )}
+
+            {/* Caption preview */}
+            <div className="flex-1 min-w-0">
+              <div className="text-sm leading-relaxed line-clamp-4 whitespace-pre-wrap">
+                {caption.trim() || <span className="text-amber-300 italic">No caption</span>}
+              </div>
+              {hashtagsRaw.trim() && (
+                <div className="mt-1.5 text-xs text-[var(--color-muted)] leading-relaxed line-clamp-2">
+                  {hashtagsRaw}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Quick summary chips */}
+          <div className="flex gap-2 flex-wrap text-[10px] text-[var(--color-muted)]">
+            <span className="rounded bg-[var(--color-surface)] border border-[var(--color-border)] px-2 py-0.5">
+              {videoUrl ? "Video (Reel)" : imageUrls.length > 0 ? `${imageUrls.length} image${imageUrls.length !== 1 ? "s" : ""}` : "No media"}
+            </span>
+            <span className="rounded bg-[var(--color-surface)] border border-[var(--color-border)] px-2 py-0.5">
+              {caption.trim().split(/\s+/).filter(Boolean).length} words
+            </span>
+            {hashtagsRaw.trim() && (
+              <span className="rounded bg-[var(--color-surface)] border border-[var(--color-border)] px-2 py-0.5">
+                {hashtagsRaw.trim().split(/[\s,]+/).filter(Boolean).length} hashtags
+              </span>
+            )}
+            {hook.trim() && (
+              <span className="rounded bg-[var(--color-surface)] border border-[var(--color-border)] px-2 py-0.5">
+                Hook set
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Platform toggles */}
@@ -1210,7 +1281,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           })}
         </div>
 
-        {/* Publish button + status */}
+        {/* Publish button + warnings */}
         <div className="flex items-center gap-3 flex-wrap">
           <button
             type="button"
@@ -1224,7 +1295,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
             <span className="text-xs text-amber-300">Caption is empty</span>
           )}
           {!videoUrl && imageUrls.length === 0 && (
-            <span className="text-xs text-amber-300">No media uploaded</span>
+            <span className="text-xs text-amber-300">No media uploaded — text-only post</span>
           )}
         </div>
 
