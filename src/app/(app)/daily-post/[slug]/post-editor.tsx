@@ -231,24 +231,68 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const [videoDragOver, setVideoDragOver] = useState(false);
   const [imageDragOver, setImageDragOver] = useState(false);
 
-  // Upload a file to R2 via Server Action.
-  // Max 100 MB (bodySizeLimit in next.config.ts). Page has maxDuration=60
-  // to allow enough time for large video uploads.
+  // Upload a file to R2.
+  // Small files (≤ 4 MB): Server Action (no CORS needed).
+  // Larger files: presigned URL (browser PUTs directly to R2).
+  // Presigned path needs R2 CORS configured in Cloudflare dashboard.
+  const SA_LIMIT = 4 * 1024 * 1024;
   const MAX_UPLOAD = 200 * 1024 * 1024;
 
   const uploadOne = async (file: File): Promise<string> => {
     if (file.size > MAX_UPLOAD) {
       const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-      throw new Error(
-        `File is ${sizeMB} MB — max upload size is 200 MB. ` +
-        `Compress the video first (e.g. HandBrake, CapCut export at lower quality).`
-      );
+      throw new Error(`File is ${sizeMB} MB — max is 200 MB.`);
     }
-    const form = new FormData();
-    form.append("file", file);
-    const res = await uploadMedia(form);
-    if (!res.ok) throw new Error(res.error ?? "Upload failed");
-    return res.url;
+    if (file.size <= SA_LIMIT) {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await uploadMedia(form);
+      if (!res.ok) throw new Error(res.error ?? "Upload failed");
+      return res.url;
+    }
+    return uploadViaPresign(file);
+  };
+
+  const uploadViaPresign = async (file: File): Promise<string> => {
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp4";
+    const contentType = file.type || "application/octet-stream";
+
+    const presignRes = await fetch("/api/upload/presign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ext, contentType }),
+    });
+    if (!presignRes.ok) {
+      const j = (await presignRes.json().catch(() => ({}))) as { message?: string; error?: string };
+      throw new Error(j.message ?? j.error ?? `Presign failed (${presignRes.status})`);
+    }
+    const { uploadUrl, publicUrl } = (await presignRes.json()) as {
+      uploadUrl: string;
+      publicUrl: string;
+    };
+
+    try {
+      const putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: file,
+      });
+      if (!putRes.ok) {
+        const text = await putRes.text().catch(() => "");
+        throw new Error(`R2 error ${putRes.status}: ${text.slice(0, 200)}`);
+      }
+    } catch (e) {
+      const msg = (e as Error).message;
+      if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+        throw new Error(
+          "Upload blocked — R2 CORS not configured. " +
+          "Go to Cloudflare Dashboard > R2 > bucket > Settings > CORS Policy. " +
+          "Add: Origin = https://creator-os-delta.vercel.app, Methods = PUT+GET+HEAD, Headers = *"
+        );
+      }
+      throw e;
+    }
+    return publicUrl;
   };
 
   const handleVideoSelected = async (file: File | null) => {
