@@ -866,6 +866,19 @@ export function DraftCard({
           const warns = selectedHealth.filter((h) => h.state === "warn");
           const allReady = selectedHealth.length > 0 && blocked.length === 0;
           const noSelection = selectedPlatforms.filter(isPlatformVisible).length === 0;
+          // Platforms that ACTUALLY get attempted on next Publish: the
+          // backend skips any platform that previously succeeded (no
+          // duplicate posts). Confirm message + button label reflect
+          // this so the user knows exactly what will happen.
+          const previouslyOkPlatforms = new Set(
+            (draft.publishResults ?? []).filter((r) => r.ok).map((r) => r.platform),
+          );
+          const platformsWillRetry = selectedPlatforms
+            .filter(isPlatformVisible)
+            .filter((p) => !previouslyOkPlatforms.has(p));
+          const platformsSkipped = selectedPlatforms
+            .filter(isPlatformVisible)
+            .filter((p) => previouslyOkPlatforms.has(p));
           return (
           <>
             {/* Pre-publish status badge — green tick when everything is
@@ -892,7 +905,11 @@ export function DraftCard({
                 {allReady ? (
                   <>
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    All {selectedHealth.length} ready
+                    {platformsWillRetry.length === 0
+                      ? "Already posted to all"
+                      : platformsWillRetry.length === selectedHealth.length
+                        ? `All ${selectedHealth.length} ready`
+                        : `Will post to ${platformsWillRetry.length} of ${selectedHealth.length}`}
                   </>
                 ) : blocked.length > 0 ? (
                   <>
@@ -930,9 +947,23 @@ export function DraftCard({
               {publishing
                 ? "Publishing…"
                 : pubConfirm
-                  ? `Confirm: post to ${selectedPlatforms.filter(isPlatformVisible).join(" + ").toLowerCase()}`
-                  : "Publish now"}
+                  ? platformsWillRetry.length > 0
+                    ? `Confirm: post to ${platformsWillRetry.join(" + ").toLowerCase()}`
+                    : "Nothing to retry — all selected platforms already posted"
+                  : platformsWillRetry.length === 0 && platformsSkipped.length > 0
+                    ? "Already posted to all"
+                    : "Publish now"}
             </button>
+            {/* Show what's being skipped so the user knows we won't
+                double-post to platforms that already succeeded. */}
+            {platformsSkipped.length > 0 && !pubConfirm && (
+              <span
+                className="text-[10px] text-[var(--color-muted)] mr-1"
+                title={`Skipping ${platformsSkipped.map((p) => p.toLowerCase()).join(", ")} — already posted last time. Untick to override.`}
+              >
+                (skipping {platformsSkipped.length} already posted)
+              </span>
+            )}
             {pubConfirm && !publishing && (
               <button
                 type="button"
