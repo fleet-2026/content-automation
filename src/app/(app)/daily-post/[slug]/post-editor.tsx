@@ -231,13 +231,13 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const [videoDragOver, setVideoDragOver] = useState(false);
   const [imageDragOver, setImageDragOver] = useState(false);
 
-  // Upload a file to R2 — two paths:
-  // ≤ 19 MB → Server Action (bodySizeLimit: "20mb" in next.config.ts)
-  // > 19 MB → Presigned URL (browser PUTs directly to R2, CORS auto-configured)
-  const SA_LIMIT = 19 * 1024 * 1024; // leave 1 MB headroom for FormData overhead
-
+  // Upload a file to R2.
+  // Videos always use presigned URLs (direct browser → R2) because even
+  // small videos can timeout on Vercel serverless functions.
+  // Images ≤ 4 MB use the Server Action. Images > 4 MB use presigned URLs.
   const uploadOne = async (file: File): Promise<string> => {
-    if (file.size <= SA_LIMIT) {
+    const isVideo = file.type.startsWith("video/");
+    if (!isVideo && file.size <= 4 * 1024 * 1024) {
       const form = new FormData();
       form.append("file", file);
       const res = await uploadMedia(form);
@@ -247,17 +247,22 @@ export default function PostEditor({ post }: { post: DailyPost }) {
     return uploadViaPresign(file);
   };
 
-  /** Presigned direct-to-R2 upload for large files. The /api/upload/presign
-   *  endpoint auto-configures CORS on the bucket before returning the URL. */
+  /** Presigned direct-to-R2 upload. The /api/upload/presign endpoint
+   *  auto-configures CORS on the bucket before returning the URL. */
   const uploadViaPresign = async (file: File): Promise<string> => {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp4";
     const contentType = file.type || "application/octet-stream";
 
-    const presignRes = await fetch("/api/upload/presign", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ext, contentType }),
-    });
+    let presignRes: Response;
+    try {
+      presignRes = await fetch("/api/upload/presign", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ext, contentType }),
+      });
+    } catch (e) {
+      throw new Error(`Network error getting upload URL: ${(e as Error).message}`);
+    }
     if (!presignRes.ok) {
       const j = (await presignRes.json().catch(() => ({}))) as { message?: string; error?: string };
       throw new Error(j.message ?? j.error ?? `Presign failed (${presignRes.status})`);
@@ -267,13 +272,23 @@ export default function PostEditor({ post }: { post: DailyPost }) {
       publicUrl: string;
     };
 
-    const putRes = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": contentType },
-      body: file,
-    });
+    let putRes: Response;
+    try {
+      putRes = await fetch(uploadUrl, {
+        method: "PUT",
+        headers: { "Content-Type": contentType },
+        body: file,
+      });
+    } catch (e) {
+      // CORS or network error — show detailed message
+      throw new Error(
+        `Upload to storage failed: ${(e as Error).message}. ` +
+        `If this persists, check R2 CORS settings in Cloudflare dashboard.`
+      );
+    }
     if (!putRes.ok) {
-      throw new Error(`Direct upload failed (${putRes.status})`);
+      const text = await putRes.text().catch(() => "");
+      throw new Error(`Storage returned ${putRes.status}: ${text.slice(0, 200)}`);
     }
     return publicUrl;
   };
