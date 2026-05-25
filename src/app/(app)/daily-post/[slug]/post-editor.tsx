@@ -1225,7 +1225,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
 
             {/* Caption preview */}
             <div className="flex-1 min-w-0">
-              <div className="text-sm leading-relaxed line-clamp-4 whitespace-pre-wrap">
+              <div className="text-sm leading-relaxed line-clamp-5 whitespace-pre-wrap">
                 {caption.trim() || <span className="text-amber-300 italic">No caption</span>}
               </div>
               {hashtagsRaw.trim() && (
@@ -1235,6 +1235,15 @@ export default function PostEditor({ post }: { post: DailyPost }) {
               )}
             </div>
           </div>
+
+          {/* CTA check — warn if the keyword CTA line is missing from the caption */}
+          {keyword.trim() && !caption.toLowerCase().includes(`comment ${keyword.toLowerCase()}`) && (
+            <div className="rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-300 leading-relaxed">
+              <strong>Missing CTA:</strong> Your caption doesn&apos;t include{" "}
+              <code className="font-mono bg-amber-500/10 px-1 rounded">Comment {keyword} for the full guide</code>.
+              Add it to the end of your caption so ManyChat picks up the trigger.
+            </div>
+          )}
 
           {/* Quick summary chips */}
           <div className="flex gap-2 flex-wrap text-[10px] text-[var(--color-muted)]">
@@ -1247,6 +1256,11 @@ export default function PostEditor({ post }: { post: DailyPost }) {
             {hashtagsRaw.trim() && (
               <span className="rounded bg-[var(--color-surface)] border border-[var(--color-border)] px-2 py-0.5">
                 {hashtagsRaw.trim().split(/[\s,]+/).filter(Boolean).length} hashtags
+              </span>
+            )}
+            {keyword.trim() && caption.toLowerCase().includes(`comment ${keyword.toLowerCase()}`) && (
+              <span className="rounded bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 text-emerald-300">
+                CTA: Comment {keyword}
               </span>
             )}
             {hook.trim() && (
