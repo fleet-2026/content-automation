@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Send, Edit, Trash2, ExternalLink, Images, Check, AlertTriangle, Eye, Music2, CheckCircle2, RefreshCw } from "lucide-react";
 import type { Platform, DraftStatus } from "@prisma/client";
-import { publishDraftNow, deleteDraft, saveDraft } from "../compose/actions";
+import { publishDraftNow, deleteDraft, saveDraft, setDraftPlatforms } from "../compose/actions";
 import { parseMediaUrls, parseMusicUrl } from "@/lib/media-urls";
 import { stripHookPrefix } from "@/lib/captions";
 import { MediaPreviewModal } from "@/components/media-preview-modal";
@@ -91,6 +91,24 @@ export function DraftCard({
   // user gets explicit per-platform success/fail confirmation instead of
   // just seeing the card silently update.
   const [recentPublish, setRecentPublish] = useState<PublishResult[] | null>(null);
+
+  // Per-draft platform selection — lets the user enable/disable each
+  // platform before clicking Publish now. Default seeded from the
+  // server-stored platforms list; persists via setDraftPlatforms server
+  // action so the choice survives navigation + re-renders.
+  const [selectedPlatforms, setSelectedPlatformsLocal] = useState<Platform[]>(
+    draft.platforms,
+  );
+  function togglePlatform(p: Platform) {
+    const next = selectedPlatforms.includes(p)
+      ? selectedPlatforms.filter((x) => x !== p)
+      : [...selectedPlatforms, p];
+    setSelectedPlatformsLocal(next);
+    // Fire-and-forget persistence — UI updates instantly; the server
+    // action sync is non-blocking. If it fails (network blip) the next
+    // Publish-now call falls back to the optimistically-set list anyway.
+    void setDraftPlatforms(draft.id, next).catch(() => {});
+  }
 
   // mediaUrl may contain a newline-packed list of URLs when the draft is a
   // carousel. Pull out the primary for the thumbnail and keep the count so
@@ -178,6 +196,24 @@ export function DraftCard({
       }
       return {
         friendly: `${platform} is missing the video-upload permission — reconnect to grant it.`,
+        needsReconnect: true,
+      };
+    }
+    // Meta GraphMethodException — usually "object does not exist" or
+    // "access denied for this object". Happens after IG Business
+    // account is unlinked from the FB page or the page-scoped token
+    // can't reach the IG account anymore. A plain reconnect won't
+    // fix this — the user has to relink the IG Business account in
+    // Meta Business Suite (or remove + reconnect from scratch).
+    if (
+      lower.includes("graphmethodexception") ||
+      (lower.includes("authorization error") && lower.includes("code\":100")) ||
+      lower.includes("error_subcode\":33") ||
+      lower.includes("error_subcode\":2069008")
+    ) {
+      return {
+        friendly:
+          "Instagram Business account isn't linked to the Page. Open Meta Business Suite → Settings → Connected Accounts → re-link IG Business → then disconnect + reconnect IG here.",
         needsReconnect: true,
       };
     }
@@ -458,9 +494,49 @@ export function DraftCard({
                 </span>
               );
             })()}
-            {draft.platforms.filter(isPlatformVisible).map((p) => (
-              <span key={p}>{p.toLowerCase()}</span>
-            ))}
+            {/* Interactive platform toggles. Click any to include/exclude
+                from the NEXT publish. A previously-successful platform
+                is automatically already excluded from the publish retry
+                (skip-on-success logic in publish.ts) — toggling here
+                lets the user override that decision either way. */}
+            {/* Show ALL configured platforms, even if not in the current
+                draft.platforms list, so the user can re-add one they
+                turned off. (Restricted to enabled platforms — YouTube
+                etc. stays hidden.) */}
+            {(() => {
+              const allVisible = (
+                ["INSTAGRAM", "TIKTOK", "FACEBOOK", "LINKEDIN"] as Platform[]
+              ).filter(isPlatformVisible);
+              return allVisible.map((p) => {
+                const selected = selectedPlatforms.includes(p);
+                const previouslyOk = (draft.publishResults ?? []).some(
+                  (r) => r.platform === p && r.ok,
+                );
+                return (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => togglePlatform(p)}
+                    title={
+                      previouslyOk
+                        ? `${p.toLowerCase()} already posted last time — toggle off to skip on retry`
+                        : `Click to ${selected ? "exclude" : "include"} ${p.toLowerCase()}`
+                    }
+                    className={
+                      "text-[10px] px-2 py-0.5 rounded-full border transition uppercase tracking-wider " +
+                      (selected
+                        ? previouslyOk
+                          ? "bg-emerald-100 border-emerald-300 text-emerald-900"
+                          : "bg-[var(--color-surface-2)] border-[var(--color-border)] text-[var(--color-text)]"
+                        : "bg-transparent border-[var(--color-border)] text-[var(--color-muted)] line-through opacity-60")
+                    }
+                  >
+                    {selected ? "✓ " : "✕ "}
+                    {p.toLowerCase()}
+                  </button>
+                );
+              });
+            })()}
             {draft.scheduledFor && (
               <span>scheduled for {new Date(draft.scheduledFor).toLocaleString()}</span>
             )}

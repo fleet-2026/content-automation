@@ -93,3 +93,19 @@ export async function deleteDraft(draftId: string) {
   if (r.count === 0) throw new Error("not_found_or_forbidden");
   return { ok: true };
 }
+
+/** Update which platforms a draft will publish to. Lets the user
+ *  toggle each platform on/off from the draft card before re-publishing
+ *  (e.g. exclude already-posted TikTok + Facebook, retry only IG). */
+export async function setDraftPlatforms(
+  draftId: string,
+  platforms: Platform[],
+): Promise<{ ok: boolean }> {
+  const userId = await requireUser();
+  const r = await prisma.draft.updateMany({
+    where: { id: draftId, userId },
+    data: { platforms },
+  });
+  if (r.count === 0) throw new Error("not_found_or_forbidden");
+  return { ok: true };
+}
