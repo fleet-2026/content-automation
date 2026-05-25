@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import crypto from "node:crypto";
 import { prisma } from "@/lib/db";
 import { savePost, type GeneratedFields } from "./data";
 import {
@@ -12,6 +13,8 @@ import { generateVideoPromptText } from "@/lib/ai/video-prompt";
 import { rateHookForVirality, type HookRating } from "@/lib/ai/rate-hook";
 import { requireUser } from "@/lib/auth-helpers";
 import { rateLimit } from "@/lib/rate-limit";
+import { uploadToR2 } from "@/lib/r2";
+import { sniffFileType } from "@/lib/file-sniff";
 
 export async function updatePost(
   slug: string,
@@ -223,6 +226,53 @@ export async function setMedia(
   revalidatePath(`/daily-post`);
   revalidatePath(`/guides/${slug}`);
   return { ok };
+}
+
+/** Upload a file via Server Action (uses the 20 MB bodySizeLimit from
+ *  next.config.ts — no Vercel 4.5 MB gateway limit, no R2 CORS needed).
+ *  Returns { ok, url } on success or { ok: false, error } on failure. */
+export async function uploadMedia(
+  formData: FormData,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  let userId: string;
+  try {
+    userId = await requireUser();
+  } catch {
+    return { ok: false, error: "unauthenticated" };
+  }
+
+  const rl = await rateLimit(`upload:${userId}`, {
+    max: 50,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!rl.allowed) {
+    return { ok: false, error: "rate_limited" };
+  }
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    return { ok: false, error: "missing_file" };
+  }
+  if (file.size === 0) {
+    return { ok: false, error: "empty_file" };
+  }
+  if (file.size > 200 * 1024 * 1024) {
+    return { ok: false, error: "file_too_large (max 200 MB)" };
+  }
+
+  try {
+    const buf = Buffer.from(await file.arrayBuffer());
+    const sniffed = sniffFileType(new Uint8Array(buf.slice(0, 64)));
+    if (!sniffed) {
+      return { ok: false, error: "unsupported_type" };
+    }
+    const key = `uploads/${userId}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${sniffed.ext}`;
+    const url = await uploadToR2(key, buf, sniffed.mime);
+    return { ok: true, url };
+  } catch (e) {
+    console.error("[uploadMedia] failed:", e);
+    return { ok: false, error: (e as Error)?.message ?? String(e) };
+  }
 }
 
 /** Bulk unpublish — flips every published guide back to draft. */

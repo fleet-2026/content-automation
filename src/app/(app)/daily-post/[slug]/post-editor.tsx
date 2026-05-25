@@ -5,6 +5,7 @@ import {
   updatePost,
   setPublished,
   setMedia,
+  uploadMedia,
   generateVideoPrompt,
   saveVideoPrompt,
   rateHook,
@@ -227,59 +228,18 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
+  const [videoDragOver, setVideoDragOver] = useState(false);
+  const [imageDragOver, setImageDragOver] = useState(false);
 
-  // Upload a file to R2.
-  // Files >4 MB use a presigned URL (browser → R2 direct) to avoid
-  // Vercel's 4.5 MB serverless body limit. Smaller files use the
-  // original /api/upload route which also handles type-sniffing.
-  const PRESIGN_THRESHOLD = 4 * 1024 * 1024; // 4 MB
-
+  // Upload a file to R2 via Server Action. Uses the 20 MB bodySizeLimit
+  // from next.config.ts — avoids both Vercel's 4.5 MB Route Handler limit
+  // and R2 CORS issues with presigned URLs.
   const uploadOne = async (file: File): Promise<string> => {
-    if (file.size > PRESIGN_THRESHOLD) {
-      return uploadViaPresign(file);
-    }
     const form = new FormData();
     form.append("file", file);
-    const res = await fetch("/api/upload", { method: "POST", body: form });
-    if (!res.ok) {
-      const j = (await res.json().catch(() => ({}))) as { message?: string; error?: string };
-      throw new Error(j.message ?? j.error ?? `Upload failed (${res.status})`);
-    }
-    const j = (await res.json()) as { url: string };
-    return j.url;
-  };
-
-  /** Presigned direct-to-R2 upload — bypasses Vercel body limit. */
-  const uploadViaPresign = async (file: File): Promise<string> => {
-    const ext = file.name.split(".").pop()?.toLowerCase() ?? "mp4";
-    const contentType = file.type || "application/octet-stream";
-
-    // 1. Get presigned URL from our API (tiny JSON request, no file data)
-    const presignRes = await fetch("/api/upload/presign", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ext, contentType }),
-    });
-    if (!presignRes.ok) {
-      const j = (await presignRes.json().catch(() => ({}))) as { message?: string; error?: string };
-      throw new Error(j.message ?? j.error ?? `Presign failed (${presignRes.status})`);
-    }
-    const { uploadUrl, publicUrl } = (await presignRes.json()) as {
-      uploadUrl: string;
-      publicUrl: string;
-    };
-
-    // 2. PUT the file directly to R2 (no Vercel in the path)
-    const putRes = await fetch(uploadUrl, {
-      method: "PUT",
-      headers: { "Content-Type": contentType },
-      body: file,
-    });
-    if (!putRes.ok) {
-      throw new Error(`Direct upload failed (${putRes.status})`);
-    }
-
-    return publicUrl;
+    const res = await uploadMedia(form);
+    if (!res.ok) throw new Error(res.error ?? "Upload failed");
+    return res.url;
   };
 
   const handleVideoSelected = async (file: File | null) => {
@@ -950,7 +910,40 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                 </div>
               </div>
             ) : (
-              <label className="block cursor-pointer rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-surface)] p-6 text-center hover:border-[var(--color-text)]/30 transition">
+              <label
+                className={
+                  "block cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition " +
+                  (videoDragOver
+                    ? "border-emerald-400 bg-emerald-50/10"
+                    : "border-[var(--color-border)] bg-[var(--color-surface)] hover:border-[var(--color-text)]/30")
+                }
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setVideoDragOver(true);
+                }}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setVideoDragOver(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setVideoDragOver(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setVideoDragOver(false);
+                  const file = e.dataTransfer.files?.[0];
+                  if (file && file.type.startsWith("video/")) {
+                    handleVideoSelected(file);
+                  } else if (file) {
+                    setUploadError("Please drop a video file (MP4, MOV)");
+                  }
+                }}
+              >
                 <input
                   ref={videoInputRef}
                   type="file"
@@ -960,7 +953,11 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                   disabled={uploadingKind === "video"}
                 />
                 <div className="text-sm text-[var(--color-muted)]">
-                  {uploadingKind === "video" ? "Uploading…" : "Click to upload Reel"}
+                  {uploadingKind === "video"
+                    ? "Uploading…"
+                    : videoDragOver
+                    ? "Drop video here"
+                    : "Click or drag video here"}
                 </div>
                 <div className="text-xs text-[var(--color-muted)] mt-1">
                   MP4 / MOV · max 200 MB
@@ -1004,7 +1001,47 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                 </div>
               )}
 
-              <label className="block cursor-pointer rounded border border-dashed border-[var(--color-border)] py-4 text-center hover:border-[var(--color-text)]/30 transition">
+              <label
+                className={
+                  "block cursor-pointer rounded border-2 border-dashed py-4 text-center transition " +
+                  (imageDragOver
+                    ? "border-emerald-400 bg-emerald-50/10"
+                    : "border-[var(--color-border)] hover:border-[var(--color-text)]/30")
+                }
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setImageDragOver(true);
+                }}
+                onDragEnter={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setImageDragOver(true);
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setImageDragOver(false);
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setImageDragOver(false);
+                  const files = e.dataTransfer.files;
+                  if (files?.length) {
+                    const imageFiles = Array.from(files).filter((f) =>
+                      f.type.startsWith("image/"),
+                    );
+                    if (imageFiles.length > 0) {
+                      const dt = new DataTransfer();
+                      imageFiles.forEach((f) => dt.items.add(f));
+                      handleImagesSelected(dt.files);
+                    } else {
+                      setUploadError("Please drop image files (JPEG, PNG, WebP)");
+                    }
+                  }
+                }}
+              >
                 <input
                   ref={imageInputRef}
                   type="file"
@@ -1017,9 +1054,11 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                 <div className="text-xs text-[var(--color-muted)]">
                   {uploadingKind === "image"
                     ? "Uploading…"
+                    : imageDragOver
+                    ? "Drop images here"
                     : imageUrls.length === 0
-                    ? "Click to add images (pick multiple)"
-                    : "Add more images"}
+                    ? "Click or drag images here"
+                    : "Add more (click or drag)"}
                 </div>
                 <div className="text-[10px] text-[var(--color-muted)] mt-0.5">
                   JPEG / PNG / WebP · max 200 MB each
