@@ -21,6 +21,7 @@ export default async function DailyPostIndexPage() {
   const ready = posts.filter((p) => !!p.generated?.script).length;
   const publishedCount = posts.filter((p) => p.isPublished).length;
   const draftCount = posts.length - publishedCount;
+  const postedToSocial = posts.filter((p) => (p.postedPlatforms ?? []).length > 0).length;
 
   return (
     <div className="px-8 py-10 max-w-7xl">
@@ -30,7 +31,7 @@ export default async function DailyPostIndexPage() {
             Daily <span className="font-italic-accent text-blush">post.</span>
           </h1>
           <p className="text-sm text-[var(--color-muted)] mt-1">
-            {posts.length} guides · {ready} ready to post (hook + script + caption + hashtags)
+            {posts.length} guides · {ready} ready · {postedToSocial} posted to socials
           </p>
         </div>
         {/* One-stop teleprompter page — all scripts on one scroll, each
@@ -75,7 +76,29 @@ export default async function DailyPostIndexPage() {
                   <span className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
                     #{p.index ?? "?"}
                   </span>
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {/* Social platform badges */}
+                    {(p.postedPlatforms ?? []).includes("INSTAGRAM") && (
+                      <span className="text-[10px] rounded border px-1.5 py-0.5 font-semibold bg-pink-500/10 text-pink-300 border-pink-500/30">
+                        IG ✓
+                      </span>
+                    )}
+                    {(p.postedPlatforms ?? []).includes("TIKTOK") && (
+                      <span className="text-[10px] rounded border px-1.5 py-0.5 font-semibold bg-cyan-500/10 text-cyan-300 border-cyan-500/30">
+                        TT ✓
+                      </span>
+                    )}
+                    {(p.postedPlatforms ?? []).includes("FACEBOOK") && (
+                      <span className="text-[10px] rounded border px-1.5 py-0.5 font-semibold bg-blue-500/10 text-blue-300 border-blue-500/30">
+                        FB ✓
+                      </span>
+                    )}
+                    {(p.postedPlatforms ?? []).includes("LINKEDIN") && (
+                      <span className="text-[10px] rounded border px-1.5 py-0.5 font-semibold bg-sky-500/10 text-sky-300 border-sky-500/30">
+                        LI ✓
+                      </span>
+                    )}
+                    {/* Guide publish status */}
                     {p.isPublished ? (
                       <span className="text-[10px] rounded border px-1.5 py-0.5 uppercase font-semibold bg-emerald-500/10 text-emerald-300 border-emerald-500/30">
                         live

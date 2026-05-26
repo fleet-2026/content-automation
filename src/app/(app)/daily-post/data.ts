@@ -46,6 +46,8 @@ export type DailyPost = {
   // Publish toggle — render conditional on `isPublished`).
   isPublished?: boolean;
   publishedAt?: string | null;
+  // Platforms this guide has been successfully published to via publishToSocial.
+  postedPlatforms?: string[];
 };
 
 // Kept as an exported constant so the existing /daily-post page can still
@@ -106,5 +108,6 @@ function toDailyPost(g: GuideAdminShape): DailyPost {
     imageUrls: g.imageUrls,
     isPublished: g.isPublished,
     publishedAt: g.publishedAt ? g.publishedAt.toISOString() : null,
+    postedPlatforms: g.postedPlatforms,
   };
 }

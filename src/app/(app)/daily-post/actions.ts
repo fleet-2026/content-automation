@@ -368,7 +368,28 @@ export async function publishToSocial(
       });
     }
 
+    // Save successfully-published platforms back to DailyGuide so the
+    // list page can show IG/TT/FB badges. Merge with any previously
+    // posted platforms (e.g. user published IG first, TT later).
+    const successPlatforms = results
+      .filter((r) => r.ok)
+      .map((r) => r.platform);
+    if (successPlatforms.length > 0) {
+      const existing = await prisma.dailyGuide.findUnique({
+        where: { slug },
+        select: { postedPlatforms: true },
+      });
+      const merged = Array.from(
+        new Set([...(existing?.postedPlatforms ?? []), ...successPlatforms]),
+      );
+      await prisma.dailyGuide.update({
+        where: { slug },
+        data: { postedPlatforms: merged },
+      });
+    }
+
     revalidatePath(`/daily-post/${slug}`);
+    revalidatePath(`/daily-post`);
     revalidatePath(`/drafts`);
     return { ok: true, results };
   } catch (e) {

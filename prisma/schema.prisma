@@ -500,6 +500,10 @@ model DailyGuide {
   /// incomplete pages publicly.
   isPublished     Boolean   @default(false)
   publishedAt     DateTime? // set when isPublished flips true
+  /// Platforms this guide has been successfully published to via publishToSocial.
+  /// Stored as ["INSTAGRAM","TIKTOK","FACEBOOK"] — set by the daily-post editor
+  /// after a successful social publish so the list page shows posted badges.
+  postedPlatforms String[]  @default([])
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 

@@ -29,6 +29,7 @@ export type GuidePublic = {
 export type GuideAdmin = GuidePublic & {
   id: string;
   isPublished: boolean;
+  postedPlatforms: string[];
   createdAt: Date;
   updatedAt: Date;
 };
@@ -159,6 +160,7 @@ type RawGuide = {
   imageUrls: string[];
   sourceUrl: string | null;
   isPublished: boolean;
+  postedPlatforms: string[];
   publishedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -188,6 +190,7 @@ function toAdmin(r: RawGuide): GuideAdmin {
     ...toPublic(r),
     id: r.id,
     isPublished: r.isPublished,
+    postedPlatforms: r.postedPlatforms,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
