@@ -73,128 +73,22 @@ export default function TrackerRow({
       const ok = results.filter((r) => r.ok);
       const fail = results.filter((r) => !r.ok);
       setPublishStatus(
-        `✓ ${ok.length}/${results.length} platforms` +
+        `${ok.length}/${results.length} platforms` +
           (fail.length ? ` · failed: ${fail.map((f) => f.platform).join(",")}` : ""),
       );
     });
   };
 
+  const isVideo = imgUrl ? /\.(mp4|mov|m4v|webm)(\?|$)/i.test(imgUrl) : false;
+
   return (
-    <>
-      <tr
-        className={`border-b border-[var(--color-border)] hover:bg-[var(--color-surface-2)]/40 transition-colors ${isPending ? "opacity-60" : ""}`}
-      >
-        {/* Day badge */}
-        <td className="px-3 py-3 align-top">
-          <span
-            className={`inline-flex items-center justify-center w-11 h-11 rounded-xl border text-sm font-semibold ${badgeColor}`}
-          >
-            {meta.dayNumber ?? "?"}
-          </span>
-        </td>
-
-        {/* Title / caption / keyword */}
-        <td className="px-3 py-3 align-top">
-          {hook && (
-            <div className="text-sm font-medium text-[var(--color-text)] leading-tight mb-1 line-clamp-2">
-              {hook}
-            </div>
-          )}
-          {caption && (
-            <div className="text-xs text-[var(--color-muted)] line-clamp-2 max-w-md mb-2">
-              {caption}
-            </div>
-          )}
-          <div className="flex items-center gap-2 flex-wrap">
-            <input
-              type="text"
-              value={keyword}
-              onChange={(e) => setKeyword(e.target.value.toUpperCase())}
-              onBlur={() => {
-                if (keyword !== (meta.keyword ?? "")) flush({ keyword });
-              }}
-              placeholder="KEYWORD"
-              className="font-mono text-xs uppercase px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-surface)] focus:border-amber-500 focus:outline-none w-32"
-            />
-            <button
-              onClick={() => copy(caption, "cap")}
-              className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] underline-offset-2 hover:underline transition-colors"
-              title="Copy caption to clipboard"
-            >
-              {copied === "cap" ? "✓ copied" : "copy caption"}
-            </button>
-            <button
-              onClick={() => copy(meta.manychatDmText, "dm")}
-              className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] underline-offset-2 hover:underline transition-colors"
-              title="Copy DM text to clipboard"
-            >
-              {copied === "dm" ? "✓ copied" : "copy DM"}
-            </button>
-          </div>
-        </td>
-
-        {/* Guide link */}
-        <td className="px-3 py-3 align-top">
-          {meta.guideLink ? (
-            <a
-              href={meta.guideLink}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs text-amber-400 hover:underline whitespace-nowrap"
-            >
-              #day-{meta.dayNumber} ↗
-            </a>
-          ) : (
-            <span className="text-xs text-zinc-500">—</span>
-          )}
-        </td>
-
-        {/* IG post URL */}
-        <td className="px-3 py-3 align-top">
-          <input
-            type="url"
-            value={igUrl}
-            onChange={(e) => setIgUrl(e.target.value)}
-            onBlur={() => {
-              if (igUrl !== (meta.igPostUrl ?? "")) flush({ igPostUrl: igUrl });
-            }}
-            placeholder="paste IG post URL"
-            className="text-xs px-2 py-1.5 rounded border border-[var(--color-border)] bg-[var(--color-surface)] focus:border-amber-500 focus:outline-none w-52"
-          />
-        </td>
-
-        {/* Wired checkbox */}
-        <td className="px-3 py-3 align-top text-center">
-          <input
-            type="checkbox"
-            checked={wired}
-            onChange={(e) => {
-              const next = e.target.checked;
-              setWired(next);
-              flush({ manychatWired: next });
-            }}
-            className="w-5 h-5 cursor-pointer accent-emerald-500"
-          />
-        </td>
-
-        {/* Publish button */}
-        <td className="px-3 py-3 align-top">
-          <button
-            onClick={handlePublish}
-            disabled={isPending}
-            className="px-3 py-1.5 rounded-md bg-amber-500 text-zinc-900 text-xs font-semibold hover:bg-amber-400 disabled:opacity-50 transition-colors whitespace-nowrap"
-          >
-            {isPending ? "…" : "Post all →"}
-          </button>
-          {publishStatus && (
-            <div className="mt-1 text-[10px] text-[var(--color-muted)]">
-              {publishStatus}
-            </div>
-          )}
-        </td>
-
-        {/* Image — click to upload */}
-        <td className="px-3 py-3 align-top">
+    <div
+      className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden transition-colors ${isPending ? "opacity-60" : ""}`}
+    >
+      {/* ── Top: Media + Post Content side by side ── */}
+      <div className="flex gap-0">
+        {/* Media (left) — upload on click */}
+        <div className="relative flex-shrink-0 w-32 sm:w-40">
           <input
             ref={fileRef}
             type="file"
@@ -209,13 +103,9 @@ export default function TrackerRow({
               fd.append("file", file);
               uploadRowImage(draftId, fd).then((res) => {
                 setUploading(false);
-                if (res.ok) {
-                  setImgUrl(res.url);
-                } else {
-                  setError(res.error);
-                }
+                if (res.ok) setImgUrl(res.url);
+                else setError(res.error);
               });
-              // Reset so re-selecting the same file triggers onChange
               e.target.value = "";
             }}
           />
@@ -223,41 +113,160 @@ export default function TrackerRow({
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="group relative w-12 h-12 rounded-lg overflow-hidden border border-[var(--color-border)] hover:border-amber-500 transition-colors cursor-pointer disabled:opacity-50"
-            title="Click to upload image"
+            className="group w-full aspect-[4/5] flex items-center justify-center bg-[var(--color-surface-2)] cursor-pointer disabled:opacity-50 relative overflow-hidden"
+            title="Click to upload image/video"
           >
             {imgUrl ? (
-              /* eslint-disable-next-line @next/next/no-img-element */
-              <img src={imgUrl} alt="" className="w-full h-full object-cover" />
+              isVideo ? (
+                <video
+                  src={imgUrl}
+                  muted
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={imgUrl} alt="" className="w-full h-full object-cover" />
+              )
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-[var(--color-surface)]">
-                <svg className="w-5 h-5 text-zinc-500 group-hover:text-amber-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <div className="flex flex-col items-center gap-1.5 text-zinc-500 group-hover:text-amber-400 transition-colors">
+                <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                 </svg>
+                <span className="text-[10px]">Upload</span>
               </div>
             )}
             {uploading && (
               <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
               </div>
             )}
             {imgUrl && !uploading && (
               <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-colors">
-                <svg className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <svg className="w-5 h-5 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
                 </svg>
               </div>
             )}
           </button>
-        </td>
-      </tr>
-      {error && (
-        <tr>
-          <td colSpan={7} className="px-4 py-1 text-xs text-rose-400 bg-rose-500/5">
-            ⚠ {error}
-          </td>
-        </tr>
+        </div>
+
+        {/* Content (right) */}
+        <div className="flex-1 min-w-0 p-4 space-y-3">
+          {/* Day badge + status */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <span
+                className={`inline-flex items-center justify-center w-9 h-9 rounded-lg border text-sm font-semibold ${badgeColor}`}
+              >
+                {meta.dayNumber ?? "?"}
+              </span>
+              {meta.guideLink && (
+                <a
+                  href={meta.guideLink}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs text-amber-400 hover:underline"
+                >
+                  Guide ↗
+                </a>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="flex items-center gap-1.5 cursor-pointer" title="ManyChat wired">
+                <input
+                  type="checkbox"
+                  checked={wired}
+                  onChange={(e) => {
+                    const next = e.target.checked;
+                    setWired(next);
+                    flush({ manychatWired: next });
+                  }}
+                  className="w-4 h-4 cursor-pointer accent-emerald-500"
+                />
+                <span className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                  Wired
+                </span>
+              </label>
+            </div>
+          </div>
+
+          {/* Hook */}
+          {hook && (
+            <p className="text-sm font-semibold text-[var(--color-text)] leading-snug">
+              {hook}
+            </p>
+          )}
+
+          {/* Caption */}
+          {caption && (
+            <p className="text-xs text-[var(--color-muted)] leading-relaxed line-clamp-4">
+              {caption}
+            </p>
+          )}
+
+          {/* Keyword + copy buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              type="text"
+              value={keyword}
+              onChange={(e) => setKeyword(e.target.value.toUpperCase())}
+              onBlur={() => {
+                if (keyword !== (meta.keyword ?? "")) flush({ keyword });
+              }}
+              placeholder="KEYWORD"
+              className="font-mono text-xs uppercase px-2 py-1 rounded border border-[var(--color-border)] bg-[var(--color-bg)] focus:border-amber-500 focus:outline-none w-28"
+            />
+            <button
+              onClick={() => copy(caption, "cap")}
+              className="text-[11px] text-[var(--color-muted)] hover:text-[var(--color-text)] underline-offset-2 hover:underline transition-colors"
+            >
+              {copied === "cap" ? "copied!" : "copy caption"}
+            </button>
+            <button
+              onClick={() => copy(meta.manychatDmText, "dm")}
+              className="text-[11px] text-[var(--color-muted)] hover:text-[var(--color-text)] underline-offset-2 hover:underline transition-colors"
+            >
+              {copied === "dm" ? "copied!" : "copy DM"}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Bottom bar: IG URL + Publish ── */}
+      <div className="border-t border-[var(--color-border)] px-4 py-3 flex items-center gap-3 flex-wrap bg-[var(--color-surface-2)]/30">
+        <input
+          type="url"
+          value={igUrl}
+          onChange={(e) => setIgUrl(e.target.value)}
+          onBlur={() => {
+            if (igUrl !== (meta.igPostUrl ?? "")) flush({ igPostUrl: igUrl });
+          }}
+          placeholder="Paste IG post URL..."
+          className="flex-1 min-w-0 text-xs px-2.5 py-1.5 rounded border border-[var(--color-border)] bg-[var(--color-bg)] focus:border-amber-500 focus:outline-none"
+        />
+        <button
+          onClick={handlePublish}
+          disabled={isPending}
+          className="px-4 py-1.5 rounded-lg bg-amber-500 text-zinc-900 text-xs font-semibold hover:bg-amber-400 disabled:opacity-50 transition-colors whitespace-nowrap"
+        >
+          {isPending ? "Publishing..." : "Post all →"}
+        </button>
+      </div>
+
+      {/* Publish result */}
+      {publishStatus && (
+        <div className="px-4 py-2 text-xs text-emerald-300 bg-emerald-500/5 border-t border-emerald-500/20">
+          {publishStatus}
+        </div>
       )}
-    </>
+
+      {/* Error */}
+      {error && (
+        <div className="px-4 py-2 text-xs text-rose-400 bg-rose-500/5 border-t border-rose-500/20">
+          {error}
+        </div>
+      )}
+    </div>
   );
 }

@@ -9,7 +9,7 @@ import { trackerSeedData } from "./seed-data";
 
 export const metadata: Metadata = {
   title: "31-day Tracker — Creator OS",
-  description: "All 31 daily Claude posts in one table. Track posting + ManyChat status.",
+  description: "All 31 daily Claude posts in one view. Track posting + ManyChat status.",
   robots: { index: false, follow: false },
 };
 
@@ -50,19 +50,20 @@ export default async function TrackerPage() {
             31-day <span className="font-italic-accent text-blush">tracker.</span>
           </h1>
           <p className="text-sm text-[var(--color-muted)] mt-1">
-            {rows.length} of {total} rows · {postedCount} posted · {wiredCount} ManyChat-wired
+            {rows.length} of {total} posts · {postedCount} posted · {wiredCount} ManyChat-wired
           </p>
         </div>
         <SeedButton />
       </div>
 
       <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-200 leading-relaxed">
-        <strong>How this works.</strong> One row per day, each one a Draft
+        <strong>How this works.</strong> One card per day, each one a Draft
         targeting your connected platforms.{" "}
         <ol className="mt-2 ml-4 list-decimal space-y-1 text-xs text-amber-100/80">
           <li>Click <em>Seed all 31 days</em> once to load every day as a Draft.</li>
-          <li>Click <strong>Post all →</strong> on a row to publish to Instagram, Facebook, TikTok, LinkedIn in one go.</li>
-          <li>Copy the IG post URL into the row, wire your ManyChat keyword + DM text, tick <strong>Wired</strong>.</li>
+          <li>Click the image area to upload your talking head photo/video.</li>
+          <li>Click <strong>Post all →</strong> to publish to Instagram, Facebook, TikTok, LinkedIn in one go.</li>
+          <li>Paste the IG post URL, wire your ManyChat keyword + DM text, tick <strong>Wired</strong>.</li>
         </ol>
       </div>
 
@@ -74,34 +75,19 @@ export default async function TrackerPage() {
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-[var(--color-surface-2)] border-b border-[var(--color-border)]">
-              <tr className="text-[10px] uppercase tracking-widest text-[var(--color-muted)]">
-                <th className="text-left font-medium px-3 py-3 w-16">Day</th>
-                <th className="text-left font-medium px-3 py-3">Post</th>
-                <th className="text-left font-medium px-3 py-3 w-24">Guide</th>
-                <th className="text-left font-medium px-3 py-3 w-56">IG URL</th>
-                <th className="text-center font-medium px-3 py-3 w-20">Wired</th>
-                <th className="text-left font-medium px-3 py-3 w-28">Publish</th>
-                <th className="text-left font-medium px-3 py-3 w-20">Image</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <TrackerRow
-                  key={r.id}
-                  draftId={r.id}
-                  caption={r.caption}
-                  hook={r.selectedHook}
-                  mediaUrl={r.mediaUrl}
-                  platforms={r.platforms}
-                  status={r.status}
-                  meta={r.meta!}
-                />
-              ))}
-            </tbody>
-          </table>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {rows.map((r) => (
+            <TrackerRow
+              key={r.id}
+              draftId={r.id}
+              caption={r.caption}
+              hook={r.selectedHook}
+              mediaUrl={r.mediaUrl}
+              platforms={r.platforms}
+              status={r.status}
+              meta={r.meta!}
+            />
+          ))}
         </div>
       )}
 
