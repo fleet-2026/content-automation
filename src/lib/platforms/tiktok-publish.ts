@@ -7,14 +7,15 @@
  *
  * Inbox mode works without special review and is the safest default.
  *
- * FILE_UPLOAD uses chunked transfer for videos > 50 MB (TikTok caps
- * chunk_size at 64 MB; we default to 50 MB for safety margin).
+ * FILE_UPLOAD uses chunked transfer for videos > 64 MB (TikTok caps
+ * chunk_size at 64 MB). We calculate evenly-sized chunks so every
+ * chunk — including the last — stays within the 5–64 MB range.
  */
 
 const API = "https://open.tiktokapis.com/v2";
 
-/** TikTok allows 5 MB – 64 MB per chunk. We pick 50 MB as a safe default. */
-const MAX_CHUNK = 50 * 1024 * 1024; // 50 MB
+/** TikTok chunk constraints: 5 MB min, 64 MB max. */
+const TT_MAX_CHUNK = 64 * 1024 * 1024; // 64 MB
 
 export type TTPublishInput = {
   videoUrl?: string;
@@ -22,17 +23,29 @@ export type TTPublishInput = {
   title?: string;
 };
 
+/**
+ * Calculate chunk parameters that keep every chunk within TikTok's
+ * 5–64 MB range. Key insight: derive totalChunks from the max limit
+ * FIRST, then compute an even chunkSize from that — avoids a tiny
+ * leftover chunk that TikTok would reject.
+ */
+function computeChunks(videoSize: number) {
+  if (videoSize <= TT_MAX_CHUNK) {
+    return { chunkSize: videoSize, totalChunks: 1 };
+  }
+  const totalChunks = Math.ceil(videoSize / TT_MAX_CHUNK);
+  const chunkSize = Math.ceil(videoSize / totalChunks);
+  return { chunkSize, totalChunks };
+}
+
 export async function ttPublishToInbox(
   accessToken: string,
   input: TTPublishInput,
 ): Promise<{ publishId: string }> {
   const videoSize = input.videoBuffer?.length ?? 0;
-  const chunkSize = input.videoUrl
-    ? 0
-    : Math.min(videoSize, MAX_CHUNK);
-  const totalChunks = input.videoUrl
-    ? 0
-    : Math.ceil(videoSize / chunkSize);
+  const { chunkSize, totalChunks } = input.videoUrl
+    ? { chunkSize: 0, totalChunks: 0 }
+    : computeChunks(videoSize);
 
   // 1. Init the upload
   const initRes = await fetch(`${API}/post/publish/inbox/video/init/`, {
