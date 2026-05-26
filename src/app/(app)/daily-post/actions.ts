@@ -403,8 +403,12 @@ export async function checkAccountHealth(): Promise<{
       const token = decrypt(acct.accessToken);
       if (acct.platform === "INSTAGRAM" || acct.platform === "FACEBOOK") {
         try {
+          const debugParams = new URLSearchParams({
+            input_token: token,
+            access_token: token,
+          });
           const r = await fetch(
-            `https://graph.facebook.com/v21.0/debug_token?input_token=${token}&access_token=${token}`,
+            `https://graph.facebook.com/v21.0/debug_token?${debugParams.toString()}`,
           );
           const j = (await r.json()) as {
             data?: { is_valid?: boolean; scopes?: string[]; error?: { message?: string } };
