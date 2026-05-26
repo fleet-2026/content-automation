@@ -1306,26 +1306,46 @@ export default function PostEditor({ post }: { post: DailyPost }) {
 
         {/* Account health status */}
         {accountHealth && accountHealth.length > 0 && (
-          <div className="flex gap-2 flex-wrap text-[11px]">
-            {accountHealth.map((a) => (
-              <span
-                key={a.platform}
-                className={
-                  "rounded border px-2 py-1 " +
-                  (a.ok
-                    ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
-                    : "border-red-500/30 bg-red-500/5 text-red-300")
-                }
-                title={a.detail + (a.scopes?.length ? `\nScopes: ${a.scopes.join(", ")}` : "")}
-              >
-                {a.ok ? "✓" : "✗"} {a.platform}
-                {!a.ok && (
-                  <span className="ml-1 opacity-70">
-                    — {a.detail.length > 40 ? a.detail.slice(0, 40) + "…" : a.detail}
-                  </span>
-                )}
-              </span>
-            ))}
+          <div className="space-y-1.5">
+            <div className="flex gap-2 flex-wrap text-[11px]">
+              {accountHealth.map((a) => (
+                <span
+                  key={a.platform}
+                  className={
+                    "rounded border px-2 py-1 " +
+                    (a.ok
+                      ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
+                      : "border-red-500/30 bg-red-500/5 text-red-300")
+                  }
+                  title={a.detail + (a.scopes?.length ? `\nScopes: ${a.scopes.join(", ")}` : "")}
+                >
+                  {a.ok ? "✓" : "✗"} {a.platform}
+                  {!a.ok && (
+                    <span className="ml-1 opacity-70">
+                      — {a.detail.length > 60 ? a.detail.slice(0, 60) + "…" : a.detail}
+                    </span>
+                  )}
+                </span>
+              ))}
+            </div>
+            {/* Show missing-scope warning prominently for IG */}
+            {accountHealth.some(
+              (a) =>
+                a.platform === "INSTAGRAM" &&
+                !a.ok &&
+                a.detail.includes("instagram_content_publish"),
+            ) && (
+              <div className="rounded border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-300 leading-relaxed">
+                <strong>Instagram needs reconnection:</strong> Your token is valid but
+                missing the <code className="font-mono bg-amber-500/10 px-1 rounded">instagram_content_publish</code> permission.
+                Go to{" "}
+                <a href="/dashboard" className="underline hover:text-amber-200">
+                  /dashboard
+                </a>{" "}
+                → disconnect Instagram → reconnect, and make sure to <strong>check all permissions</strong> on
+                Meta&apos;s consent screen.
+              </div>
+            )}
           </div>
         )}
 

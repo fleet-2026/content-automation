@@ -409,19 +409,29 @@ export async function checkAccountHealth(): Promise<{
           const j = (await r.json()) as {
             data?: { is_valid?: boolean; scopes?: string[]; error?: { message?: string } };
           };
+          const scopes = j.data?.scopes ?? [];
           if (j.data?.is_valid) {
+            // For Instagram, specifically check that instagram_content_publish
+            // is in the granted scopes — without it, the publish call will
+            // fail with "Authorization Error code 100 subcode 33" even though
+            // the token itself is valid.
+            const missingPublish =
+              acct.platform === "INSTAGRAM" &&
+              !scopes.includes("instagram_content_publish");
             return {
               platform: acct.platform,
-              ok: true,
-              detail: `Valid (${acct.platformUserId})`,
-              scopes: j.data.scopes ?? [],
+              ok: !missingPublish,
+              detail: missingPublish
+                ? "Missing instagram_content_publish scope — reconnect from /dashboard"
+                : `Valid (${acct.platformUserId})`,
+              scopes,
             };
           }
           return {
             platform: acct.platform,
             ok: false,
             detail: j.data?.error?.message ?? "Token invalid",
-            scopes: j.data?.scopes ?? [],
+            scopes,
           };
         } catch (e) {
           return { platform: acct.platform, ok: false, detail: (e as Error).message };
