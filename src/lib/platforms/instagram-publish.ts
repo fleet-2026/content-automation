@@ -64,11 +64,20 @@ async function publishWithRetry(
   accessToken: string,
   isVideo: boolean,
 ): Promise<{ id: string }> {
-  // Keep total wait under ~50s so we don't exceed Vercel's 60s
-  // Hobby timeout. 12 attempts × 4s delay = 48s worst case.
-  // Pro plans get 300s, but we stay within Hobby limits.
-  const maxAttempts = isVideo ? 12 : 3;
-  const delayMs = isVideo ? 4000 : 2000;
+  // Keep total wait under ~55s so we don't exceed Vercel's 60s
+  // Hobby timeout.
+  //   Video:  3s initial + 11 retries × 4s = ~47s worst case
+  //   Image:  2s initial +  7 retries × 3s = ~23s worst case
+  // Instagram often needs a few seconds to fetch the media from R2
+  // and process the container — the initial delay prevents the
+  // "Media ID is not available" error on the very first attempt.
+  const maxAttempts = isVideo ? 12 : 8;
+  const delayMs = isVideo ? 4000 : 3000;
+  const initialDelay = isVideo ? 3000 : 2000;
+
+  // Always wait a beat before the first publish attempt so Instagram
+  // has time to fetch + process the media from our R2 URL.
+  await sleep(initialDelay);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
@@ -90,16 +99,18 @@ async function publishWithRetry(
     }
 
     const body = await pubRes.text();
+    const bodyLower = body.toLowerCase();
 
     // If the error is "not ready yet" / "still processing", retry.
-    // Meta uses various phrasings — match broadly.
+    // Meta uses various phrasings — match broadly (case-insensitive).
     const isNotReady =
-      body.includes("not ready") ||
-      body.includes("not yet ready") ||
-      body.includes("being processed") ||
-      body.includes("media is not") ||
-      body.includes("IN_PROGRESS") ||
-      body.includes("PUBLISHED") || // container already published (race)
+      bodyLower.includes("not ready") ||
+      bodyLower.includes("not yet ready") ||
+      bodyLower.includes("being processed") ||
+      bodyLower.includes("media is not") ||      // "Media is not ready"
+      bodyLower.includes("media id is not") ||    // "Media ID is not available"
+      bodyLower.includes("in_progress") ||
+      bodyLower.includes("published") ||          // container already published (race)
       pubRes.status === 400;
 
     if (isNotReady && attempt < maxAttempts) {
