@@ -47,25 +47,35 @@ export async function ttPublishToInbox(
     ? { chunkSize: 0, totalChunks: 0 }
     : computeChunks(videoSize);
 
+  // Log chunk params so we can debug "invalid chunk count" rejections.
+  console.log(
+    `[tiktok-publish] videoSize=${videoSize} chunkSize=${chunkSize} totalChunks=${totalChunks}` +
+    ` (${(videoSize / 1024 / 1024).toFixed(1)} MB, ${(chunkSize / 1024 / 1024).toFixed(1)} MB/chunk)`,
+  );
+
   // 1. Init the upload
+  const sourceInfo = input.videoUrl
+    ? { source: "PULL_FROM_URL", video_url: input.videoUrl }
+    : {
+        source: "FILE_UPLOAD",
+        video_size: videoSize,
+        chunk_size: chunkSize,
+        total_chunk_count: totalChunks,
+      };
   const initRes = await fetch(`${API}/post/publish/inbox/video/init/`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({
-      source_info: input.videoUrl
-        ? { source: "PULL_FROM_URL", video_url: input.videoUrl }
-        : {
-            source: "FILE_UPLOAD",
-            video_size: videoSize,
-            chunk_size: chunkSize,
-            total_chunk_count: totalChunks,
-          },
-    }),
+    body: JSON.stringify({ source_info: sourceInfo }),
   });
-  if (!initRes.ok) throw new Error(`TT init: ${initRes.status} ${await initRes.text()}`);
+  if (!initRes.ok) {
+    const body = await initRes.text();
+    throw new Error(
+      `TT init: ${initRes.status} ${body} [sent: video_size=${videoSize} chunk_size=${chunkSize} total_chunk_count=${totalChunks}]`,
+    );
+  }
   const init = (await initRes.json()) as {
     data?: { publish_id?: string; upload_url?: string };
     error?: { code?: string; message?: string };
