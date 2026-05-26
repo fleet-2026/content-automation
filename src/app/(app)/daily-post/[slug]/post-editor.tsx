@@ -1374,32 +1374,58 @@ export default function PostEditor({ post }: { post: DailyPost }) {
         )}
 
         {publishResults && (
-          <div className="space-y-1.5">
+          <div className="space-y-2">
             {publishResults.map((r) => (
               <div
                 key={r.platform}
                 className={
-                  "flex items-center gap-2 rounded border px-3 py-2 text-xs " +
+                  "rounded border px-3 py-2 text-xs " +
                   (r.ok
                     ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
                     : "border-red-500/30 bg-red-500/5 text-red-300")
                 }
               >
-                <span className="font-semibold">
-                  {r.ok ? "✓" : "✕"} {r.platform}
-                </span>
-                {r.url && (
-                  <a
-                    href={r.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline ml-auto"
-                  >
-                    View post ↗
-                  </a>
-                )}
-                {r.error && (
-                  <span className="ml-auto truncate max-w-xs">{r.error}</span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">
+                    {r.ok ? "✓" : "✕"} {r.platform}
+                  </span>
+                  {r.url && (
+                    <a
+                      href={r.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline ml-auto"
+                    >
+                      View post ↗
+                    </a>
+                  )}
+                  {r.error && r.platform !== "TIKTOK" && (
+                    <span className="ml-auto truncate max-w-xs">{r.error}</span>
+                  )}
+                </div>
+                {/* TikTok inbox: show caption to copy since inbox mode can't set it */}
+                {r.platform === "TIKTOK" && r.ok && (
+                  <div className="mt-2 space-y-2">
+                    <div className="text-[11px] text-amber-300">
+                      Video sent to your TikTok inbox — open TikTok app → post it → paste caption below:
+                    </div>
+                    <div className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-2.5 text-[11px] leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto text-[var(--color-text)]">
+                      {caption.trim()}
+                      {hashtagsRaw.trim() ? "\n\n" + hashtagsRaw.trim() : ""}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        copy(
+                          caption.trim() +
+                          (hashtagsRaw.trim() ? "\n\n" + hashtagsRaw.trim() : ""),
+                        )
+                      }
+                      className="rounded bg-[var(--color-text)] text-[var(--color-text-on-dark)] px-3 py-1.5 text-xs font-semibold hover:opacity-90"
+                    >
+                      Copy TikTok caption
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
