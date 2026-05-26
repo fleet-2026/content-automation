@@ -376,6 +376,73 @@ export async function publishToSocial(
   }
 }
 
+/** Check the health of connected social accounts by testing each token
+ *  against the platform's API. Returns per-platform status + scopes so
+ *  the publish section can show which accounts are ready. */
+export async function checkAccountHealth(): Promise<{
+  accounts: {
+    platform: string;
+    ok: boolean;
+    detail: string;
+    scopes?: string[];
+  }[];
+}> {
+  const { decrypt } = await import("@/lib/crypto");
+  let userId: string;
+  try {
+    userId = await requireUser();
+  } catch {
+    return { accounts: [] };
+  }
+  const dbAccounts = await prisma.socialAccount.findMany({
+    where: { userId, isActive: true, platform: { in: ["INSTAGRAM", "TIKTOK", "FACEBOOK"] } },
+    select: { platform: true, platformUserId: true, accessToken: true, tokenExpiry: true },
+  });
+  const results = await Promise.all(
+    dbAccounts.map(async (acct) => {
+      const token = decrypt(acct.accessToken);
+      if (acct.platform === "INSTAGRAM" || acct.platform === "FACEBOOK") {
+        try {
+          const r = await fetch(
+            `https://graph.facebook.com/v21.0/debug_token?input_token=${token}&access_token=${token}`,
+          );
+          const j = (await r.json()) as {
+            data?: { is_valid?: boolean; scopes?: string[]; error?: { message?: string } };
+          };
+          if (j.data?.is_valid) {
+            return {
+              platform: acct.platform,
+              ok: true,
+              detail: `Valid (${acct.platformUserId})`,
+              scopes: j.data.scopes ?? [],
+            };
+          }
+          return {
+            platform: acct.platform,
+            ok: false,
+            detail: j.data?.error?.message ?? "Token invalid",
+            scopes: j.data?.scopes ?? [],
+          };
+        } catch (e) {
+          return { platform: acct.platform, ok: false, detail: (e as Error).message };
+        }
+      }
+      if (acct.platform === "TIKTOK") {
+        const expired = acct.tokenExpiry ? acct.tokenExpiry < new Date() : false;
+        return {
+          platform: "TIKTOK",
+          ok: !expired,
+          detail: expired
+            ? `Token expired ${acct.tokenExpiry?.toISOString()}`
+            : `Valid until ${acct.tokenExpiry?.toISOString() ?? "unknown"}`,
+        };
+      }
+      return { platform: acct.platform, ok: false, detail: "Unknown platform" };
+    }),
+  );
+  return { accounts: results };
+}
+
 /** Bulk unpublish — flips every published guide back to draft. */
 export async function unpublishAll() {
   const all = await listAllGuidesAdmin();

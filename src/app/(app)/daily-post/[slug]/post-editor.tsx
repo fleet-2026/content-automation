@@ -11,6 +11,7 @@ import {
   rateHook,
   replaceHook,
   publishToSocial,
+  checkAccountHealth,
 } from "../actions";
 import type { Platform } from "@prisma/client";
 import {
@@ -247,6 +248,14 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const [publishResults, setPublishResults] = useState<
     { platform: string; ok: boolean; url?: string; error?: string }[] | null
   >(null);
+
+  // Account health check — runs on mount to show which accounts are valid
+  const [accountHealth, setAccountHealth] = useState<
+    { platform: string; ok: boolean; detail: string; scopes?: string[] }[] | null
+  >(null);
+  useEffect(() => {
+    checkAccountHealth().then((r) => setAccountHealth(r.accounts));
+  }, []);
 
   const togglePlatform = (p: Platform) => {
     setSelectedPlatforms((prev) =>
@@ -1294,6 +1303,31 @@ export default function PostEditor({ post }: { post: DailyPost }) {
             );
           })}
         </div>
+
+        {/* Account health status */}
+        {accountHealth && accountHealth.length > 0 && (
+          <div className="flex gap-2 flex-wrap text-[11px]">
+            {accountHealth.map((a) => (
+              <span
+                key={a.platform}
+                className={
+                  "rounded border px-2 py-1 " +
+                  (a.ok
+                    ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-300"
+                    : "border-red-500/30 bg-red-500/5 text-red-300")
+                }
+                title={a.detail + (a.scopes?.length ? `\nScopes: ${a.scopes.join(", ")}` : "")}
+              >
+                {a.ok ? "✓" : "✗"} {a.platform}
+                {!a.ok && (
+                  <span className="ml-1 opacity-70">
+                    — {a.detail.length > 40 ? a.detail.slice(0, 40) + "…" : a.detail}
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
 
         {/* Publish button + warnings */}
         <div className="flex items-center gap-3 flex-wrap">
