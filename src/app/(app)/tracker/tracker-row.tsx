@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { patchTrackerRow, publishRow } from "./actions";
+import { useRef, useState, useTransition } from "react";
+import { patchTrackerRow, publishRow, uploadRowImage } from "./actions";
 import type { TrackerMeta } from "./meta";
 
 type Props = {
@@ -30,6 +30,9 @@ export default function TrackerRow({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<"cap" | "dm" | null>(null);
   const [publishStatus, setPublishStatus] = useState<string | null>(null);
+  const [imgUrl, setImgUrl] = useState(mediaUrl);
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const badgeColor = wired
     ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
@@ -190,20 +193,62 @@ export default function TrackerRow({
           )}
         </td>
 
-        {/* Image */}
+        {/* Image — click to upload */}
         <td className="px-3 py-3 align-top">
-          {mediaUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={mediaUrl}
-              alt=""
-              className="w-12 h-12 rounded-lg object-cover border border-[var(--color-border)]"
-            />
-          ) : (
-            <div className="w-12 h-12 rounded-lg border border-dashed border-[var(--color-border)] flex items-center justify-center text-[10px] text-zinc-500">
-              no img
-            </div>
-          )}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*,video/mp4,video/quicktime"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setUploading(true);
+              setError(null);
+              const fd = new FormData();
+              fd.append("file", file);
+              uploadRowImage(draftId, fd).then((res) => {
+                setUploading(false);
+                if (res.ok) {
+                  setImgUrl(res.url);
+                } else {
+                  setError(res.error);
+                }
+              });
+              // Reset so re-selecting the same file triggers onChange
+              e.target.value = "";
+            }}
+          />
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            className="group relative w-12 h-12 rounded-lg overflow-hidden border border-[var(--color-border)] hover:border-amber-500 transition-colors cursor-pointer disabled:opacity-50"
+            title="Click to upload image"
+          >
+            {imgUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={imgUrl} alt="" className="w-full h-full object-cover" />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-[var(--color-surface)]">
+                <svg className="w-5 h-5 text-zinc-500 group-hover:text-amber-400 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </div>
+            )}
+            {uploading && (
+              <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            {imgUrl && !uploading && (
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 flex items-center justify-center transition-colors">
+                <svg className="w-4 h-4 text-white opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                </svg>
+              </div>
+            )}
+          </button>
         </td>
       </tr>
       {error && (

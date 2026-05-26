@@ -13,9 +13,12 @@
 //                       tracker page after success
 
 import { revalidatePath } from "next/cache";
+import crypto from "node:crypto";
 import { prisma } from "@/lib/db";
 import { tryGetUser } from "@/lib/auth-helpers";
 import { publishDraft } from "@/lib/publish";
+import { uploadToR2 } from "@/lib/r2";
+import { sniffFileType } from "@/lib/file-sniff";
 import { trackerSeedData, type TrackerSeed } from "./seed-data";
 import { readTrackerMeta, writeTrackerMeta, type TrackerMeta } from "./meta";
 
@@ -171,5 +174,48 @@ export async function publishRow(
       ok: false,
       error: err instanceof Error ? err.message : String(err),
     };
+  }
+}
+
+/** Upload an image/video for a tracker row and set it as the Draft's mediaUrl. */
+export async function uploadRowImage(
+  draftId: string,
+  formData: FormData,
+): Promise<{ ok: true; url: string } | { ok: false; error: string }> {
+  const userId = await tryGetUser();
+  if (!userId) return { ok: false, error: "not signed in" };
+
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) {
+    return { ok: false, error: "missing_file" };
+  }
+  if (file.size > 200 * 1024 * 1024) {
+    return { ok: false, error: "file_too_large (max 200 MB)" };
+  }
+
+  // Verify ownership
+  const draft = await prisma.draft.findFirst({
+    where: { id: draftId, userId },
+    select: { id: true },
+  });
+  if (!draft) return { ok: false, error: "row not found" };
+
+  try {
+    const buf = Buffer.from(await file.arrayBuffer());
+    const sniffed = sniffFileType(new Uint8Array(buf.slice(0, 64)));
+    if (!sniffed) return { ok: false, error: "unsupported_type" };
+
+    const key = `uploads/${userId}/${Date.now()}-${crypto.randomBytes(6).toString("hex")}.${sniffed.ext}`;
+    const url = await uploadToR2(key, buf, sniffed.mime);
+
+    await prisma.draft.update({
+      where: { id: draftId },
+      data: { mediaUrl: url },
+    });
+
+    revalidatePath("/tracker");
+    return { ok: true, url };
+  } catch (e) {
+    return { ok: false, error: (e as Error)?.message ?? String(e) };
   }
 }
