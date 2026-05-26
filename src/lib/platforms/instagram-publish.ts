@@ -64,8 +64,11 @@ async function publishWithRetry(
   accessToken: string,
   isVideo: boolean,
 ): Promise<{ id: string }> {
-  const maxAttempts = isVideo ? 30 : 3;
-  const delayMs = isVideo ? 5000 : 2000;
+  // Keep total wait under ~50s so we don't exceed Vercel's 60s
+  // Hobby timeout. 12 attempts × 4s delay = 48s worst case.
+  // Pro plans get 300s, but we stay within Hobby limits.
+  const maxAttempts = isVideo ? 12 : 3;
+  const delayMs = isVideo ? 4000 : 2000;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     if (attempt > 1) {
