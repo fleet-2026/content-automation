@@ -127,6 +127,58 @@ async function publishWithRetry(
   throw new Error(`IG publish: timed out after ${maxAttempts} attempts`);
 }
 
+/**
+ * Create a single-item container and return its ID.
+ * Separated so we can recreate on failure (outer retry).
+ */
+async function createSingleContainer(
+  igBusinessId: string,
+  pageAccessToken: string,
+  input: IGPublishInput,
+  /** When true, send the raw image URL without the weserv proxy. */
+  skipProxy?: boolean,
+): Promise<string> {
+  const params = new URLSearchParams({ access_token: pageAccessToken });
+  if (input.caption) params.set("caption", input.caption);
+
+  if (input.videoUrl) {
+    params.set("media_type", input.isReel ? "REELS" : "VIDEO");
+    params.set("video_url", input.videoUrl);
+    if (input.thumbnailUrl) params.set("thumb_offset", "0");
+  } else if (input.imageUrl) {
+    params.set(
+      "image_url",
+      skipProxy ? input.imageUrl : safeIgImageUrl(input.imageUrl),
+    );
+  } else {
+    throw new Error("igPublish requires imageUrl, videoUrl, or imageUrls[]");
+  }
+
+  console.log(
+    `[ig-publish] creating container: igBusinessId=${igBusinessId} media_type=${params.get("media_type")} skipProxy=${!!skipProxy}`,
+  );
+  const createRes = await fetch(`${GRAPH}/${igBusinessId}/media`, {
+    method: "POST",
+    body: params,
+  });
+  if (!createRes.ok) {
+    throw new Error(
+      `IG create container: ${createRes.status} ${await createRes.text()}`,
+    );
+  }
+  const created = (await createRes.json()) as {
+    id?: string;
+    error?: { message?: string; code?: number };
+  };
+  if (!created.id) {
+    throw new Error(
+      `IG create container: no ID returned (${JSON.stringify(created.error ?? created)})`,
+    );
+  }
+  console.log(`[ig-publish] container created: ${created.id}`);
+  return created.id;
+}
+
 export async function igPublish(
   igBusinessId: string,
   pageAccessToken: string,
@@ -190,60 +242,57 @@ export async function igPublish(
     return { platformPostId: pub.id, permalink: link?.permalink };
   }
 
-  // ─── Single-item branch ────────────────────────────────────
-  // 1. Create container
-  const params = new URLSearchParams({ access_token: pageAccessToken });
-  if (input.caption) params.set("caption", input.caption);
-
-  if (input.videoUrl) {
-    params.set("media_type", input.isReel ? "REELS" : "VIDEO");
-    params.set("video_url", input.videoUrl);
-    if (input.thumbnailUrl) params.set("thumb_offset", "0");
-  } else if (input.imageUrl) {
-    params.set("image_url", safeIgImageUrl(input.imageUrl));
-  } else {
-    throw new Error("igPublish requires imageUrl, videoUrl, or imageUrls[]");
-  }
-
-  console.log(
-    `[ig-publish] creating container: igBusinessId=${igBusinessId} media_type=${params.get("media_type")}`,
-  );
-  const createRes = await fetch(`${GRAPH}/${igBusinessId}/media`, {
-    method: "POST",
-    body: params,
-  });
-  if (!createRes.ok) {
-    throw new Error(`IG create container: ${createRes.status} ${await createRes.text()}`);
-  }
-  const created = (await createRes.json()) as {
-    id?: string;
-    error?: { message?: string; code?: number };
-  };
-  if (!created.id) {
-    throw new Error(
-      `IG create container: no ID returned (${JSON.stringify(created.error ?? created)})`,
-    );
-  }
-  const containerId = created.id;
-  console.log(`[ig-publish] container created: ${containerId}`);
-
-  // 2. Publish — retry loop handles video processing time.
-  //    Skips the broken GET /{container}?fields=status_code endpoint.
+  // ─── Single-item branch (with outer retry) ─────────────────
+  // Outer retry: if all publish attempts fail (container is dead),
+  // create a BRAND NEW container and try again. On the 2nd outer
+  // pass for images, skip the weserv proxy (send raw R2 URL) in
+  // case the proxy is the reason IG can't fetch the media.
   const isVideo = !!input.videoUrl;
-  const pub = await publishWithRetry(
-    igBusinessId,
-    containerId,
-    pageAccessToken,
-    isVideo,
-  );
+  const maxOuterAttempts = 2;
+  let lastError: Error | null = null;
 
-  // 3. Lookup permalink
-  const linkRes = await fetch(graphGet(pub.id, "permalink", pageAccessToken));
-  const link = linkRes.ok
-    ? ((await linkRes.json()) as { permalink?: string })
-    : null;
+  for (let outer = 1; outer <= maxOuterAttempts; outer++) {
+    try {
+      // On 2nd attempt for images: skip the weserv proxy
+      const skipProxy = outer > 1 && !isVideo;
+      if (outer > 1) {
+        console.log(
+          `[ig-publish] outer retry ${outer}/${maxOuterAttempts}: recreating container${skipProxy ? " (raw URL, no proxy)" : ""}`,
+        );
+      }
 
-  return { platformPostId: pub.id, permalink: link?.permalink };
+      const containerId = await createSingleContainer(
+        igBusinessId,
+        pageAccessToken,
+        input,
+        skipProxy,
+      );
+
+      const pub = await publishWithRetry(
+        igBusinessId,
+        containerId,
+        pageAccessToken,
+        isVideo,
+      );
+
+      // Success — lookup permalink
+      const linkRes = await fetch(
+        graphGet(pub.id, "permalink", pageAccessToken),
+      );
+      const link = linkRes.ok
+        ? ((await linkRes.json()) as { permalink?: string })
+        : null;
+
+      return { platformPostId: pub.id, permalink: link?.permalink };
+    } catch (e) {
+      lastError = e as Error;
+      console.warn(
+        `[ig-publish] outer attempt ${outer} failed: ${lastError.message}`,
+      );
+    }
+  }
+
+  throw lastError ?? new Error("IG publish: unknown failure");
 }
 
 function sleep(ms: number) {
