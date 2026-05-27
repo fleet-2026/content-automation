@@ -5,12 +5,10 @@
  *  1. POST /{ig-user-id}/media         → returns container id
  *  2. POST /{ig-user-id}/media_publish → publishes the container
  *
- * For Reels/Video: retry the publish call until the container is
- * processed. The GET /{container-id}?fields=status_code polling
- * endpoint is unreliable (returns 400 "Authorization Error" on
- * some token configurations), so we skip it and try to publish
- * directly — Meta returns a clear "media is not ready" error when
- * the video is still processing, which we catch and retry.
+ * Container processing is polled via GET /{container-id}?fields=status_code
+ * when the endpoint is available — this avoids wasting publish attempts.
+ * Falls back to direct publish-and-retry when the status endpoint returns
+ * a 400 (happens on some token configurations).
  */
 
 const GRAPH = "https://graph.facebook.com/v21.0";
@@ -51,8 +49,41 @@ export type IGPublishInput = {
 };
 
 /**
+ * Poll the container's processing status. Returns:
+ *  - "FINISHED" → ready to publish
+ *  - "IN_PROGRESS" → still processing
+ *  - "ERROR" → container failed (throw)
+ *  - null → endpoint unavailable (fallback to blind publish)
+ */
+async function checkContainerStatus(
+  containerId: string,
+  accessToken: string,
+): Promise<"FINISHED" | "IN_PROGRESS" | null> {
+  try {
+    const url = graphGet(containerId, "status_code", accessToken);
+    const res = await fetch(url);
+    if (!res.ok) return null; // endpoint unavailable for this token config
+    const data = (await res.json()) as { status_code?: string };
+    const status = data.status_code?.toUpperCase();
+    if (status === "FINISHED") return "FINISHED";
+    if (status === "ERROR") {
+      throw new Error(`IG container ${containerId} status: ERROR`);
+    }
+    return "IN_PROGRESS";
+  } catch (e) {
+    if ((e as Error).message.includes("status: ERROR")) throw e;
+    return null; // network / parse issue → fall back
+  }
+}
+
+/**
  * Try to publish a container. Uses a hard deadline instead of fixed
- * attempt counts so the outer retry loop can share the same 48s budget.
+ * attempt counts so the outer retry loop can share the same budget.
+ *
+ * Strategy:
+ *  1. Poll container status if the endpoint works → wait for FINISHED
+ *  2. Once FINISHED (or if polling unavailable) → attempt publish
+ *  3. If publish says "not ready" → keep retrying until deadline
  *
  * Returns the published media ID or throws when time runs out.
  */
@@ -64,18 +95,47 @@ async function publishWithRetry(
   /** Epoch ms — stop retrying after this point. */
   deadline: number,
 ): Promise<{ id: string }> {
-  const delayMs = isVideo ? 4000 : 3000;
-  const initialDelay = isVideo ? 3000 : 2000;
+  const pollDelay = isVideo ? 5000 : 3000;
+  const initialDelay = isVideo ? 6000 : 3000;
 
-  // Wait before the first attempt so IG can fetch + process the media.
+  // Wait before the first check so IG can fetch the media URL.
   await sleep(initialDelay);
 
+  // ── Phase 1: poll container status (if the endpoint works) ────
+  let statusAvailable = true;
+  let statusChecks = 0;
+  while (Date.now() < deadline) {
+    const status = await checkContainerStatus(containerId, accessToken);
+    statusChecks++;
+
+    if (status === null) {
+      // Endpoint unavailable — skip to Phase 2 (blind publish)
+      statusAvailable = false;
+      console.log(
+        `[ig-publish] status endpoint unavailable, falling back to direct publish`,
+      );
+      break;
+    }
+    if (status === "FINISHED") {
+      console.log(
+        `[ig-publish] container FINISHED after ${statusChecks} status checks`,
+      );
+      break;
+    }
+    // Still IN_PROGRESS
+    console.log(
+      `[ig-publish] status: IN_PROGRESS (check ${statusChecks}), ` +
+      `${Math.round((deadline - Date.now()) / 1000)}s left`,
+    );
+    await sleep(pollDelay);
+  }
+
+  // ── Phase 2: attempt publish ──────────────────────────────────
   let attempt = 0;
   while (Date.now() < deadline) {
     attempt++;
     if (attempt > 1) {
-      await sleep(delayMs);
-      // Re-check deadline after sleeping
+      await sleep(pollDelay);
       if (Date.now() >= deadline) break;
     }
 
@@ -96,30 +156,31 @@ async function publishWithRetry(
     const body = await pubRes.text();
     const bodyLower = body.toLowerCase();
 
-    const isNotReady =
+    // Only retry on SPECIFIC "media still processing" strings.
+    // Do NOT retry on blanket 400 — that catches token / permission
+    // errors and wastes the entire deadline.
+    const isStillProcessing =
       bodyLower.includes("not ready") ||
       bodyLower.includes("not yet ready") ||
       bodyLower.includes("being processed") ||
-      bodyLower.includes("media is not") ||
-      bodyLower.includes("media id is not") ||
-      bodyLower.includes("in_progress") ||
-      bodyLower.includes("published") ||
-      pubRes.status === 400;
+      bodyLower.includes("media is not ready") ||
+      bodyLower.includes("in_progress");
 
-    if (isNotReady) {
+    if (isStillProcessing) {
       console.log(
-        `[ig-publish] attempt ${attempt}: not ready (${pubRes.status}), ` +
+        `[ig-publish] publish attempt ${attempt}: still processing (${pubRes.status}), ` +
         `${Math.round((deadline - Date.now()) / 1000)}s left`,
       );
       continue;
     }
 
-    // Fatal / non-retryable error
+    // Any other error is fatal — fail fast so the outer retry can
+    // try a fresh container with the remaining budget.
     throw new Error(`IG publish: ${pubRes.status} ${body}`);
   }
 
   throw new Error(
-    `IG publish: deadline reached after ${attempt} attempts`,
+    `IG publish: deadline reached after ${statusChecks} status checks + ${attempt} publish attempts`,
   );
 }
 
@@ -182,7 +243,7 @@ export async function igPublish(
 ): Promise<{ platformPostId: string; permalink?: string }> {
   // ─── Carousel branch ────────────────────────────────────────
   if (input.imageUrls && input.imageUrls.length >= 2) {
-    const carouselDeadline = Date.now() + 48_000;
+    const carouselDeadline = Date.now() + 53_000;
     const childIds: string[] = [];
     for (const url of input.imageUrls.slice(0, 10)) {
       const isVid = /\.(mp4|mov|m4v|webm)(\?|$)/i.test(url);
@@ -241,15 +302,15 @@ export async function igPublish(
   }
 
   // ─── Single-item branch (with outer retry + deadline) ───────
-  // Hard 48s budget so the entire flow fits inside Vercel's 60s
-  // Hobby timeout (leaves ~12s for the server action overhead,
-  // DB writes, and the permalink lookup at the end).
+  // Hard 53s budget — fits inside Vercel's 60s Hobby timeout with
+  // ~7s left for the server action overhead (DB writes, permalink
+  // lookup). Container status polling avoids wasting time on blind
+  // publish attempts, so the budget stretches further.
   //
-  // Outer retry: if all publish attempts on one container fail,
-  // create a BRAND NEW container and retry with the remaining time.
-  // On the 2nd outer pass for images, skip the weserv proxy in case
-  // the proxy is the reason IG couldn't fetch the media.
-  const deadline = Date.now() + 48_000;
+  // Outer retry: if publish fails, create a BRAND NEW container and
+  // retry with the remaining time. On the 2nd pass for images, skip
+  // the weserv proxy in case it's the reason IG couldn't fetch media.
+  const deadline = Date.now() + 53_000;
   const isVideo = !!input.videoUrl;
   // Videos need the full budget — skip outer retry for them.
   const maxOuterAttempts = isVideo ? 1 : 2;
