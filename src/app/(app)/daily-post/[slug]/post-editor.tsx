@@ -1399,7 +1399,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                       View post ↗
                     </a>
                   )}
-                  {r.error && r.platform !== "TIKTOK" && (
+                  {r.error && !(r.platform === "TIKTOK" && r.ok) && (
                     <span className="ml-auto truncate max-w-xs">{r.error}</span>
                   )}
                 </div>
