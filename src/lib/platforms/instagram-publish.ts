@@ -51,37 +51,32 @@ export type IGPublishInput = {
 };
 
 /**
- * Try to publish a container. For video/Reels, the container needs
- * processing time. Instead of polling the (broken) GET status endpoint,
- * we retry the publish POST — Meta returns "The media was unable to be
- * published" or similar when not ready, and we retry after a delay.
+ * Try to publish a container. Uses a hard deadline instead of fixed
+ * attempt counts so the outer retry loop can share the same 48s budget.
  *
- * Returns the published media ID or throws after all retries fail.
+ * Returns the published media ID or throws when time runs out.
  */
 async function publishWithRetry(
   igBusinessId: string,
   containerId: string,
   accessToken: string,
   isVideo: boolean,
+  /** Epoch ms — stop retrying after this point. */
+  deadline: number,
 ): Promise<{ id: string }> {
-  // Keep total wait under ~55s so we don't exceed Vercel's 60s
-  // Hobby timeout.
-  //   Video:  3s initial + 11 retries × 4s = ~47s worst case
-  //   Image:  2s initial +  7 retries × 3s = ~23s worst case
-  // Instagram often needs a few seconds to fetch the media from R2
-  // and process the container — the initial delay prevents the
-  // "Media ID is not available" error on the very first attempt.
-  const maxAttempts = isVideo ? 12 : 8;
   const delayMs = isVideo ? 4000 : 3000;
   const initialDelay = isVideo ? 3000 : 2000;
 
-  // Always wait a beat before the first publish attempt so Instagram
-  // has time to fetch + process the media from our R2 URL.
+  // Wait before the first attempt so IG can fetch + process the media.
   await sleep(initialDelay);
 
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+  let attempt = 0;
+  while (Date.now() < deadline) {
+    attempt++;
     if (attempt > 1) {
       await sleep(delayMs);
+      // Re-check deadline after sleeping
+      if (Date.now() >= deadline) break;
     }
 
     const pubRes = await fetch(`${GRAPH}/${igBusinessId}/media_publish`, {
@@ -101,30 +96,31 @@ async function publishWithRetry(
     const body = await pubRes.text();
     const bodyLower = body.toLowerCase();
 
-    // If the error is "not ready yet" / "still processing", retry.
-    // Meta uses various phrasings — match broadly (case-insensitive).
     const isNotReady =
       bodyLower.includes("not ready") ||
       bodyLower.includes("not yet ready") ||
       bodyLower.includes("being processed") ||
-      bodyLower.includes("media is not") ||      // "Media is not ready"
-      bodyLower.includes("media id is not") ||    // "Media ID is not available"
+      bodyLower.includes("media is not") ||
+      bodyLower.includes("media id is not") ||
       bodyLower.includes("in_progress") ||
-      bodyLower.includes("published") ||          // container already published (race)
+      bodyLower.includes("published") ||
       pubRes.status === 400;
 
-    if (isNotReady && attempt < maxAttempts) {
+    if (isNotReady) {
       console.log(
-        `[ig-publish] attempt ${attempt}/${maxAttempts}: not ready yet (${pubRes.status}), retrying in ${delayMs / 1000}s`,
+        `[ig-publish] attempt ${attempt}: not ready (${pubRes.status}), ` +
+        `${Math.round((deadline - Date.now()) / 1000)}s left`,
       );
       continue;
     }
 
-    // Fatal error or last attempt — throw
+    // Fatal / non-retryable error
     throw new Error(`IG publish: ${pubRes.status} ${body}`);
   }
 
-  throw new Error(`IG publish: timed out after ${maxAttempts} attempts`);
+  throw new Error(
+    `IG publish: deadline reached after ${attempt} attempts`,
+  );
 }
 
 /**
@@ -186,6 +182,7 @@ export async function igPublish(
 ): Promise<{ platformPostId: string; permalink?: string }> {
   // ─── Carousel branch ────────────────────────────────────────
   if (input.imageUrls && input.imageUrls.length >= 2) {
+    const carouselDeadline = Date.now() + 48_000;
     const childIds: string[] = [];
     for (const url of input.imageUrls.slice(0, 10)) {
       const isVid = /\.(mp4|mov|m4v|webm)(\?|$)/i.test(url);
@@ -234,6 +231,7 @@ export async function igPublish(
       parentJson.id,
       pageAccessToken,
       false,
+      carouselDeadline,
     );
     const linkRes = await fetch(graphGet(pub.id, "permalink", pageAccessToken));
     const link = linkRes.ok
@@ -242,22 +240,32 @@ export async function igPublish(
     return { platformPostId: pub.id, permalink: link?.permalink };
   }
 
-  // ─── Single-item branch (with outer retry) ─────────────────
-  // Outer retry: if all publish attempts fail (container is dead),
-  // create a BRAND NEW container and try again. On the 2nd outer
-  // pass for images, skip the weserv proxy (send raw R2 URL) in
-  // case the proxy is the reason IG can't fetch the media.
+  // ─── Single-item branch (with outer retry + deadline) ───────
+  // Hard 48s budget so the entire flow fits inside Vercel's 60s
+  // Hobby timeout (leaves ~12s for the server action overhead,
+  // DB writes, and the permalink lookup at the end).
+  //
+  // Outer retry: if all publish attempts on one container fail,
+  // create a BRAND NEW container and retry with the remaining time.
+  // On the 2nd outer pass for images, skip the weserv proxy in case
+  // the proxy is the reason IG couldn't fetch the media.
+  const deadline = Date.now() + 48_000;
   const isVideo = !!input.videoUrl;
-  const maxOuterAttempts = 2;
+  // Videos need the full budget — skip outer retry for them.
+  const maxOuterAttempts = isVideo ? 1 : 2;
   let lastError: Error | null = null;
 
   for (let outer = 1; outer <= maxOuterAttempts; outer++) {
+    // Bail if we've used up the budget before even starting.
+    if (Date.now() >= deadline) break;
+
     try {
-      // On 2nd attempt for images: skip the weserv proxy
       const skipProxy = outer > 1 && !isVideo;
       if (outer > 1) {
         console.log(
-          `[ig-publish] outer retry ${outer}/${maxOuterAttempts}: recreating container${skipProxy ? " (raw URL, no proxy)" : ""}`,
+          `[ig-publish] outer retry ${outer}/${maxOuterAttempts}: ` +
+          `recreating container${skipProxy ? " (raw URL, no proxy)" : ""}, ` +
+          `${Math.round((deadline - Date.now()) / 1000)}s left`,
         );
       }
 
@@ -273,6 +281,7 @@ export async function igPublish(
         containerId,
         pageAccessToken,
         isVideo,
+        deadline,
       );
 
       // Success — lookup permalink
