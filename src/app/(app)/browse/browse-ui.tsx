@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useCallback } from "react";
 import {
   Search,
   Loader2,
@@ -13,9 +13,32 @@ import {
   AlertTriangle,
   Plus,
   BadgeCheck,
+  Star,
+  X,
 } from "lucide-react";
 import { lookupIgProfile, watchIgProfile } from "./actions";
 import type { BrowseProfile, BrowsePost } from "@/lib/browse";
+
+const FAV_KEY = "browse-ig-favorites";
+
+type FavEntry = {
+  handle: string;
+  displayName?: string;
+  profileImage?: string;
+};
+
+function loadFavorites(): FavEntry[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(localStorage.getItem(FAV_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveFavorites(favs: FavEntry[]) {
+  localStorage.setItem(FAV_KEY, JSON.stringify(favs));
+}
 
 export function BrowseUI() {
   const [handle, setHandle] = useState("");
@@ -24,13 +47,53 @@ export function BrowseUI() {
   const [err, setErr] = useState<string | null>(null);
   const [watchedOk, setWatchedOk] = useState(false);
   const [watching, setWatching] = useState(false);
+  const [favorites, setFavorites] = useState<FavEntry[]>([]);
 
-  function go() {
-    const clean = handle.trim();
-    if (!clean) {
-      setErr("Type a handle.");
-      return;
-    }
+  useEffect(() => {
+    setFavorites(loadFavorites());
+  }, []);
+
+  const isFavorited = profile
+    ? favorites.some((f) => f.handle.toLowerCase() === profile.handle.toLowerCase())
+    : false;
+
+  const toggleFavorite = useCallback(
+    (p: BrowseProfile) => {
+      setFavorites((prev) => {
+        const exists = prev.some(
+          (f) => f.handle.toLowerCase() === p.handle.toLowerCase(),
+        );
+        const next = exists
+          ? prev.filter((f) => f.handle.toLowerCase() !== p.handle.toLowerCase())
+          : [
+              ...prev,
+              {
+                handle: p.handle,
+                displayName: p.displayName ?? undefined,
+                profileImage: p.profileImage ?? undefined,
+              },
+            ];
+        saveFavorites(next);
+        return next;
+      });
+    },
+    [],
+  );
+
+  const removeFavorite = useCallback((handle: string) => {
+    setFavorites((prev) => {
+      const next = prev.filter(
+        (f) => f.handle.toLowerCase() !== handle.toLowerCase(),
+      );
+      saveFavorites(next);
+      return next;
+    });
+  }, []);
+
+  function search(h: string) {
+    const clean = h.trim().replace(/^@/, "");
+    if (!clean) return;
+    setHandle(clean);
     setErr(null);
     setProfile(null);
     setWatchedOk(false);
@@ -46,6 +109,15 @@ export function BrowseUI() {
         setErr(e instanceof Error ? e.message : String(e));
       }
     });
+  }
+
+  function go() {
+    const clean = handle.trim();
+    if (!clean) {
+      setErr("Type a handle.");
+      return;
+    }
+    search(clean);
   }
 
   async function onWatch() {
@@ -64,6 +136,56 @@ export function BrowseUI() {
 
   return (
     <div>
+      {/* ── Favorites bar ── */}
+      {favorites.length > 0 && (
+        <div className="mb-5">
+          <div className="text-[10px] uppercase tracking-wider text-[var(--color-muted)] mb-2">
+            Favorites
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {favorites.map((f) => (
+              <div
+                key={f.handle}
+                className="group flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface)] pl-1 pr-2 py-1 hover:border-amber-500/50 transition cursor-pointer"
+              >
+                <button
+                  onClick={() => search(f.handle)}
+                  disabled={pending}
+                  className="flex items-center gap-2 disabled:opacity-50"
+                >
+                  {f.profileImage ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={f.profileImage}
+                      alt=""
+                      width={24}
+                      height={24}
+                      className="w-6 h-6 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-[var(--color-surface-2)] flex items-center justify-center text-[10px] font-semibold text-[var(--color-muted)]">
+                      {f.handle.charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <span className="text-xs font-medium">@{f.handle}</span>
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeFavorite(f.handle);
+                  }}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity text-[var(--color-muted)] hover:text-rose-400"
+                  title="Remove from favorites"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Search bar ── */}
       <div className="flex flex-col sm:flex-row gap-2 mb-6">
         <div className="relative flex-1">
           <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-muted)]" />
@@ -120,6 +242,8 @@ export function BrowseUI() {
           onWatch={onWatch}
           watching={watching}
           watchedOk={watchedOk}
+          isFavorited={isFavorited}
+          onToggleFavorite={() => toggleFavorite(profile)}
         />
       )}
 
@@ -145,11 +269,15 @@ function ProfileCard({
   onWatch,
   watching,
   watchedOk,
+  isFavorited,
+  onToggleFavorite,
 }: {
   profile: BrowseProfile;
   onWatch: () => void;
   watching: boolean;
   watchedOk: boolean;
+  isFavorited: boolean;
+  onToggleFavorite: () => void;
 }) {
   return (
     <div className="space-y-6">
@@ -214,6 +342,20 @@ function ProfileCard({
         </div>
 
         <div className="flex flex-col gap-2 shrink-0">
+          <button
+            onClick={onToggleFavorite}
+            className={`rounded-lg px-4 py-2 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors ${
+              isFavorited
+                ? "bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/25"
+                : "bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] text-[var(--color-text)]"
+            }`}
+          >
+            <Star
+              className="w-3.5 h-3.5"
+              fill={isFavorited ? "currentColor" : "none"}
+            />
+            {isFavorited ? "Favorited" : "Favorite"}
+          </button>
           <a
             href={`https://www.instagram.com/${profile.handle}/`}
             target="_blank"
