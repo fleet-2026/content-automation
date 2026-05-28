@@ -15,6 +15,8 @@ type GuideRow = {
   postedPlatforms: string[];
   hasScript: boolean;
   hasCaption: boolean;
+  scriptScore: number | null;
+  captionScore: number | null;
 };
 
 type Filter = "all" | "needs-media" | "needs-social" | "ready" | "live";
@@ -105,9 +107,10 @@ export default function TrackerTable({ guides }: { guides: GuideRow[] }) {
       {/* Table */}
       <div className="rounded-xl border border-[var(--color-border)] overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[3rem_1fr_5rem_6rem_5rem_5rem] gap-0 bg-[var(--color-surface)] border-b border-[var(--color-border)] px-4 py-2.5 text-[10px] uppercase tracking-wider text-[var(--color-muted)] font-semibold">
+        <div className="grid grid-cols-[3rem_1fr_5.5rem_5rem_6rem_5rem_5rem] gap-0 bg-[var(--color-surface)] border-b border-[var(--color-border)] px-4 py-2.5 text-[10px] uppercase tracking-wider text-[var(--color-muted)] font-semibold">
           <div>#</div>
           <div>Title / Hook</div>
+          <div className="text-center">Quality</div>
           <div className="text-center">Media</div>
           <div className="text-center">Socials</div>
           <div className="text-center">Site</div>
@@ -138,7 +141,7 @@ function Row({ g }: { g: GuideRow }) {
   return (
     <Link
       href={`/daily-post/${g.slug}`}
-      className="grid grid-cols-[3rem_1fr_5rem_6rem_5rem_5rem] gap-0 px-4 py-3 border-b border-[var(--color-border)] last:border-b-0 hover:bg-[var(--color-surface)]/50 transition items-center"
+      className="grid grid-cols-[3rem_1fr_5.5rem_5rem_6rem_5rem_5rem] gap-0 px-4 py-3 border-b border-[var(--color-border)] last:border-b-0 hover:bg-[var(--color-surface)]/50 transition items-center"
     >
       {/* Day number */}
       <div className="text-sm font-semibold text-[var(--color-muted)]">
@@ -154,6 +157,42 @@ function Row({ g }: { g: GuideRow }) {
           <div className="text-[11px] text-[var(--color-muted)] leading-snug truncate mt-0.5">
             {g.hook}
           </div>
+        )}
+      </div>
+
+      {/* Quality scores (AI-rated script + caption) */}
+      <div className="text-center">
+        {g.scriptScore != null || g.captionScore != null ? (
+          <div className="flex flex-col items-center gap-0.5">
+            {g.scriptScore != null && (
+              <span
+                className={`inline-block rounded border px-1 py-0.5 text-[9px] font-bold ${
+                  g.scriptScore >= 8
+                    ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                    : g.scriptScore >= 6
+                    ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                    : "bg-red-500/10 text-red-300 border-red-500/30"
+                }`}
+              >
+                S:{g.scriptScore}
+              </span>
+            )}
+            {g.captionScore != null && (
+              <span
+                className={`inline-block rounded border px-1 py-0.5 text-[9px] font-bold ${
+                  g.captionScore >= 8
+                    ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                    : g.captionScore >= 6
+                    ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
+                    : "bg-red-500/10 text-red-300 border-red-500/30"
+                }`}
+              >
+                C:{g.captionScore}
+              </span>
+            )}
+          </div>
+        ) : (
+          <span className="text-[10px] text-zinc-500">—</span>
         )}
       </div>
 

@@ -30,6 +30,8 @@ export type GuideAdmin = GuidePublic & {
   id: string;
   isPublished: boolean;
   postedPlatforms: string[];
+  scriptScore: number | null;
+  captionScore: number | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -161,6 +163,8 @@ type RawGuide = {
   sourceUrl: string | null;
   isPublished: boolean;
   postedPlatforms: string[];
+  scriptScore: number | null;
+  captionScore: number | null;
   publishedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -191,6 +195,8 @@ function toAdmin(r: RawGuide): GuideAdmin {
     id: r.id,
     isPublished: r.isPublished,
     postedPlatforms: r.postedPlatforms,
+    scriptScore: r.scriptScore,
+    captionScore: r.captionScore,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };

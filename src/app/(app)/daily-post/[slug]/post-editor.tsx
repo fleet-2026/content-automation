@@ -10,6 +10,7 @@ import {
   saveVideoPrompt,
   rateHook,
   replaceHook,
+  rateContent,
   publishToSocial,
   checkAccountHealth,
 } from "../actions";
@@ -35,6 +36,29 @@ type HookRating = {
   strengths: string[];
   weaknesses: string[];
   rewrites: string[];
+};
+
+type ContentRating = {
+  scriptScore: number;
+  captionScore: number;
+  verdict: string;
+  scriptScores: {
+    structure: number;
+    engagement: number;
+    pacing: number;
+    valueDelivery: number;
+    speakability: number;
+  };
+  captionScores: {
+    hookAlignment: number;
+    callToAction: number;
+    readability: number;
+    seoValue: number;
+    lengthFit: number;
+  };
+  strengths: string[];
+  improvements: string[];
+  captionRewrites: string[];
 };
 
 export default function PostEditor({ post }: { post: DailyPost }) {
@@ -67,6 +91,33 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const [hookRating, setHookRating] = useState<HookRating | null>(null);
   const [isRating, setIsRating] = useState(false);
   const [ratingError, setRatingError] = useState<string | null>(null);
+
+  // Content (script + caption) rating state
+  const [contentRating, setContentRating] = useState<ContentRating | null>(null);
+  const [isRatingContent, setIsRatingContent] = useState(false);
+  const [contentRatingError, setContentRatingError] = useState<string | null>(null);
+
+  const runRateContent = async () => {
+    setContentRatingError(null);
+    setIsRatingContent(true);
+    try {
+      // Persist pending edits before rating
+      await updatePost(post.slug, { script, caption });
+      const res = await rateContent(post.slug);
+      if (!res.ok || !res.rating) throw new Error(res.error ?? "Rating failed");
+      setContentRating(res.rating);
+    } catch (e) {
+      setContentRatingError((e as Error).message);
+    } finally {
+      setIsRatingContent(false);
+    }
+  };
+
+  const useCaptionRewrite = async (rewrite: string) => {
+    setCaption(rewrite);
+    await updatePost(post.slug, { caption: rewrite });
+    setContentRating(null);
+  };
 
   const runRateHook = async () => {
     setRatingError(null);
@@ -832,6 +883,44 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           className="w-full rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-sm font-mono"
         />
         <ActionBar onCopy={() => copy(hashtagsRaw)} />
+      </Section>
+
+      {/* Script + Caption quality rating */}
+      <Section
+        label="Content quality rating"
+        hint="AI rates your script & caption for engagement, clarity, and CTA strength"
+      >
+        <div className="flex gap-2 flex-wrap items-center">
+          <button
+            type="button"
+            onClick={runRateContent}
+            disabled={isRatingContent || (!script.trim() && !caption.trim())}
+            className="text-[11px] rounded bg-teal-500/20 text-teal-200 border border-teal-500/40 px-3 py-1.5 font-semibold hover:bg-teal-500/30 disabled:opacity-50"
+          >
+            {isRatingContent ? "Rating..." : "Rate script & caption"}
+          </button>
+          {contentRating && (
+            <div className="flex gap-2 items-center">
+              <ScoreBadge label="Script" score={contentRating.scriptScore} />
+              <ScoreBadge label="Caption" score={contentRating.captionScore} />
+            </div>
+          )}
+        </div>
+
+        {contentRatingError && (
+          <div className="mt-3 rounded border border-red-500/30 bg-red-500/5 p-2 text-xs text-red-300">
+            {contentRatingError}
+          </div>
+        )}
+
+        {contentRating && (
+          <ContentRatingPanel
+            rating={contentRating}
+            onUseCaptionRewrite={useCaptionRewrite}
+            onCopy={copy}
+            onDismiss={() => setContentRating(null)}
+          />
+        )}
       </Section>
 
       {/* AI video-prompt brief — interactive: hit Generate to build a
@@ -1713,6 +1802,180 @@ function CopyScriptBar({
       <span className="text-[10px] text-[var(--color-muted)] self-center ml-auto">
         {wordCount} words · ~{estSec}s · auto-saves on blur
       </span>
+    </div>
+  );
+}
+
+/** Small colored badge showing a score like "Script 8/10". */
+function ScoreBadge({ label, score }: { label: string; score: number }) {
+  const color =
+    score >= 8
+      ? "text-emerald-300 bg-emerald-500/10 border-emerald-500/30"
+      : score >= 6
+      ? "text-amber-300 bg-amber-500/10 border-amber-500/30"
+      : "text-red-300 bg-red-500/10 border-red-500/30";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded border px-2 py-0.5 text-xs font-semibold ${color}`}>
+      {label} {score}/10
+    </span>
+  );
+}
+
+/** Inline panel that renders the AI content rating (script + caption). */
+function ContentRatingPanel({
+  rating,
+  onUseCaptionRewrite,
+  onCopy,
+  onDismiss,
+}: {
+  rating: ContentRating;
+  onUseCaptionRewrite: (text: string) => void;
+  onCopy: (text: string) => void;
+  onDismiss: () => void;
+}) {
+  const scriptDims = [
+    { label: "Structure", value: rating.scriptScores.structure },
+    { label: "Engagement", value: rating.scriptScores.engagement },
+    { label: "Pacing", value: rating.scriptScores.pacing },
+    { label: "Value", value: rating.scriptScores.valueDelivery },
+    { label: "Speakability", value: rating.scriptScores.speakability },
+  ];
+
+  const captionDims = [
+    { label: "Hook match", value: rating.captionScores.hookAlignment },
+    { label: "CTA", value: rating.captionScores.callToAction },
+    { label: "Readability", value: rating.captionScores.readability },
+    { label: "SEO", value: rating.captionScores.seoValue },
+    { label: "Length", value: rating.captionScores.lengthFit },
+  ];
+
+  return (
+    <div className="mt-4 rounded-xl border-2 border-teal-500/30 bg-teal-500/5 p-4 space-y-4">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          <ScoreBadge label="Script" score={rating.scriptScore} />
+          <ScoreBadge label="Caption" score={rating.captionScore} />
+          <div className="text-sm mt-0.5">{rating.verdict}</div>
+        </div>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] px-2"
+          title="Close panel"
+        >
+          X
+        </button>
+      </div>
+
+      {/* Script dimension scores */}
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-teal-300 font-semibold mb-2">
+          Script scores
+        </div>
+        <div className="grid grid-cols-5 gap-2">
+          {scriptDims.map((d) => (
+            <div key={d.label} className="text-center">
+              <div
+                className={`text-base font-bold ${
+                  d.value >= 8 ? "text-emerald-300" : d.value >= 6 ? "text-amber-300" : "text-red-300"
+                }`}
+              >
+                {d.value}
+              </div>
+              <div className="text-[9px] uppercase tracking-wider text-[var(--color-muted)] leading-tight mt-0.5">
+                {d.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Caption dimension scores */}
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-teal-300 font-semibold mb-2">
+          Caption scores
+        </div>
+        <div className="grid grid-cols-5 gap-2">
+          {captionDims.map((d) => (
+            <div key={d.label} className="text-center">
+              <div
+                className={`text-base font-bold ${
+                  d.value >= 8 ? "text-emerald-300" : d.value >= 6 ? "text-amber-300" : "text-red-300"
+                }`}
+              >
+                {d.value}
+              </div>
+              <div className="text-[9px] uppercase tracking-wider text-[var(--color-muted)] leading-tight mt-0.5">
+                {d.label}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Strengths + improvements */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+        {rating.strengths.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-emerald-300 font-semibold mb-1">
+              Working well
+            </div>
+            <ul className="space-y-1 list-disc list-inside text-[var(--color-text)]">
+              {rating.strengths.map((s, i) => (
+                <li key={i}>{s}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {rating.improvements.length > 0 && (
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-amber-300 font-semibold mb-1">
+              Improve
+            </div>
+            <ul className="space-y-1 list-disc list-inside text-[var(--color-text)]">
+              {rating.improvements.map((w, i) => (
+                <li key={i}>{w}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* 2 caption rewrites */}
+      {rating.captionRewrites.length > 0 && (
+        <div>
+          <div className="text-[10px] uppercase tracking-wider text-teal-300 font-semibold mb-2">
+            Try these captions
+          </div>
+          <div className="space-y-2">
+            {rating.captionRewrites.map((r, i) => (
+              <div
+                key={i}
+                className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-3"
+              >
+                <div className="text-sm leading-relaxed mb-2 whitespace-pre-wrap">{r}</div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => onUseCaptionRewrite(r)}
+                    className="rounded bg-teal-500/20 text-teal-200 border border-teal-500/40 px-3 py-1 text-xs font-semibold hover:bg-teal-500/30"
+                  >
+                    Use this caption
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onCopy(r)}
+                    className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1 text-xs hover:bg-[var(--color-surface-hover)]"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

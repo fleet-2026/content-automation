@@ -12,6 +12,7 @@ import {
 } from "@/lib/guides";
 import { generateVideoPromptText } from "@/lib/ai/video-prompt";
 import { rateHookForVirality, type HookRating } from "@/lib/ai/rate-hook";
+import { rateContentQuality, type ContentRating } from "@/lib/ai/rate-content";
 import { publishDraft } from "@/lib/publish";
 import type { PublishResult } from "@/lib/publish";
 import { requireUser } from "@/lib/auth-helpers";
@@ -202,6 +203,61 @@ export async function replaceHook(slug: string, newHook: string) {
   revalidatePath(`/daily-post/${slug}`);
   revalidatePath(`/guides/${slug}`);
   return { ok };
+}
+
+/** Rate the guide's script + caption quality. Returns per-dimension
+ *  scores and 2 alternative captions the admin can swap in. */
+export async function rateContent(slug: string): Promise<{
+  ok: boolean;
+  rating?: ContentRating;
+  error?: string;
+}> {
+  let userId: string;
+  try {
+    userId = await requireUser();
+  } catch {
+    return { ok: false, error: "unauthenticated" };
+  }
+  const rl = await rateLimit(`rate-content:${userId}`, {
+    max: 60,
+    windowMs: 60 * 60 * 1000,
+  });
+  if (!rl.allowed) {
+    return {
+      ok: false,
+      error: `Rate limit hit — try again in ${rl.retryAfterSec}s`,
+    };
+  }
+  const guide = await prisma.dailyGuide.findUnique({
+    where: { slug },
+    select: { title: true, hook: true, script: true, caption: true, hashtags: true },
+  });
+  if (!guide) return { ok: false, error: "guide_not_found" };
+  if (!guide.script.trim() && !guide.caption.trim()) {
+    return { ok: false, error: "Fill in the script or caption first" };
+  }
+  try {
+    const rating = await rateContentQuality({
+      title: guide.title,
+      hook: guide.hook,
+      script: guide.script,
+      caption: guide.caption,
+      hashtags: guide.hashtags,
+    });
+    // Persist scores so the tracker table can display them without re-running AI.
+    await prisma.dailyGuide.update({
+      where: { slug },
+      data: {
+        scriptScore: Math.round(rating.scriptScore),
+        captionScore: Math.round(rating.captionScore),
+      },
+    });
+    revalidatePath(`/daily-post`);
+    revalidatePath(`/tracker`);
+    return { ok: true, rating };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
 }
 
 /** Manual save for the video-prompt textarea (after the admin edits the

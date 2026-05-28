@@ -494,6 +494,12 @@ model DailyGuide {
   /// in draft state — once the user publishes, /daily-post writes the URL here.
   sourceUrl       String?   @db.Text
 
+  /// AI quality scores (1-10) from the "Rate script & caption" tool.
+  /// Null until rated; persisted so the tracker table can display them
+  /// without re-running the AI.
+  scriptScore     Int?
+  captionScore    Int?
+
   // Lifecycle / publishing
   /// `false` keeps the guide off /guides even after import. Flip to true when
   /// it's ready for SEO. Lets the admin draft + iterate without exposing

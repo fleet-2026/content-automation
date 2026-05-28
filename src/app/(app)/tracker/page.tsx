@@ -25,6 +25,7 @@ export default async function TrackerPage() {
   const withMedia = sorted.filter((g) => !!g.videoUrl || g.imageUrls.length > 0).length;
   const published = sorted.filter((g) => g.isPublished).length;
   const postedToSocial = sorted.filter((g) => g.postedPlatforms.length > 0).length;
+  const rated = sorted.filter((g) => g.scriptScore != null || g.captionScore != null).length;
 
   return (
     <div className="px-8 py-10 max-w-7xl">
@@ -34,7 +35,7 @@ export default async function TrackerPage() {
             Quick daily <span className="font-italic-accent text-blush">posts.</span>
           </h1>
           <p className="text-sm text-[var(--color-muted)] mt-1">
-            {total} guides · {withScript} scripted · {withMedia} with media · {published} live · {postedToSocial} on socials
+            {total} guides · {withScript} scripted · {withMedia} with media · {published} live · {postedToSocial} on socials · {rated} rated
           </p>
         </div>
         <Link
@@ -67,6 +68,8 @@ export default async function TrackerPage() {
             postedPlatforms: g.postedPlatforms,
             hasScript: !!g.script?.trim(),
             hasCaption: !!g.caption?.trim(),
+            scriptScore: g.scriptScore,
+            captionScore: g.captionScore,
           }))}
         />
       )}
