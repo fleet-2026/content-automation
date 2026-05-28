@@ -68,7 +68,11 @@ export async function ttPublishToInbox(
   const postInfo: Record<string, unknown> = {
     privacy_level: "SELF_ONLY",
   };
-  if (input.title) postInfo.title = input.title.slice(0, 150);
+  // TikTok's title field doubles as the video caption. The API docs
+  // say 150 chars but recent API versions accept up to 2200 chars
+  // for most regions. Send the full caption so it's pre-filled in
+  // the TikTok inbox — user just taps "Post".
+  if (input.title) postInfo.title = input.title.slice(0, 2200);
 
   const initRes = await fetch(`${API}/post/publish/inbox/video/init/`, {
     method: "POST",

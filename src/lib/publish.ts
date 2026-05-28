@@ -171,9 +171,20 @@ export async function publishDraft(
             };
           }
           const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
+          // Build the full caption + hashtags so TikTok pre-fills it
+          // in the inbox — user just taps "Post" instead of pasting.
+          const ttCaption = [
+            draft.caption?.trim(),
+            draft.hashtags?.length
+              ? draft.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n");
+
           const out = await ttPublishToInbox(ttAccessToken, {
             videoBuffer,
-            title: draft.caption?.slice(0, 150) || "Video",
+            title: ttCaption || "Video",
           });
           return {
             platform,
