@@ -14,8 +14,12 @@
 
 const API = "https://open.tiktokapis.com/v2";
 
-/** TikTok chunk constraints: 5 MB min, 64 MB max. */
-const TT_MAX_CHUNK = 64 * 1024 * 1024; // 64 MB
+/** TikTok chunk constraints: 5 MB min, 64 MB max.
+ *  Use 10 MB as the standard chunk size — matches TikTok's own
+ *  documentation examples and avoids "invalid chunk count" errors
+ *  that happen with computed even-split sizes. */
+const TT_MAX_CHUNK = 64 * 1024 * 1024; // 64 MB (single-chunk threshold)
+const TT_STD_CHUNK = 10 * 1024 * 1024; // 10 MB (standard multi-chunk size)
 
 export type TTPublishInput = {
   videoUrl?: string;
@@ -24,18 +28,19 @@ export type TTPublishInput = {
 };
 
 /**
- * Calculate chunk parameters that keep every chunk within TikTok's
- * 5–64 MB range. Key insight: derive totalChunks from the max limit
- * FIRST, then compute an even chunkSize from that — avoids a tiny
- * leftover chunk that TikTok would reject.
+ * Calculate chunk parameters for TikTok's FILE_UPLOAD.
+ *
+ * For videos ≤ 64 MB: single chunk (chunk_size = video_size).
+ * For videos > 64 MB: use a fixed 10 MB chunk size. TikTok's API
+ * rejects computed even-split sizes ("total chunk count is invalid")
+ * but accepts a standard fixed chunk_size with the last chunk smaller.
  */
 function computeChunks(videoSize: number) {
   if (videoSize <= TT_MAX_CHUNK) {
     return { chunkSize: videoSize, totalChunks: 1 };
   }
-  const totalChunks = Math.ceil(videoSize / TT_MAX_CHUNK);
-  const chunkSize = Math.ceil(videoSize / totalChunks);
-  return { chunkSize, totalChunks };
+  const totalChunks = Math.ceil(videoSize / TT_STD_CHUNK);
+  return { chunkSize: TT_STD_CHUNK, totalChunks };
 }
 
 export async function ttPublishToInbox(
