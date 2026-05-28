@@ -271,6 +271,16 @@ export default function PostEditor({ post }: { post: DailyPost }) {
       const res = await publishToSocial(post.slug, selectedPlatforms);
       if (!res.ok) throw new Error(res.error ?? "Publish failed");
       setPublishResults(res.results ?? []);
+
+      // Auto-copy caption to clipboard when TikTok succeeds — the user
+      // just opens TikTok and pastes. Inbox mode can't pre-fill captions.
+      const ttOk = res.results?.find((r) => r.platform === "TIKTOK" && r.ok);
+      if (ttOk) {
+        const ttCaption =
+          caption.trim() +
+          (hashtagsRaw.trim() ? "\n\n" + hashtagsRaw.trim() : "");
+        copy(ttCaption);
+      }
     } catch (e) {
       setPublishError((e as Error).message);
     } finally {
@@ -1406,8 +1416,8 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                 {/* TikTok inbox: show caption to copy since inbox mode can't set it */}
                 {r.platform === "TIKTOK" && r.ok && (
                   <div className="mt-2 space-y-2">
-                    <div className="text-[11px] text-amber-300">
-                      Video sent to your TikTok inbox — open TikTok app → post it → paste caption below:
+                    <div className="text-[11px] text-amber-300 font-semibold">
+                      ✓ Caption copied to clipboard — open TikTok app → tap the video → paste → Post
                     </div>
                     <div className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-2.5 text-[11px] leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto text-[var(--color-text)]">
                       {caption.trim()}
