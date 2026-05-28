@@ -510,6 +510,10 @@ model DailyGuide {
   /// Stored as ["INSTAGRAM","TIKTOK","FACEBOOK"] — set by the daily-post editor
   /// after a successful social publish so the list page shows posted badges.
   postedPlatforms String[]  @default([])
+  /// Content source: "library" for the main daily-post content library,
+  /// "tracker" for the 31-day Notion tracker challenge posts.
+  /// Lets /daily-post and /tracker show separate content from the same table.
+  source          String    @default("library")
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
 
@@ -517,6 +521,7 @@ model DailyGuide {
   // and for slug-based fetches (already covered by @unique on slug).
   @@index([isPublished, publishedAt])
   @@index([index])
+  @@index([source])
   @@map("daily_guides")
 }
 

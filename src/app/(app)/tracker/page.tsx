@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { tryGetUser } from "@/lib/auth-helpers";
-import { listAllGuidesAdmin } from "@/lib/guides";
+import { listTrackerGuides } from "@/lib/guides";
 import TrackerTable from "./tracker-table";
 
 export const metadata: Metadata = {
@@ -17,7 +17,7 @@ export default async function TrackerPage() {
   const userId = await tryGetUser();
   if (!userId) redirect("/login");
 
-  const guides = await listAllGuidesAdmin();
+  const guides = await listTrackerGuides();
   const sorted = [...guides].sort((a, b) => (a.index ?? 999) - (b.index ?? 999));
 
   const total = sorted.length;

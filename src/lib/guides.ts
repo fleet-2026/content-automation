@@ -32,6 +32,7 @@ export type GuideAdmin = GuidePublic & {
   postedPlatforms: string[];
   scriptScore: number | null;
   captionScore: number | null;
+  source: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -85,6 +86,22 @@ export async function listAllGuidesAdmin(): Promise<GuideAdmin[]> {
     return rows.map(toAdmin);
   } catch (e) {
     console.warn("[guides] listAllGuidesAdmin failed:", (e as Error).message);
+    return [];
+  }
+}
+
+/** Tracker variant — returns only guides with source = "tracker".
+ *  Used by /tracker (quick daily posts) so it doesn't duplicate the
+ *  main /daily-post library. */
+export async function listTrackerGuides(): Promise<GuideAdmin[]> {
+  try {
+    const rows = await prisma.dailyGuide.findMany({
+      where: { source: "tracker" },
+      orderBy: [{ index: "asc" }, { createdAt: "desc" }],
+    });
+    return rows.map(toAdmin);
+  } catch (e) {
+    console.warn("[guides] listTrackerGuides failed:", (e as Error).message);
     return [];
   }
 }
@@ -165,6 +182,7 @@ type RawGuide = {
   postedPlatforms: string[];
   scriptScore: number | null;
   captionScore: number | null;
+  source: string;
   publishedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -197,6 +215,7 @@ function toAdmin(r: RawGuide): GuideAdmin {
     postedPlatforms: r.postedPlatforms,
     scriptScore: r.scriptScore,
     captionScore: r.captionScore,
+    source: r.source,
     createdAt: r.createdAt,
     updatedAt: r.updatedAt,
   };
