@@ -62,13 +62,21 @@ export async function ttPublishToInbox(
         chunk_size: chunkSize,
         total_chunk_count: totalChunks,
       };
+
+  // TikTok's Content Posting API v2 now requires post_info even for
+  // inbox mode — without it the init returns 400 invalid_params.
+  const postInfo: Record<string, unknown> = {
+    privacy_level: "SELF_ONLY",
+  };
+  if (input.title) postInfo.title = input.title.slice(0, 150);
+
   const initRes = await fetch(`${API}/post/publish/inbox/video/init/`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ source_info: sourceInfo }),
+    body: JSON.stringify({ source_info: sourceInfo, post_info: postInfo }),
   });
   if (!initRes.ok) {
     const body = await initRes.text();

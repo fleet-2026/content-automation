@@ -1400,7 +1400,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                     </a>
                   )}
                   {r.error && !(r.platform === "TIKTOK" && r.ok) && (
-                    <span className="ml-auto truncate max-w-xs">{r.error}</span>
+                    <span className="ml-auto text-right break-all text-[10px] leading-tight max-w-md">{r.error}</span>
                   )}
                 </div>
                 {/* TikTok inbox: show caption to copy since inbox mode can't set it */}

@@ -171,7 +171,10 @@ export async function publishDraft(
             };
           }
           const videoBuffer = Buffer.from(await videoRes.arrayBuffer());
-          const out = await ttPublishToInbox(ttAccessToken, { videoBuffer });
+          const out = await ttPublishToInbox(ttAccessToken, {
+            videoBuffer,
+            title: draft.caption?.slice(0, 150) || "Video",
+          });
           return {
             platform,
             ok: true,
