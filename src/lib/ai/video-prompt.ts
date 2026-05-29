@@ -159,9 +159,9 @@ export async function generateVideoPromptText(
   input: VideoPromptInput,
 ): Promise<string> {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key || !key.startsWith("sk-ant")) {
+  if (!key) {
     throw new Error(
-      "ANTHROPIC_API_KEY missing or malformed (server env). Cannot generate.",
+      "ANTHROPIC_API_KEY missing (server env). Cannot generate.",
     );
   }
   const client = new Anthropic({ apiKey: key });

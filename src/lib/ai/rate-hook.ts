@@ -120,8 +120,8 @@ function parseRating(raw: string): HookRating {
 
 export async function rateHookForVirality(input: RateHookInput): Promise<HookRating> {
   const key = process.env.ANTHROPIC_API_KEY;
-  if (!key || !key.startsWith("sk-ant")) {
-    throw new Error("ANTHROPIC_API_KEY missing or malformed (server env).");
+  if (!key) {
+    throw new Error("ANTHROPIC_API_KEY missing (server env).");
   }
   const client = new Anthropic({ apiKey: key });
   const msg = await client.messages.create({

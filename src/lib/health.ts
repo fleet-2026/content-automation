@@ -133,15 +133,7 @@ function checkAnthropic(): IntegrationCheck {
   if (!key) {
     return { id, label, status: "missing_env", detail: "ANTHROPIC_API_KEY not set" };
   }
-  if (!key.startsWith("sk-ant-")) {
-    return {
-      id,
-      label,
-      status: "error",
-      detail: "ANTHROPIC_API_KEY does not start with expected prefix sk-ant-",
-    };
-  }
-  return { id, label, status: "ok", detail: "key present, prefix valid" };
+  return { id, label, status: "ok", detail: "key present" };
 }
 
 function checkOpenAI(): IntegrationCheck {

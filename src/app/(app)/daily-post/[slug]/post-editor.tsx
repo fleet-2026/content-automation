@@ -895,7 +895,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
             type="button"
             onClick={runRateContent}
             disabled={isRatingContent || (!script.trim() && !caption.trim())}
-            className="text-[11px] rounded bg-teal-500/20 text-teal-200 border border-teal-500/40 px-3 py-1.5 font-semibold hover:bg-teal-500/30 disabled:opacity-50"
+            className="text-[11px] rounded bg-[var(--color-text)] text-[var(--color-text-on-dark)] px-3 py-1.5 font-semibold hover:opacity-90 disabled:opacity-50"
           >
             {isRatingContent ? "Rating..." : "Rate script & caption"}
           </button>
