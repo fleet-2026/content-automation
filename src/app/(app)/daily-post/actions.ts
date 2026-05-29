@@ -473,7 +473,7 @@ export async function checkAccountHealth(): Promise<{
   }
   const dbAccounts = await prisma.socialAccount.findMany({
     where: { userId, isActive: true, platform: { in: ["INSTAGRAM", "TIKTOK", "FACEBOOK"] } },
-    select: { platform: true, platformUserId: true, accessToken: true, tokenExpiry: true },
+    select: { id: true, platform: true, platformUserId: true, accessToken: true, refreshToken: true, tokenExpiry: true },
   });
   const results = await Promise.all(
     dbAccounts.map(async (acct) => {
@@ -520,11 +520,40 @@ export async function checkAccountHealth(): Promise<{
       }
       if (acct.platform === "TIKTOK") {
         const expired = acct.tokenExpiry ? acct.tokenExpiry < new Date() : false;
+        if (expired && acct.refreshToken) {
+          // Auto-refresh the expired TikTok token
+          try {
+            const { tiktokRefresh } = await import("@/lib/platforms/tiktok");
+            const rt = decrypt(acct.refreshToken);
+            const fresh = await tiktokRefresh(rt);
+            const { encrypt } = await import("@/lib/crypto");
+            await prisma.socialAccount.update({
+              where: { id: acct.id },
+              data: {
+                accessToken: encrypt(fresh.accessToken),
+                refreshToken: encrypt(fresh.refreshToken),
+                tokenExpiry: fresh.expiresAt,
+                lastError: null,
+              },
+            });
+            return {
+              platform: "TIKTOK",
+              ok: true,
+              detail: `Refreshed — valid until ${fresh.expiresAt.toISOString()}`,
+            };
+          } catch (e) {
+            return {
+              platform: "TIKTOK",
+              ok: false,
+              detail: `Refresh failed: ${(e as Error).message}`,
+            };
+          }
+        }
         return {
           platform: "TIKTOK",
           ok: !expired,
           detail: expired
-            ? `Token expired ${acct.tokenExpiry?.toISOString()}`
+            ? `Token expired — no refresh token, reconnect from /dashboard`
             : `Valid until ${acct.tokenExpiry?.toISOString() ?? "unknown"}`,
         };
       }
