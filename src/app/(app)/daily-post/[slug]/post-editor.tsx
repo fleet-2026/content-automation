@@ -13,6 +13,7 @@ import {
   rateContent,
   publishToSocial,
   checkAccountHealth,
+  getTikTokCaptionUrl,
 } from "../actions";
 import type { Platform } from "@prisma/client";
 import {
@@ -299,6 +300,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const [publishResults, setPublishResults] = useState<
     { platform: string; ok: boolean; url?: string; error?: string }[] | null
   >(null);
+  const [ttCaptionQr, setTtCaptionQr] = useState<string | null>(null);
 
   // Account health check — runs on mount to show which accounts are valid
   const [accountHealth, setAccountHealth] = useState<
@@ -317,20 +319,26 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const runPublishToSocial = async () => {
     setPublishError(null);
     setPublishResults(null);
+    setTtCaptionQr(null);
     setIsPublishing(true);
     try {
       const res = await publishToSocial(post.slug, selectedPlatforms);
       if (!res.ok) throw new Error(res.error ?? "Publish failed");
       setPublishResults(res.results ?? []);
 
-      // Auto-copy caption to clipboard when TikTok succeeds — the user
-      // just opens TikTok and pastes. Inbox mode can't pre-fill captions.
+      // When TikTok publish succeeds, generate a QR-code URL so the user
+      // can scan it on their phone to grab the caption (desktop clipboard
+      // doesn't transfer to mobile).
       const ttOk = res.results?.find((r) => r.platform === "TIKTOK" && r.ok);
       if (ttOk) {
         const ttCaption =
           caption.trim() +
           (hashtagsRaw.trim() ? "\n\n" + hashtagsRaw.trim() : "");
         copy(ttCaption);
+        try {
+          const url = await getTikTokCaptionUrl(post.slug);
+          setTtCaptionQr(url);
+        } catch { /* non-critical */ }
       }
     } catch (e) {
       setPublishError((e as Error).message);
@@ -1502,12 +1510,35 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                     <span className="ml-auto text-right break-all text-[10px] leading-tight max-w-md">{r.error}</span>
                   )}
                 </div>
-                {/* TikTok inbox: show caption to copy since inbox mode can't set it */}
+                {/* TikTok inbox: QR code + caption for mobile paste */}
                 {r.platform === "TIKTOK" && r.ok && (
-                  <div className="mt-2 space-y-2">
+                  <div className="mt-2 space-y-3">
                     <div className="text-[11px] text-amber-300 font-semibold">
-                      ✓ Caption copied to clipboard — open TikTok app → tap the video → paste → Post
+                      ✓ Video sent to TikTok inbox — scan QR on your phone to get the caption
                     </div>
+
+                    {/* QR code for mobile caption access */}
+                    {ttCaptionQr && (
+                      <div className="flex items-start gap-4">
+                        <div className="shrink-0 rounded-lg bg-white p-2">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={`https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(ttCaptionQr)}`}
+                            alt="Scan to get caption on phone"
+                            width={140}
+                            height={140}
+                          />
+                        </div>
+                        <div className="space-y-1.5 text-[11px] text-[var(--color-muted)]">
+                          <p><strong className="text-[var(--color-text)]">On your phone:</strong></p>
+                          <p>1. Scan this QR code</p>
+                          <p>2. Tap "Copy Caption"</p>
+                          <p>3. Open TikTok → tap the draft → paste</p>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Caption preview + desktop copy fallback */}
                     <div className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-2.5 text-[11px] leading-relaxed whitespace-pre-wrap max-h-32 overflow-y-auto text-[var(--color-text)]">
                       {caption.trim()}
                       {hashtagsRaw.trim() ? "\n\n" + hashtagsRaw.trim() : ""}
@@ -1522,7 +1553,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
                       }
                       className="rounded bg-[var(--color-text)] text-[var(--color-text-on-dark)] px-3 py-1.5 text-xs font-semibold hover:opacity-90"
                     >
-                      Copy TikTok caption
+                      Copy caption (desktop)
                     </button>
                   </div>
                 )}

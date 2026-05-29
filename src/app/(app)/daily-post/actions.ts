@@ -577,3 +577,11 @@ export async function unpublishAll() {
   revalidatePath(`/sitemap.xml`);
   return { ok: true, unpublished };
 }
+
+/** Build a time-limited URL for the mobile TikTok caption page. */
+export async function getTikTokCaptionUrl(slug: string): Promise<string> {
+  const { captionHmac } = await import("@/app/api/tt-caption/route");
+  const { h, t } = captionHmac(slug);
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://creator-os-delta.vercel.app";
+  return `${base}/api/tt-caption?slug=${encodeURIComponent(slug)}&h=${h}&t=${t}`;
+}
