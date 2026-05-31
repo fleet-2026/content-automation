@@ -44,33 +44,56 @@ function verify(slug: string, h: string, t: string): boolean {
 
 export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get("slug") ?? "";
+  const draftId = req.nextUrl.searchParams.get("draft") ?? "";
   const h = req.nextUrl.searchParams.get("h") ?? "";
   const t = req.nextUrl.searchParams.get("t") ?? "";
 
-  if (!slug || !h || !verify(slug, h, t)) {
+  const key = slug || draftId;
+  if (!key || !h || !verify(key, h, t)) {
     return new NextResponse("Link expired or invalid. Publish again to get a fresh QR code.", {
       status: 403,
       headers: { "Content-Type": "text/plain" },
     });
   }
 
-  const guide = await prisma.dailyGuide.findUnique({
-    where: { slug },
-    select: { title: true, caption: true, hashtags: true },
-  });
+  let title = "";
+  let fullCaption = "";
 
-  if (!guide) {
-    return new NextResponse("Post not found.", { status: 404, headers: { "Content-Type": "text/plain" } });
+  if (slug) {
+    const guide = await prisma.dailyGuide.findUnique({
+      where: { slug },
+      select: { title: true, caption: true, hashtags: true },
+    });
+    if (!guide) {
+      return new NextResponse("Post not found.", { status: 404, headers: { "Content-Type": "text/plain" } });
+    }
+    title = title;
+    fullCaption = [
+      guide.caption?.trim(),
+      guide.hashtags?.length
+        ? guide.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")
+        : "",
+    ].filter(Boolean).join("\n\n");
+  } else {
+    const draft = await prisma.draft.findUnique({
+      where: { id: draftId },
+      select: { caption: true, selectedHook: true, hashtags: true },
+    });
+    if (!draft) {
+      return new NextResponse("Draft not found.", { status: 404, headers: { "Content-Type": "text/plain" } });
+    }
+    title = draft.selectedHook ?? "TikTok Post";
+    const parts: string[] = [];
+    if (draft.selectedHook && draft.caption) {
+      parts.push(`${draft.selectedHook}\n\n${draft.caption.replace(new RegExp(`^${draft.selectedHook.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*`), "")}`);
+    } else {
+      parts.push(draft.caption ?? "");
+    }
+    if (draft.hashtags?.length) {
+      parts.push(draft.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" "));
+    }
+    fullCaption = parts.filter(Boolean).join("\n\n");
   }
-
-  const fullCaption = [
-    guide.caption?.trim(),
-    guide.hashtags?.length
-      ? guide.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" ")
-      : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
 
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -78,7 +101,7 @@ export async function GET(req: NextRequest) {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="robots" content="noindex" />
-  <title>TikTok Caption — ${escHtml(guide.title)}</title>
+  <title>TikTok Caption — ${escHtml(title)}</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #111; color: #eee; padding: 20px; min-height: 100dvh; }
@@ -94,7 +117,7 @@ export async function GET(req: NextRequest) {
 </head>
 <body>
   <h1>TikTok Caption</h1>
-  <h2>${escHtml(guide.title)}</h2>
+  <h2>${escHtml(title)}</h2>
   <div class="caption" id="cap">${escHtml(fullCaption)}</div>
   <button class="btn copy-btn" id="copyBtn" onclick="copyCaption()">Copy Caption</button>
   <p class="hint">Paste into TikTok → Post</p>

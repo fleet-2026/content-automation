@@ -116,3 +116,11 @@ export async function setDraftPlatforms(
   if (r.count === 0) throw new Error("not_found_or_forbidden");
   return { ok: true };
 }
+
+/** Build a time-limited QR URL for the mobile TikTok caption page (draft variant). */
+export async function getDraftCaptionUrl(draftId: string): Promise<string> {
+  const { captionHmac } = await import("@/app/api/tt-caption/route");
+  const { h, t } = captionHmac(draftId);
+  const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://creator-os-delta.vercel.app";
+  return `${base}/api/tt-caption?draft=${encodeURIComponent(draftId)}&h=${h}&t=${t}`;
+}

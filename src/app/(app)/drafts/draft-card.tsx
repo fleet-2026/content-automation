@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Send, Edit, Trash2, ExternalLink, Images, Check, AlertTriangle, Eye, Music2, CheckCircle2, RefreshCw } from "lucide-react";
 import type { Platform, DraftStatus } from "@prisma/client";
-import { publishDraftNow, deleteDraft, saveDraft, setDraftPlatforms } from "../compose/actions";
+import { publishDraftNow, deleteDraft, saveDraft, setDraftPlatforms, getDraftCaptionUrl } from "../compose/actions";
 import { parseMediaUrls, parseMusicUrl } from "@/lib/media-urls";
 import { stripHookPrefix } from "@/lib/captions";
 import { MediaPreviewModal } from "@/components/media-preview-modal";
@@ -120,6 +120,47 @@ function CopyCaptionButton({ text, label }: { text: string; label: string }) {
     >
       {copied ? "✓ Copied" : label}
     </button>
+  );
+}
+
+/** QR code button for TikTok caption — shows a QR code on click
+ *  so the user can scan on their phone and paste the caption. */
+function TikTokQrButton({ draftId }: { draftId: string }) {
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const toggle = async () => {
+    if (qrUrl) { setQrUrl(null); return; }
+    setLoading(true);
+    try {
+      const url = await getDraftCaptionUrl(draftId);
+      setQrUrl(url);
+    } catch { /* non-critical */ }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <span className="inline-flex items-center">
+      <button
+        type="button"
+        onClick={toggle}
+        className="text-xs px-2 py-0.5 rounded font-medium inline-flex items-center gap-1 ml-1 bg-cyan-100 hover:bg-cyan-200 text-cyan-900 transition"
+        title="Show QR code — scan on phone to copy caption"
+      >
+        {loading ? "…" : qrUrl ? "Hide QR" : "QR"}
+      </button>
+      {qrUrl && (
+        <span className="ml-2 inline-block rounded bg-white p-1">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(qrUrl)}`}
+            alt="Scan to copy caption"
+            width={80}
+            height={80}
+          />
+        </span>
+      )}
+    </span>
   );
 }
 
@@ -597,14 +638,17 @@ export function DraftCard({
                             — {cls.friendly}
                           </span>
                           {r.platform === "TIKTOK" && (
-                            <CopyCaptionButton
-                              text={buildShareableCaption(draft, {
-                                forTikTok: true,
-                                tiktokKeyword:
-                                  extractKeyword(draft.caption) ?? undefined,
-                              })}
-                              label="Copy caption for TikTok"
-                            />
+                            <>
+                              <CopyCaptionButton
+                                text={buildShareableCaption(draft, {
+                                  forTikTok: true,
+                                  tiktokKeyword:
+                                    extractKeyword(draft.caption) ?? undefined,
+                                })}
+                                label="Copy caption for TikTok"
+                              />
+                              <TikTokQrButton draftId={draft.id} />
+                            </>
                           )}
                         </>
                       ) : (
@@ -856,17 +900,20 @@ export function DraftCard({
                       </a>
                     )}
                     {/* TikTok inbox uploads arrive with NO caption (API
-                        limitation). One-tap copy button so the user
-                        can paste the caption into TikTok app. */}
+                        limitation). One-tap copy button + QR code so the
+                        user can paste the caption into TikTok app. */}
                     {r.platform === "TIKTOK" && r.ok && cls.friendly && (
-                      <CopyCaptionButton
-                        text={buildShareableCaption(draft, {
-                          forTikTok: true,
-                          tiktokKeyword:
-                            extractKeyword(draft.caption) ?? undefined,
-                        })}
-                        label="Copy TikTok caption"
-                      />
+                      <>
+                        <CopyCaptionButton
+                          text={buildShareableCaption(draft, {
+                            forTikTok: true,
+                            tiktokKeyword:
+                              extractKeyword(draft.caption) ?? undefined,
+                          })}
+                          label="Copy TikTok caption"
+                        />
+                        <TikTokQrButton draftId={draft.id} />
+                      </>
                     )}
                   </li>
                 );
