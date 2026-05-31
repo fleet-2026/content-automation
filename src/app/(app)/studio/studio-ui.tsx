@@ -693,6 +693,7 @@ function OpenartTab() {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [characterId, setCharacterId] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [imgDragOver, setImgDragOver] = useState(false);
   const [pending, start] = useTransition();
   const [result, setResult] = useState<StudioAsset | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -714,9 +715,7 @@ function OpenartTab() {
     };
   }, []);
 
-  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function uploadImageFile(file: File) {
     setErr(null);
     setUploading(true);
     try {
@@ -733,8 +732,14 @@ function OpenartTab() {
       setErr(e2 instanceof Error ? e2.message : String(e2));
     } finally {
       setUploading(false);
-      e.target.value = "";
     }
+  }
+
+  async function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadImageFile(file);
+    e.target.value = "";
   }
 
   function go() {
@@ -887,42 +892,64 @@ function OpenartTab() {
 
         {showImageInput && (
           <Field label={kind === "video" ? "Reference image (image→video)" : "Source image (edit)"}>
-            <div className="flex items-center gap-2">
-              <label className="bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] rounded-md px-3 py-1.5 text-xs font-medium cursor-pointer inline-flex items-center gap-1.5">
-                {uploading ? (
-                  <>
-                    <Loader2 className="w-3 h-3 animate-spin" /> Uploading…
-                  </>
-                ) : (
-                  <>📎 {imageUrl ? "Replace" : "Upload"}</>
-                )}
-                <input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageUpload}
-                  className="hidden"
-                />
-              </label>
-              {imageUrl && (
-                <>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={imageUrl}
-                    alt="reference"
-                    width={32}
-                    height={32}
-                    loading="lazy"
-                    decoding="async"
-                    className="w-8 h-8 object-cover rounded border border-[var(--color-border)]"
-                  />
-                  <button
-                    onClick={() => setImageUrl(null)}
-                    className="text-[11px] text-[var(--color-muted)] hover:text-red-700"
-                  >
-                    Remove
-                  </button>
-                </>
+            <div
+              onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setImgDragOver(true); } }}
+              onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setImgDragOver(false); }}
+              onDrop={async (e) => {
+                e.preventDefault();
+                setImgDragOver(false);
+                const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith("image/"));
+                if (file) await uploadImageFile(file);
+                else setErr("Drop an image file (JPEG, PNG, WebP)");
+              }}
+              className={`rounded-lg border-2 border-dashed p-3 transition ${
+                imgDragOver
+                  ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
+                  : "border-[var(--color-border)]"
+              }`}
+            >
+              {imgDragOver && (
+                <div className="mb-2 text-center text-xs font-medium text-[var(--color-accent)]">
+                  Drop image here
+                </div>
               )}
+              <div className="flex items-center gap-2">
+                <label className="bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] rounded-md px-3 py-1.5 text-xs font-medium cursor-pointer inline-flex items-center gap-1.5">
+                  {uploading ? (
+                    <>
+                      <Loader2 className="w-3 h-3 animate-spin" /> Uploading…
+                    </>
+                  ) : (
+                    <>{imageUrl ? "Replace" : "Upload or drag image"}</>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageUpload}
+                    className="hidden"
+                  />
+                </label>
+                {imageUrl && (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={imageUrl}
+                      alt="reference"
+                      width={32}
+                      height={32}
+                      loading="lazy"
+                      decoding="async"
+                      className="w-8 h-8 object-cover rounded border border-[var(--color-border)]"
+                    />
+                    <button
+                      onClick={() => setImageUrl(null)}
+                      className="text-[11px] text-[var(--color-muted)] hover:text-red-700"
+                    >
+                      Remove
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </Field>
         )}

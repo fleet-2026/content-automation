@@ -87,25 +87,9 @@ function DraftTab() {
   const [pending, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [audioDragOver, setAudioDragOver] = useState(false);
 
-  function go() {
-    if (!thought.trim()) return;
-    setErr(null);
-    setDrafts([]);
-    start(async () => {
-      try {
-        const r = await draftFromThought(thought);
-        setDrafts(r.drafts);
-        setSamplesUsed(r.samplesUsed);
-      } catch (e) {
-        setErr(String((e as Error).message ?? e));
-      }
-    });
-  }
-
-  async function handleAudioUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  async function uploadAudioFile(file: File) {
     setErr(null);
     setUploading(true);
     setDrafts([]);
@@ -125,17 +109,61 @@ function DraftTab() {
       setThought(r.transcript);
       setDrafts(r.drafts);
       setSamplesUsed(r.samplesUsed);
-    } catch (e) {
-      setErr(String((e as Error).message ?? e));
+    } catch (e2) {
+      setErr(String((e2 as Error).message ?? e2));
     } finally {
       setUploading(false);
     }
   }
 
+  function go() {
+    if (!thought.trim()) return;
+    setErr(null);
+    setDrafts([]);
+    start(async () => {
+      try {
+        const r = await draftFromThought(thought);
+        setDrafts(r.drafts);
+        setSamplesUsed(r.samplesUsed);
+      } catch (e) {
+        setErr(String((e as Error).message ?? e));
+      }
+    });
+  }
+
+  async function handleAudioUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadAudioFile(file);
+    e.target.value = "";
+  }
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
       <div className="space-y-4">
-        <div>
+        <div
+          onDragOver={(e) => { if (e.dataTransfer.types.includes("Files")) { e.preventDefault(); setAudioDragOver(true); } }}
+          onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setAudioDragOver(false); }}
+          onDrop={async (e) => {
+            e.preventDefault();
+            setAudioDragOver(false);
+            const file = Array.from(e.dataTransfer.files).find((f) =>
+              /^(audio|video)\//.test(f.type),
+            );
+            if (file) await uploadAudioFile(file);
+            else setErr("Drop an audio or video file to transcribe.");
+          }}
+          className={`rounded-xl border-2 border-dashed p-4 transition ${
+            audioDragOver
+              ? "border-[var(--color-accent)] bg-[var(--color-accent)]/10"
+              : "border-transparent"
+          }`}
+        >
+          {audioDragOver && (
+            <div className="mb-2 text-center text-sm font-medium text-[var(--color-accent)]">
+              Drop audio/video to transcribe
+            </div>
+          )}
           <label className="block text-xs uppercase tracking-wider text-[var(--color-muted)] mb-1.5">
             Your raw thought
           </label>
@@ -143,7 +171,7 @@ function DraftTab() {
             value={thought}
             onChange={(e) => setThought(e.target.value)}
             rows={6}
-            placeholder="Type your idea, or upload a voice note. Doesn't have to be polished — just dump it."
+            placeholder="Type your idea, or drag & drop a voice note here. Doesn't have to be polished — just dump it."
             className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)] resize-y"
           />
           <div className="flex flex-wrap items-center gap-3 mt-2">
