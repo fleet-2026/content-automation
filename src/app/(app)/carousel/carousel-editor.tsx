@@ -24,6 +24,8 @@ export function CarouselEditor() {
   const [err, setErr] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [ttQrUrl, setTtQrUrl] = useState<string | null>(null);
+  const [responseFileUrl, setResponseFileUrl] = useState<string | null>(null);
+  const [responseFileUploading, setResponseFileUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Drag reorder state
@@ -49,6 +51,7 @@ export function CarouselEditor() {
       if (p.hashtagsRaw) setHashtagsRaw(p.hashtagsRaw);
       if (p.ctaKeyword) setCtaKeyword(p.ctaKeyword);
       if (p.ctaResponse) setCtaResponse(p.ctaResponse);
+      if (p.responseFileUrl) setResponseFileUrl(p.responseFileUrl);
       if (p.draftId) setDraftId(p.draftId);
     } catch {}
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -59,10 +62,10 @@ export function CarouselEditor() {
     try {
       window.localStorage.setItem(
         PERSIST_KEY,
-        JSON.stringify({ images, caption, hashtagsRaw, ctaKeyword, ctaResponse, draftId, savedAt: Date.now() }),
+        JSON.stringify({ images, caption, hashtagsRaw, ctaKeyword, ctaResponse, responseFileUrl, draftId, savedAt: Date.now() }),
       );
     } catch {}
-  }, [images, caption, hashtagsRaw, ctaKeyword, ctaResponse, draftId]);
+  }, [images, caption, hashtagsRaw, ctaKeyword, ctaResponse, responseFileUrl, draftId]);
 
   // Upload via presigned URL (same pattern as compose)
   async function uploadOneFile(file: File): Promise<string> {
@@ -348,21 +351,93 @@ export function CarouselEditor() {
           <textarea
             value={ctaResponse}
             onChange={(e) => setCtaResponse(e.target.value)}
-            rows={3}
+            rows={4}
             placeholder={ctaKeyword.trim()
               ? `You said ${ctaKeyword}! Here it is 🤩\nTap the button below to grab the full guide.`
-              : "Set the keyword first."}
+              : "Set the keyword first — then write or paste the full response the bot sends back."}
             className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] outline-none focus:border-emerald-500/50 resize-y text-sm"
           />
-          {ctaKeyword.trim() && !ctaResponse.trim() && (
-            <button
-              type="button"
-              onClick={() => setCtaResponse(`You said ${ctaKeyword}! Here it is 🤩\n\nI put together a full guide for you — tap the button below to grab it.\n\nLet me know if you have questions!`)}
-              className="mt-1 text-[11px] text-emerald-300 hover:underline"
-            >
-              Generate template →
-            </button>
+          <div className="mt-2 flex flex-wrap gap-2 items-center">
+            {ctaKeyword.trim() && !ctaResponse.trim() && (
+              <button
+                type="button"
+                onClick={() => setCtaResponse(`You said ${ctaKeyword}! Here it is 🤩\n\nI put together a full guide for you — tap the button below to grab it.\n\nLet me know if you have questions!`)}
+                className="text-[11px] text-emerald-300 hover:underline"
+              >
+                Generate template →
+              </button>
+            )}
+            {ctaResponse.trim() && (
+              <button
+                type="button"
+                onClick={async () => {
+                  try { await navigator.clipboard.writeText(ctaResponse); } catch {}
+                }}
+                className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/40 hover:bg-emerald-500/30 font-medium"
+              >
+                Copy reply
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Response file — the guide/PDF/image the bot attaches */}
+        <div>
+          <label className="block text-[11px] font-semibold mb-1 text-emerald-200">
+            Response file (the guide the bot sends)
+          </label>
+          {responseFileUrl ? (
+            <div className="flex gap-2 items-center">
+              <a
+                href={responseFileUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 truncate rounded border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs font-mono hover:underline text-emerald-200"
+              >
+                {responseFileUrl.split("/").pop()}
+              </a>
+              <button
+                type="button"
+                onClick={async () => { try { await navigator.clipboard.writeText(responseFileUrl); } catch {} }}
+                className="text-[11px] px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/40 hover:bg-emerald-500/30"
+              >
+                Copy URL
+              </button>
+              <button
+                type="button"
+                onClick={() => setResponseFileUrl(null)}
+                className="text-[11px] px-2 py-1 rounded bg-red-500/10 text-red-300 border border-red-500/30 hover:bg-red-500/20"
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <label className="cursor-pointer inline-flex items-center gap-2 rounded border border-dashed border-emerald-500/30 bg-emerald-500/5 px-4 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/10 transition">
+              {responseFileUploading ? "Uploading..." : "Upload guide file (PDF, image, doc)"}
+              <input
+                type="file"
+                hidden
+                accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.zip"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setResponseFileUploading(true);
+                  try {
+                    const url = await uploadOneFile(file);
+                    setResponseFileUrl(url);
+                  } catch {
+                    setErr("Response file upload failed");
+                  } finally {
+                    setResponseFileUploading(false);
+                    e.target.value = "";
+                  }
+                }}
+              />
+            </label>
           )}
+          <p className="mt-1.5 text-[10px] text-[var(--color-muted)]">
+            Upload the PDF/image that ManyChat sends as the DM attachment. Copy the URL and paste it as the button link in ManyChat.
+          </p>
         </div>
       </div>
 
