@@ -40,7 +40,7 @@ function flag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
 
-const MODEL = arg("model") ?? process.env.MODEL ?? "claude-sonnet-4-5";
+const MODEL = arg("model") ?? process.env.MODEL ?? "claude-sonnet-4-6";
 const FORCE = flag("force") || process.env.FORCE === "1";
 const LIMIT_RAW = arg("limit") ?? process.env.LIMIT;
 const LIMIT = LIMIT_RAW ? parseInt(LIMIT_RAW, 10) : undefined;

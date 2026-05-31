@@ -53,7 +53,7 @@ export type ContentRating = {
   captionRewrites: string[];
 };
 
-const MODEL = process.env.RATE_HOOK_MODEL ?? "claude-sonnet-4-5";
+const MODEL = process.env.RATE_HOOK_MODEL ?? "claude-sonnet-4-6";
 
 const SYSTEM_PROMPT = `You are a social-media content coach who has analyzed tens of thousands of viral Reels, TikToks, and Shorts.
 

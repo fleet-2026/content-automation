@@ -71,7 +71,7 @@ async function planEdit(input: {
 }): Promise<PlanResponse> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY! });
   const msg = await client.messages.create({
-    model: "claude-sonnet-4-5",
+    model: "claude-sonnet-4-6",
     max_tokens: 2500,
     system: `You plan a premium short-form video edit (Alex Hormozi / Diary of a CEO style).
 

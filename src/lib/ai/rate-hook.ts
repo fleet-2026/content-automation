@@ -39,7 +39,7 @@ export type HookRating = {
   rewrites: string[];
 };
 
-const MODEL = process.env.RATE_HOOK_MODEL ?? "claude-sonnet-4-5";
+const MODEL = process.env.RATE_HOOK_MODEL ?? "claude-sonnet-4-6";
 
 const SYSTEM_PROMPT = `You are a viral-content strategist who has analyzed millions of Reels and TikToks.
 Your job: rate the HOOK of a piece of content for scroll-stopping power on a 1-10

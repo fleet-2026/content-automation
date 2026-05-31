@@ -21,7 +21,7 @@ export type VideoPromptInput = {
   body?: string;
 };
 
-const MODEL = process.env.VIDEO_PROMPT_MODEL ?? "claude-sonnet-4-5";
+const MODEL = process.env.VIDEO_PROMPT_MODEL ?? "claude-sonnet-4-6";
 
 const SYSTEM_PROMPT = `You are a senior commercial director writing AI-video production briefs
 for Sora / Veo / Runway / Pika. The output is pasted directly into those models,
