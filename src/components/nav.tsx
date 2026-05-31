@@ -23,6 +23,7 @@ import {
   ListTodo,
   Rocket,
   BookOpen,
+  Images,
   Menu,
   X,
 } from "lucide-react";
@@ -52,6 +53,7 @@ const items: NavItem[] = [
   { href: "/flip", label: "Flip", icon: Zap },
   { href: "/voice", label: "Voice", icon: BrainCircuit },
   { href: "/studio", label: "Studio", icon: Wand2 },
+  { href: "/carousel", label: "Carousel", icon: Images },
   { href: "/compose", label: "Compose", icon: PenLine },
   { href: "/drafts", label: "Drafts", icon: ClipboardList },
   { href: "/tracker", label: "31-day tracker", icon: ListChecks },
