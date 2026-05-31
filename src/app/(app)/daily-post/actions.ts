@@ -273,6 +273,18 @@ export async function saveVideoPrompt(slug: string, text: string) {
   return { ok };
 }
 
+/** Save or clear the ManyChat response file URL for a guide. */
+export async function saveResponseUrl(slug: string, url: string | null) {
+  try {
+    await requireUser();
+  } catch {
+    return { ok: false };
+  }
+  const ok = await updateGuide(slug, { responseUrl: url || null });
+  revalidatePath(`/daily-post/${slug}`);
+  return { ok };
+}
+
 /** Save media URLs for a guide. Either videoUrl, imageUrls, or both.
  *  Used by the post-editor's media upload section after /api/upload
  *  returns an R2 URL. */

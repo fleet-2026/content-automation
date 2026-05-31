@@ -8,6 +8,7 @@ import {
   uploadMedia,
   generateVideoPrompt,
   saveVideoPrompt,
+  saveResponseUrl,
   rateHook,
   replaceHook,
   rateContent,
@@ -72,6 +73,8 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   );
   const [keyword, setKeyword] = useState(g?.keyword ?? "");
   const [body, setBody] = useState(post.body ?? "");
+  const [responseUrl, setResponseUrl] = useState<string | null>(post.responseUrl ?? null);
+  const [responseUploading, setResponseUploading] = useState(false);
   const [published, setPublishedState] = useState<boolean>(!!post.isPublished);
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState<string | null>(null);
@@ -756,6 +759,73 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           </div>
         </div>
 
+        {/* 5. Response file (optional) — for sending a PDF/image as the DM attachment */}
+        <div>
+          <label className="block text-xs font-semibold mb-1.5">
+            5. Response file
+            <span className="text-[10px] text-[var(--color-muted)] ml-2 font-normal">
+              optional — upload a PDF/image to attach in the DM (if the guide page isn&apos;t enough)
+            </span>
+          </label>
+          {responseUrl ? (
+            <div className="flex gap-2 items-center">
+              <a
+                href={responseUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="flex-1 truncate rounded border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs font-mono hover:underline"
+              >
+                {responseUrl.split("/").pop() ?? responseUrl}
+              </a>
+              <button
+                type="button"
+                onClick={() => copy(responseUrl)}
+                className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-2 text-xs hover:bg-[var(--color-surface-hover)]"
+              >
+                Copy URL
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setResponseUrl(null);
+                  await saveResponseUrl(post.slug, null);
+                }}
+                className="rounded border border-red-500/30 bg-red-500/10 text-red-300 px-3 py-2 text-xs hover:bg-red-500/20"
+              >
+                Remove
+              </button>
+            </div>
+          ) : (
+            <label className="cursor-pointer inline-flex items-center gap-2 rounded border border-dashed border-emerald-500/30 bg-emerald-500/5 px-4 py-2.5 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/10 transition">
+              {responseUploading ? "Uploading..." : "Upload response file (PDF, image, etc.)"}
+              <input
+                type="file"
+                hidden
+                accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.zip"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  setResponseUploading(true);
+                  try {
+                    const fd = new FormData();
+                    fd.append("file", file);
+                    const res = await fetch("/api/upload", { method: "POST", body: fd });
+                    if (!res.ok) throw new Error("Upload failed");
+                    const { url } = await res.json();
+                    setResponseUrl(url);
+                    await saveResponseUrl(post.slug, url);
+                  } catch {
+                    setStatus("Response file upload failed");
+                  } finally {
+                    setResponseUploading(false);
+                    e.target.value = "";
+                  }
+                }}
+              />
+            </label>
+          )}
+        </div>
+
         {/* ManyChat setup hint — explains the assembly without becoming
             a wall of text. The keyword name is interpolated so the
             instruction reads as concrete for this guide. */}
@@ -765,7 +835,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           <code className="font-mono">{keyword || "(set keyword above)"}</code>.
           Set the DM message text from step 2, then add a Button (type: URL)
           with the label from step 3 and the URL from step 4. The recipient
-          sees a friendly note and a "{dmButtonLabel}" button — never the raw link.
+          sees a friendly note and a &quot;{dmButtonLabel}&quot; button — never the raw link.
         </div>
       </div>
 

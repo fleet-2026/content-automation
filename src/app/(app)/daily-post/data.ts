@@ -48,6 +48,8 @@ export type DailyPost = {
   publishedAt?: string | null;
   // Platforms this guide has been successfully published to via publishToSocial.
   postedPlatforms?: string[];
+  // ManyChat response file URL (PDF/image uploaded for DM delivery).
+  responseUrl?: string | null;
 };
 
 // Kept as an exported constant so the existing /daily-post page can still
@@ -109,5 +111,6 @@ function toDailyPost(g: GuideAdminShape): DailyPost {
     isPublished: g.isPublished,
     publishedAt: g.publishedAt ? g.publishedAt.toISOString() : null,
     postedPlatforms: g.postedPlatforms,
+    responseUrl: g.responseUrl,
   };
 }

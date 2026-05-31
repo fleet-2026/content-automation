@@ -1,9 +1,3 @@
-// Creator OS — Database Schema
-// Postgres + pgvector. Run `pnpm db:push` (or npm run db:push) after editing.
-//
-// Enable the extension in your DB once:
-//   CREATE EXTENSION IF NOT EXISTS vector;
-
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
@@ -15,48 +9,37 @@ datasource db {
   extensions = [vector]
 }
 
-// ─── AUTH ─────────────────────────────────────────────────
-
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  name         String?
-  niche        String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  socialAccounts  SocialAccount[]
-  posts           Post[]
-  drafts          Draft[]
-  watchedCreators Creator[]
-  chatThreads     ChatThread[]
+  id              String             @id @default(cuid())
+  email           String             @unique
+  passwordHash    String
+  name            String?
+  niche           String?
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
   voiceSamples    BrandVoiceSample[]
+  chatThreads     ChatThread[]
+  watchedCreators Creator[]
+  drafts          Draft[]
   mediaAssets     MediaAsset[]
   notes           Note[]
+  posts           Post[]
+  socialAccounts  SocialAccount[]
 
   @@map("users")
 }
 
-// ─── BRAND VOICE MEMORY (LaunchedPost) ────────────────────
-// Long-form writing samples used as "voice DNA" for caption drafting.
-// Each sample is embedded via OpenAI text-embedding-3-small (1536 dims),
-// retrieved by cosine similarity to anchor draft generation in user's voice.
-
 model BrandVoiceSample {
-  id        String                       @id @default(cuid())
+  id        String                 @id @default(cuid())
   userId    String
-  text      String                       @db.Text
-  embedding Unsupported("vector(1536)")?
-  createdAt DateTime                     @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  text      String
+  embedding Unsupported("vector")?
+  createdAt DateTime               @default(now())
+  user      User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@map("brand_voice_samples")
 }
-
-// ─── PLATFORM CONNECTIONS ─────────────────────────────────
 
 model SocialAccount {
   id             String    @id @default(cuid())
@@ -66,23 +49,366 @@ model SocialAccount {
   username       String?
   displayName    String?
   profileImage   String?
-  accessToken    String    @db.Text // encrypted (AES-256-GCM)
-  refreshToken   String?   @db.Text // encrypted
+  accessToken    String
+  refreshToken   String?
   tokenExpiry    DateTime?
   scopes         String?
-  metadata       Json? // page IDs, channel IDs, business account IDs
+  metadata       Json?
   isActive       Boolean   @default(true)
   lastSyncedAt   DateTime?
-  lastError      String?   @db.Text
+  lastError      String?
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
-
-  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  posts Post[]
+  posts          Post[]
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, platform, platformUserId])
   @@index([userId, platform])
   @@map("social_accounts")
+}
+
+model Post {
+  id              String           @id @default(cuid())
+  userId          String
+  socialAccountId String
+  platform        Platform
+  platformPostId  String
+  url             String?
+  caption         String?
+  hashtags        String[]
+  mediaType       MediaType
+  mediaUrl        String?
+  thumbnailUrl    String?
+  durationSec     Int?
+  publishedAt     DateTime
+  views           Int              @default(0)
+  likes           Int              @default(0)
+  comments        Int              @default(0)
+  shares          Int              @default(0)
+  saves           Int              @default(0)
+  reach           Int?
+  impressions     Int?
+  engagementRate  Float?
+  hookText        String?
+  hookId          String?
+  topic           String?
+  conceptTags     String[]
+  status          PostStatus       @default(PUBLISHED)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  metricSnapshots MetricSnapshot[]
+  hook            Hook?            @relation(fields: [hookId], references: [id])
+  account         SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transcript      Transcript?
+
+  @@unique([platform, platformPostId])
+  @@index([userId, publishedAt])
+  @@index([userId, platform])
+  @@index([hookId])
+  @@map("posts")
+}
+
+model MetricSnapshot {
+  id         String   @id @default(cuid())
+  postId     String
+  capturedAt DateTime @default(now())
+  views      Int
+  likes      Int
+  comments   Int
+  shares     Int
+  saves      Int
+  reach      Int?
+  post       Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@index([postId, capturedAt])
+  @@map("metric_snapshots")
+}
+
+model FollowerSnapshot {
+  id              String   @id @default(cuid())
+  socialAccountId String
+  capturedAt      DateTime @default(now())
+  followers       Int
+  following       Int?
+  totalPosts      Int?
+
+  @@index([socialAccountId, capturedAt])
+  @@map("follower_snapshots")
+}
+
+model Transcript {
+  id               String                 @id @default(cuid())
+  postId           String?                @unique
+  competitorPostId String?                @unique
+  text             String
+  language         String?
+  source           TranscriptSource
+  durationSec      Int?
+  segments         Json?
+  embedding        Unsupported("vector")?
+  createdAt        DateTime               @default(now())
+  competitorPost   CompetitorPost?        @relation(fields: [competitorPostId], references: [id], onDelete: Cascade)
+  post             Post?                  @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@map("transcripts")
+}
+
+model Hook {
+  id                String                 @id @default(cuid())
+  text              String
+  embedding         Unsupported("vector")?
+  pattern           String?
+  ownerType         HookOwnerType
+  niche             String?
+  uses              Int                    @default(0)
+  avgEngagementRate Float?
+  bestPostViews     Int?
+  bestPostId        String?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+  competitorPosts   CompetitorPost[]
+  posts             Post[]
+
+  @@index([ownerType, niche])
+  @@map("hooks")
+}
+
+model Creator {
+  id            String           @id @default(cuid())
+  userId        String
+  platform      Platform
+  handle        String
+  platformId    String?
+  displayName   String?
+  profileImage  String?
+  bio           String?
+  followerCount Int?
+  niche         String?
+  isWatching    Boolean          @default(true)
+  lastScrapedAt DateTime?
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  posts         CompetitorPost[]
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, platform, handle])
+  @@index([userId, isWatching])
+  @@map("creators")
+}
+
+model CompetitorPost {
+  id             String      @id @default(cuid())
+  creatorId      String
+  platform       Platform
+  platformPostId String
+  url            String?
+  caption        String?
+  hashtags       String[]
+  mediaType      MediaType
+  mediaUrl       String?
+  thumbnailUrl   String?
+  durationSec    Int?
+  publishedAt    DateTime
+  views          Int         @default(0)
+  likes          Int         @default(0)
+  comments       Int         @default(0)
+  shares         Int?
+  hookText       String?
+  hookId         String?
+  topic          String?
+  conceptTags    String[]
+  isViral        Boolean     @default(false)
+  scrapedAt      DateTime    @default(now())
+  creator        Creator     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  hook           Hook?       @relation(fields: [hookId], references: [id])
+  transcript     Transcript?
+
+  @@unique([platform, platformPostId])
+  @@index([creatorId, publishedAt])
+  @@index([isViral, publishedAt])
+  @@map("competitor_posts")
+}
+
+model NewsItem {
+  id          String                 @id @default(cuid())
+  title       String
+  url         String                 @unique
+  source      String?
+  publishedAt DateTime
+  summary     String?
+  content     String?
+  niche       String?
+  embedding   Unsupported("vector")?
+  ingestedAt  DateTime               @default(now())
+
+  @@index([niche, publishedAt])
+  @@map("news_items")
+}
+
+model Draft {
+  id             String      @id @default(cuid())
+  userId         String
+  caption        String
+  hashtags       String[]
+  hookOptions    Json?
+  selectedHook   String?
+  mediaUrl       String?
+  platforms      Platform[]
+  scheduledFor   DateTime?
+  status         DraftStatus @default(DRAFT)
+  publishResults Json?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([status, scheduledFor])
+  @@map("drafts")
+}
+
+model ChatThread {
+  id        String        @id @default(cuid())
+  userId    String
+  title     String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  messages  ChatMessage[]
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, updatedAt])
+  @@map("chat_threads")
+}
+
+model ChatMessage {
+  id        String     @id @default(cuid())
+  threadId  String
+  role      String
+  content   String
+  toolCalls Json?
+  citations Json?
+  createdAt DateTime   @default(now())
+  thread    ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([threadId, createdAt])
+  @@map("chat_messages")
+}
+
+model MediaAsset {
+  id           String         @id @default(cuid())
+  userId       String
+  type         MediaAssetType
+  prompt       String
+  url          String
+  thumbnailUrl String?
+  width        Int?
+  height       Int?
+  durationSec  Int?
+  model        String
+  size         String?
+  costCents    Int?
+  status       MediaStatus    @default(READY)
+  error        String?
+  remoteId     String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, type, createdAt])
+  @@map("media_assets")
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String?
+  content   String
+  pinned    Boolean  @default(false)
+  tags      String[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, pinned, updatedAt])
+  @@index([userId, updatedAt])
+  @@map("notes")
+}
+
+model DailyGuide {
+  id              String    @id @default(cuid())
+  slug            String    @unique
+  title           String
+  index           Int?
+  hook            String
+  script          String
+  caption         String
+  hashtags        String[]  @default([])
+  manychatKeyword String
+  /// Permalink to the live post on social once it's published. Null while still
+  /// in draft state — once the user publishes, /daily-post writes the URL here.
+  sourceUrl       String?
+  /// `false` keeps the guide off /guides even after import. Flip to true when
+  /// it's ready for SEO. Lets the admin draft + iterate without exposing
+  /// incomplete pages publicly.
+  isPublished     Boolean   @default(false)
+  publishedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  /// Long-form article body — owns the "full guide" experience on /guides/<slug>
+  /// so we don't have to send readers off-domain. Plain text with paragraph
+  /// breaks; rendered with whitespace-pre-wrap. Empty by default; the admin
+  /// writes/pastes the content per guide in /daily-post.
+  body            String    @default("")
+  /// Carousel image URLs (R2-hosted). For image-based posts (no talking
+  /// head). Stored in order; admin uploads multiple at once.
+  imageUrls       String[]  @default([])
+  /// Talking-head video URL (R2-hosted). Single file. Surfaced on the
+  /// dashboard editor as the "Talking-head post" upload slot; the public
+  /// /guides/<slug> page can optionally embed it.
+  videoUrl        String?
+  /// Structured AI-video production brief (SCENES + VOICEOVER + CAPTIONS).
+  /// Pasted into Sora / Veo / Runway to generate the Reel for this guide.
+  /// Empty by default; the admin clicks "Generate" in /daily-post to fill
+  /// it in based on the guide's hook + script + body + caption.
+  videoPrompt     String    @default("")
+  /// Platforms this guide has been successfully published to via publishToSocial.
+  /// Stored as ["INSTAGRAM","TIKTOK","FACEBOOK"] — set by the daily-post editor
+  /// after a successful social publish so the list page shows posted badges.
+  postedPlatforms String[]  @default([])
+  captionScore    Int?
+  /// AI quality scores (1-10) from the "Rate script & caption" tool.
+  /// Null until rated; persisted so the tracker table can display them
+  /// without re-running the AI.
+  scriptScore     Int?
+  /// Content source: "library" for the main daily-post content library,
+  /// "tracker" for the 31-day Notion tracker challenge posts.
+  /// Lets /daily-post and /tracker show separate content from the same table.
+  source          String    @default("library")
+  /// URL to the ManyChat response file (PDF, image, or any downloadable).
+  /// Used when the guide page alone isn't the DM response — e.g. a freebie
+  /// PDF the bot attaches. Null = just send the /guides/<slug> link.
+  responseUrl     String?
+
+  @@index([isPublished, publishedAt])
+  @@index([index])
+  @@index([source])
+  @@map("daily_guides")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  action     String
+  target     String?
+  status     String
+  details    Json?
+  error      String?
+  durationMs Int?
+  createdAt  DateTime @default(now())
+
+  @@index([action, createdAt])
+  @@map("audit_log")
 }
 
 enum Platform {
@@ -91,56 +417,6 @@ enum Platform {
   YOUTUBE
   FACEBOOK
   LINKEDIN
-}
-
-// ─── YOUR POSTS ───────────────────────────────────────────
-
-model Post {
-  id              String    @id @default(cuid())
-  userId          String
-  socialAccountId String
-  platform        Platform
-  platformPostId  String
-  url             String?
-  caption         String?   @db.Text
-  hashtags        String[]
-  mediaType       MediaType
-  mediaUrl        String?
-  thumbnailUrl    String?
-  durationSec     Int?
-  publishedAt     DateTime
-
-  // Performance
-  views          Int    @default(0)
-  likes          Int    @default(0)
-  comments       Int    @default(0)
-  shares         Int    @default(0)
-  saves          Int    @default(0)
-  reach          Int?
-  impressions    Int?
-  engagementRate Float?
-
-  // AI extracted
-  hookText     String?  @db.Text
-  hookId       String?
-  topic        String?
-  conceptTags  String[]
-
-  status    PostStatus @default(PUBLISHED)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-
-  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  account         SocialAccount    @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
-  hook            Hook?            @relation(fields: [hookId], references: [id], onDelete: SetNull)
-  transcript      Transcript?
-  metricSnapshots MetricSnapshot[]
-
-  @@unique([platform, platformPostId])
-  @@index([userId, publishedAt])
-  @@index([userId, platform])
-  @@index([hookId])
-  @@map("posts")
 }
 
 enum MediaType {
@@ -160,195 +436,15 @@ enum PostStatus {
   FAILED
 }
 
-// ─── TIMESERIES METRICS ───────────────────────────────────
-
-model MetricSnapshot {
-  id         String   @id @default(cuid())
-  postId     String
-  capturedAt DateTime @default(now())
-  views      Int
-  likes      Int
-  comments   Int
-  shares     Int
-  saves      Int
-  reach      Int?
-
-  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
-
-  @@index([postId, capturedAt])
-  @@map("metric_snapshots")
-}
-
-model FollowerSnapshot {
-  id              String   @id @default(cuid())
-  socialAccountId String
-  capturedAt      DateTime @default(now())
-  followers       Int
-  following       Int?
-  totalPosts      Int?
-
-  @@index([socialAccountId, capturedAt])
-  @@map("follower_snapshots")
-}
-
-// ─── TRANSCRIPTS (yours + competitors) ────────────────────
-
-model Transcript {
-  id               String                       @id @default(cuid())
-  postId           String?                      @unique
-  competitorPostId String?                      @unique
-  text             String                       @db.Text
-  language         String?
-  source           TranscriptSource
-  durationSec      Int?
-  segments         Json? // [{ start, end, text }]
-  embedding        Unsupported("vector(1536)")?
-  createdAt        DateTime                     @default(now())
-
-  post           Post?           @relation(fields: [postId], references: [id], onDelete: Cascade)
-  competitorPost CompetitorPost? @relation(fields: [competitorPostId], references: [id], onDelete: Cascade)
-
-  @@map("transcripts")
-}
-
 enum TranscriptSource {
   PLATFORM_CAPTIONS
   WHISPER
   USER_PROVIDED
 }
 
-// ─── HOOK LIBRARY ─────────────────────────────────────────
-
-model Hook {
-  id                   String                       @id @default(cuid())
-  text                 String                       @db.Text
-  embedding            Unsupported("vector(1536)")?
-  pattern              String? // question | stat | story | controversy | promise | callout | curiosity_gap | numbered
-  ownerType            HookOwnerType
-  niche                String?
-  uses                 Int                          @default(0)
-  avgEngagementRate    Float?
-  bestPostViews        Int?
-  bestPostId           String?
-  createdAt            DateTime                     @default(now())
-  updatedAt            DateTime                     @updatedAt
-
-  posts           Post[]
-  competitorPosts CompetitorPost[]
-
-  @@index([ownerType, niche])
-  @@map("hooks")
-}
-
 enum HookOwnerType {
   MINE
   NICHE
-}
-
-// ─── COMPETITOR WATCHLIST ─────────────────────────────────
-
-model Creator {
-  id            String    @id @default(cuid())
-  userId        String
-  platform      Platform
-  handle        String
-  platformId    String?
-  displayName   String?
-  profileImage  String?
-  bio           String?   @db.Text
-  followerCount Int?
-  niche         String?
-  isWatching    Boolean   @default(true)
-  lastScrapedAt DateTime?
-  notes         String?   @db.Text
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  posts CompetitorPost[]
-
-  @@unique([userId, platform, handle])
-  @@index([userId, isWatching])
-  @@map("creators")
-}
-
-model CompetitorPost {
-  id             String    @id @default(cuid())
-  creatorId      String
-  platform       Platform
-  platformPostId String
-  url            String?
-  caption        String?   @db.Text
-  hashtags       String[]
-  mediaType      MediaType
-  mediaUrl       String?
-  thumbnailUrl   String?
-  durationSec    Int?
-  publishedAt    DateTime
-
-  views    Int  @default(0)
-  likes    Int  @default(0)
-  comments Int  @default(0)
-  shares   Int?
-
-  hookText    String?  @db.Text
-  hookId      String?
-  topic       String?
-  conceptTags String[]
-  isViral     Boolean  @default(false) // > 5x creator average
-
-  scrapedAt DateTime @default(now())
-
-  creator    Creator     @relation(fields: [creatorId], references: [id], onDelete: Cascade)
-  hook       Hook?       @relation(fields: [hookId], references: [id])
-  transcript Transcript?
-
-  @@unique([platform, platformPostId])
-  @@index([creatorId, publishedAt])
-  @@index([isViral, publishedAt])
-  @@map("competitor_posts")
-}
-
-// ─── NICHE NEWS ───────────────────────────────────────────
-
-model NewsItem {
-  id          String                       @id @default(cuid())
-  title       String
-  url         String                       @unique
-  source      String?
-  publishedAt DateTime
-  summary     String?                      @db.Text
-  content     String?                      @db.Text
-  niche       String?
-  embedding   Unsupported("vector(1536)")?
-  ingestedAt  DateTime                     @default(now())
-
-  @@index([niche, publishedAt])
-  @@map("news_items")
-}
-
-// ─── DRAFTS / COMPOSE ─────────────────────────────────────
-
-model Draft {
-  id             String      @id @default(cuid())
-  userId         String
-  caption        String      @db.Text
-  hashtags       String[]
-  hookOptions    Json? // [{ text, pattern, predictedScore, similarPosts:[ids] }]
-  selectedHook   String?
-  mediaUrl       String?
-  platforms      Platform[]
-  scheduledFor   DateTime?
-  status         DraftStatus @default(DRAFT)
-  publishResults Json? // { platform: { postId, url, status, error } }
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, status])
-  @@index([status, scheduledFor])
-  @@map("drafts")
 }
 
 enum DraftStatus {
@@ -358,67 +454,6 @@ enum DraftStatus {
   PUBLISHING
   PUBLISHED
   FAILED
-}
-
-// ─── AI CHAT ──────────────────────────────────────────────
-
-model ChatThread {
-  id        String   @id @default(cuid())
-  userId    String
-  title     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages ChatMessage[]
-
-  @@index([userId, updatedAt])
-  @@map("chat_threads")
-}
-
-model ChatMessage {
-  id        String   @id @default(cuid())
-  threadId  String
-  role      String // user | assistant | tool
-  content   String   @db.Text
-  toolCalls Json?
-  citations Json? // [{ type: "post"|"transcript"|"news", id, snippet }]
-  createdAt DateTime @default(now())
-
-  thread ChatThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
-
-  @@index([threadId, createdAt])
-  @@map("chat_messages")
-}
-
-// ─── GENERATED MEDIA (Studio) ─────────────────────────────
-// Images and videos generated via OpenAI gpt-image-1 / Sora 2.
-// Stored in R2; this table is the metadata index.
-
-model MediaAsset {
-  id           String         @id @default(cuid())
-  userId       String
-  type         MediaAssetType
-  prompt       String         @db.Text
-  url          String // R2 public URL
-  thumbnailUrl String?
-  width        Int?
-  height       Int?
-  durationSec  Int?
-  model        String // "gpt-image-1" | "sora-2" | etc
-  size         String? // "1024x1024", "1280x720", etc
-  costCents    Int? // estimated cost in cents
-  status       MediaStatus    @default(READY)
-  error        String?        @db.Text
-  remoteId     String? // OpenAI video id (for polling) — null for images
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, createdAt])
-  @@index([userId, type, createdAt])
-  @@map("media_assets")
 }
 
 enum MediaAssetType {
@@ -431,112 +466,4 @@ enum MediaStatus {
   GENERATING
   READY
   FAILED
-}
-
-// ─── NOTES ────────────────────────────────────────────────
-// Free-form scratchpad for course links, swipe ideas, references.
-// Pin frequently-used notes; auto-linkified in the UI for quick paste.
-
-model Note {
-  id        String   @id @default(cuid())
-  userId    String
-  title     String?
-  content   String   @db.Text
-  pinned    Boolean  @default(false)
-  tags      String[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, pinned, updatedAt])
-  @@index([userId, updatedAt])
-  @@map("notes")
-}
-
-// ─── DAILY GUIDES (public content site at /guides) ───────
-// The "daily post" admin in the dashboard creates each row here. Public
-// visitors at /guides + /guides/<slug> read these directly. Source-of-
-// truth lives in the DB now rather than scattered JSON files on the
-// user's local machine — those still get imported by
-// scripts/import-daily-guides.ts on initial backfill.
-
-model DailyGuide {
-  id              String    @id @default(cuid())
-  slug            String    @unique // URL identifier, used in /guides/<slug>
-  title           String    @db.Text // human-readable headline
-  index           Int? // original ordering ("day 1, day 2…"), null = unordered
-
-  // Content fields — every guide is a Reel/TikTok talking-head template
-  hook            String    @db.Text // first 8-12 words to stop the scroll
-  script          String    @db.Text // full talking-head script for the reel
-  caption         String    @db.Text // Instagram/TikTok caption text
-  hashtags        String[]  @default([])
-  manychatKeyword String    @db.Text // ManyChat trigger word for DM automation
-  /// Long-form article body — owns the "full guide" experience on /guides/<slug>
-  /// so we don't have to send readers off-domain. Plain text with paragraph
-  /// breaks; rendered with whitespace-pre-wrap. Empty by default; the admin
-  /// writes/pastes the content per guide in /daily-post.
-  body            String    @db.Text @default("")
-  /// Talking-head video URL (R2-hosted). Single file. Surfaced on the
-  /// dashboard editor as the "Talking-head post" upload slot; the public
-  /// /guides/<slug> page can optionally embed it.
-  videoUrl        String?   @db.Text
-  /// Carousel image URLs (R2-hosted). For image-based posts (no talking
-  /// head). Stored in order; admin uploads multiple at once.
-  imageUrls       String[]  @default([])
-  /// Structured AI-video production brief (SCENES + VOICEOVER + CAPTIONS).
-  /// Pasted into Sora / Veo / Runway to generate the Reel for this guide.
-  /// Empty by default; the admin clicks "Generate" in /daily-post to fill
-  /// it in based on the guide's hook + script + body + caption.
-  videoPrompt     String    @db.Text @default("")
-  /// Permalink to the live post on social once it's published. Null while still
-  /// in draft state — once the user publishes, /daily-post writes the URL here.
-  sourceUrl       String?   @db.Text
-
-  /// AI quality scores (1-10) from the "Rate script & caption" tool.
-  /// Null until rated; persisted so the tracker table can display them
-  /// without re-running the AI.
-  scriptScore     Int?
-  captionScore    Int?
-
-  // Lifecycle / publishing
-  /// `false` keeps the guide off /guides even after import. Flip to true when
-  /// it's ready for SEO. Lets the admin draft + iterate without exposing
-  /// incomplete pages publicly.
-  isPublished     Boolean   @default(false)
-  publishedAt     DateTime? // set when isPublished flips true
-  /// Platforms this guide has been successfully published to via publishToSocial.
-  /// Stored as ["INSTAGRAM","TIKTOK","FACEBOOK"] — set by the daily-post editor
-  /// after a successful social publish so the list page shows posted badges.
-  postedPlatforms String[]  @default([])
-  /// Content source: "library" for the main daily-post content library,
-  /// "tracker" for the 31-day Notion tracker challenge posts.
-  /// Lets /daily-post and /tracker show separate content from the same table.
-  source          String    @default("library")
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-
-  // Fast index lookups for the public page (filter by published + sort by index)
-  // and for slug-based fetches (already covered by @unique on slug).
-  @@index([isPublished, publishedAt])
-  @@index([index])
-  @@index([source])
-  @@map("daily_guides")
-}
-
-// ─── AUDIT LOG ────────────────────────────────────────────
-
-model AuditLog {
-  id         String   @id @default(cuid())
-  action     String
-  target     String?
-  status     String
-  details    Json?
-  error      String?  @db.Text
-  durationMs Int?
-  createdAt  DateTime @default(now())
-
-  @@index([action, createdAt])
-  @@map("audit_log")
 }

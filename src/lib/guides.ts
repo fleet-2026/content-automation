@@ -23,6 +23,7 @@ export type GuidePublic = {
   videoUrl: string | null;
   imageUrls: string[];
   sourceUrl: string | null;
+  responseUrl: string | null;
   publishedAt: Date | null;
 };
 
@@ -131,6 +132,7 @@ type Patchable = Partial<{
   videoUrl: string | null;
   imageUrls: string[];
   sourceUrl: string | null;
+  responseUrl: string | null;
   isPublished: boolean;
   index: number | null;
 }>;
@@ -178,6 +180,7 @@ type RawGuide = {
   videoUrl: string | null;
   imageUrls: string[];
   sourceUrl: string | null;
+  responseUrl: string | null;
   isPublished: boolean;
   postedPlatforms: string[];
   scriptScore: number | null;
@@ -203,6 +206,7 @@ function toPublic(r: RawGuide): GuidePublic {
     videoUrl: r.videoUrl,
     imageUrls: r.imageUrls,
     sourceUrl: r.sourceUrl,
+    responseUrl: r.responseUrl,
     publishedAt: r.publishedAt,
   };
 }
