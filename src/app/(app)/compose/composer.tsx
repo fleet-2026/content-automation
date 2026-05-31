@@ -232,10 +232,62 @@ export function Composer({
     });
   }
 
+  /** Upload a single file to R2.
+   *  Small files (≤ 4 MB): POST to /api/upload (no CORS needed).
+   *  Large files (> 4 MB): presigned PUT directly to R2 (bypasses
+   *  Vercel's 4.5 MB serverless body limit). */
+  const SA_LIMIT = 4 * 1024 * 1024;
+  const MAX_UPLOAD = 200 * 1024 * 1024;
+
+  async function uploadOneFile(file: File): Promise<string> {
+    if (file.size > MAX_UPLOAD) {
+      throw new Error(`File is ${(file.size / (1024 * 1024)).toFixed(1)} MB — max is 200 MB.`);
+    }
+    if (file.size <= SA_LIMIT) {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/upload", { method: "POST", body: fd });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.message || body?.error || `HTTP ${res.status}`);
+      }
+      const { url } = (await res.json()) as { url: string };
+      return url;
+    }
+    // Presigned upload for large files
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
+    const contentType = file.type || "application/octet-stream";
+    const presignRes = await fetch("/api/upload/presign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ext, contentType }),
+    });
+    if (!presignRes.ok) {
+      const j = (await presignRes.json().catch(() => ({}))) as { message?: string; error?: string };
+      throw new Error(j.message ?? j.error ?? `Presign failed (${presignRes.status})`);
+    }
+    const { uploadUrl, publicUrl } = (await presignRes.json()) as {
+      uploadUrl: string;
+      publicUrl: string;
+    };
+    const putRes = await fetch(uploadUrl, {
+      method: "PUT",
+      headers: { "Content-Type": contentType },
+      body: file,
+    });
+    if (!putRes.ok) {
+      const text = await putRes.text().catch(() => "");
+      if (text.includes("Failed to fetch") || text.includes("NetworkError")) {
+        throw new Error("Upload blocked — R2 CORS not configured for your domain.");
+      }
+      throw new Error(`R2 upload failed (${putRes.status})`);
+    }
+    return publicUrl;
+  }
+
   /** Core upload routine — accepts a raw File[] so it can be called from
    *  either the <input type=file> change event OR the drop zone's
-   *  drop event. Sequential POSTs to /api/upload (one file per request);
-   *  Instagram carousel cap = 10 attachments. */
+   *  drop event. Sequential uploads; Instagram carousel cap = 10. */
   async function uploadFiles(files: File[]) {
     if (files.length === 0) return;
     setErr(null);
@@ -246,15 +298,7 @@ export function Composer({
         if (mediaUrls.length + newUrls.length >= 10) {
           throw new Error("Max 10 images per post (Instagram carousel limit).");
         }
-        const fd = new FormData();
-        fd.append("file", file);
-        const res = await fetch("/api/upload", { method: "POST", body: fd });
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          const msg = body?.message || body?.error || `HTTP ${res.status}`;
-          throw new Error(`Upload failed: ${msg}`);
-        }
-        const { url } = (await res.json()) as { url: string };
+        const url = await uploadOneFile(file);
         newUrls.push(url);
       }
       setMediaUrls((cur) => [...cur, ...newUrls]);
