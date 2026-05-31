@@ -50,6 +50,8 @@ export type DailyPost = {
   postedPlatforms?: string[];
   // ManyChat response file URL (PDF/image uploaded for DM delivery).
   responseUrl?: string | null;
+  // Custom ManyChat DM reply text.
+  responseText?: string;
 };
 
 // Kept as an exported constant so the existing /daily-post page can still
@@ -112,5 +114,6 @@ function toDailyPost(g: GuideAdminShape): DailyPost {
     publishedAt: g.publishedAt ? g.publishedAt.toISOString() : null,
     postedPlatforms: g.postedPlatforms,
     responseUrl: g.responseUrl,
+    responseText: g.responseText,
   };
 }

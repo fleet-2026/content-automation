@@ -285,6 +285,18 @@ export async function saveResponseUrl(slug: string, url: string | null) {
   return { ok };
 }
 
+/** Save the custom ManyChat DM reply text for a guide. */
+export async function saveResponseText(slug: string, text: string) {
+  try {
+    await requireUser();
+  } catch {
+    return { ok: false };
+  }
+  const ok = await updateGuide(slug, { responseText: text });
+  revalidatePath(`/daily-post/${slug}`);
+  return { ok };
+}
+
 /** Save media URLs for a guide. Either videoUrl, imageUrls, or both.
  *  Used by the post-editor's media upload section after /api/upload
  *  returns an R2 URL. */

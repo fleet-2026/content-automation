@@ -9,6 +9,7 @@ import {
   generateVideoPrompt,
   saveVideoPrompt,
   saveResponseUrl,
+  saveResponseText,
   rateHook,
   replaceHook,
   rateContent,
@@ -75,6 +76,7 @@ export default function PostEditor({ post }: { post: DailyPost }) {
   const [body, setBody] = useState(post.body ?? "");
   const [responseUrl, setResponseUrl] = useState<string | null>(post.responseUrl ?? null);
   const [responseUploading, setResponseUploading] = useState(false);
+  const [responseText, setResponseText] = useState(post.responseText ?? "");
   const [published, setPublishedState] = useState<boolean>(!!post.isPublished);
   const [isPending, startTransition] = useTransition();
   const [status, setStatus] = useState<string | null>(null);
@@ -824,6 +826,37 @@ export default function PostEditor({ post }: { post: DailyPost }) {
               />
             </label>
           )}
+        </div>
+
+        {/* 6. Custom DM reply text */}
+        <div>
+          <label className="block text-xs font-semibold mb-1.5">
+            6. Custom DM reply text
+            <span className="text-[10px] text-[var(--color-muted)] ml-2 font-normal">
+              optional — write the exact text ManyChat sends when someone comments the keyword
+            </span>
+          </label>
+          <textarea
+            value={responseText}
+            onChange={(e) => setResponseText(e.target.value)}
+            onBlur={() => saveResponseText(post.slug, responseText)}
+            rows={5}
+            placeholder={`Example:\nHey! Here's everything you need to know about ${post.title.toLowerCase()}.\n\nI put together a full guide for you — tap the button below to grab it.\n\nLet me know if you have questions!`}
+            className="w-full rounded border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm leading-relaxed"
+          />
+          <div className="mt-1.5 flex gap-2 items-center">
+            <button
+              type="button"
+              onClick={() => copy(responseText)}
+              disabled={!responseText.trim()}
+              className="rounded border border-[var(--color-border)] bg-[var(--color-surface)] px-3 py-1.5 text-xs hover:bg-[var(--color-surface-hover)] disabled:opacity-50"
+            >
+              Copy text
+            </button>
+            <span className="text-[10px] text-[var(--color-muted)]">
+              {responseText.trim() ? `${responseText.trim().length} chars` : "Empty — will use default template above"} · auto-saves on blur
+            </span>
+          </div>
         </div>
 
         {/* ManyChat setup hint — explains the assembly without becoming

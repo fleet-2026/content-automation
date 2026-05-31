@@ -389,7 +389,10 @@ model DailyGuide {
   /// URL to the ManyChat response file (PDF, image, or any downloadable).
   /// Used when the guide page alone isn't the DM response — e.g. a freebie
   /// PDF the bot attaches. Null = just send the /guides/<slug> link.
-  responseUrl     String?
+  responseUrl     String?   @db.Text
+  /// Custom text the ManyChat bot sends as the DM reply when someone
+  /// triggers the CTA keyword. Null = use the default template.
+  responseText    String    @db.Text @default("")
 
   @@index([isPublished, publishedAt])
   @@index([index])
