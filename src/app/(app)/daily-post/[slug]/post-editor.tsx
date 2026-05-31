@@ -577,11 +577,10 @@ export default function PostEditor({ post }: { post: DailyPost }) {
 
   // ManyChat reply uses a TEXT body + BUTTON. The text doesn't include
   // the URL — the URL lives behind a "Get Free Guide" button so the DM
-  // reads as a friendly note, not a raw link drop. The 🤩 (star-struck)
-  // emoji is the "super stare" face the brand voice uses.
-  const dmText =
-    `Here it is! Hope it's SUPER helpful 🤩\n\n` +
-    `If you have any questions, just let me know.`;
+  // reads as a friendly note, not a raw link drop.
+  const dmText = keyword.trim()
+    ? `You said ${keyword}! Here it is 🤩\n\nI put together a full guide on ${post.title.toLowerCase()} — tap the button below to grab it.\n\nLet me know if you have questions!`
+    : `Here it is! Hope it's SUPER helpful 🤩\n\nIf you have any questions, just let me know.`;
   const dmButtonLabel = "Get Free Guide";
 
   // Prefill /compose with the caption + hashtags
@@ -828,20 +827,41 @@ export default function PostEditor({ post }: { post: DailyPost }) {
           )}
         </div>
 
-        {/* 6. Custom DM reply text */}
+        {/* 6. Custom DM reply text — wired to the CTA keyword */}
         <div>
           <label className="block text-xs font-semibold mb-1.5">
-            6. Custom DM reply text
+            6. Bot reply when someone comments{" "}
+            {keyword.trim() ? (
+              <code className="font-mono bg-emerald-500/10 px-1 rounded">{keyword}</code>
+            ) : (
+              <span className="text-[var(--color-muted)]">(set keyword in step 1)</span>
+            )}
             <span className="text-[10px] text-[var(--color-muted)] ml-2 font-normal">
-              optional — write the exact text ManyChat sends when someone comments the keyword
+              the exact DM text ManyChat sends back
             </span>
           </label>
+          <div className="flex gap-2 mb-2">
+            <button
+              type="button"
+              disabled={!keyword.trim()}
+              onClick={async () => {
+                const t = `You said ${keyword}! Here it is 🤩\n\nI put together a full guide on ${post.title.toLowerCase()} — tap the button below to grab it.\n\nLet me know if you have questions!`;
+                setResponseText(t);
+                await saveResponseText(post.slug, t);
+              }}
+              className="rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/40 px-3 py-1.5 text-xs font-semibold hover:bg-emerald-500/30 disabled:opacity-50"
+            >
+              Generate from {keyword.trim() ? keyword : "keyword"}
+            </button>
+          </div>
           <textarea
             value={responseText}
             onChange={(e) => setResponseText(e.target.value)}
             onBlur={() => saveResponseText(post.slug, responseText)}
             rows={5}
-            placeholder={`Example:\nHey! Here's everything you need to know about ${post.title.toLowerCase()}.\n\nI put together a full guide for you — tap the button below to grab it.\n\nLet me know if you have questions!`}
+            placeholder={keyword.trim()
+              ? `Someone comments ${keyword} on your Reel.\nWhat does the bot DM them?\n\nExample:\nYou said ${keyword}! Here it is 🤩\nI put together a full guide on ${post.title.toLowerCase()} — tap the button below to grab it.`
+              : "Set the trigger keyword first (step 1), then write or generate the bot reply here."}
             className="w-full rounded border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-sm leading-relaxed"
           />
           <div className="mt-1.5 flex gap-2 items-center">
@@ -854,7 +874,9 @@ export default function PostEditor({ post }: { post: DailyPost }) {
               Copy text
             </button>
             <span className="text-[10px] text-[var(--color-muted)]">
-              {responseText.trim() ? `${responseText.trim().length} chars` : "Empty — will use default template above"} · auto-saves on blur
+              {responseText.trim()
+                ? `${responseText.trim().length} chars · ${keyword.trim() ? `triggers on "${keyword}"` : "no keyword set"}`
+                : `Empty — will use default template from step 2`} · auto-saves on blur
             </span>
           </div>
         </div>
