@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { X, GripVertical, Plus, Send, CheckCircle2 } from "lucide-react";
-import { saveDraft, publishDraftNow, getDraftCaptionUrl } from "../compose/actions";
+import { X, GripVertical, Plus, Send, CheckCircle2, CalendarClock } from "lucide-react";
+import { saveDraft, publishDraftNow, scheduleDraft, getDraftCaptionUrl } from "../compose/actions";
 import type { Platform } from "@prisma/client";
 import { packMediaUrls } from "@/lib/media-urls";
 import { PLATFORM_INFO, ENABLED_PLATFORMS_ORDERED } from "@/lib/platform-info";
@@ -26,6 +26,8 @@ export function CarouselEditor() {
   const [ttQrUrl, setTtQrUrl] = useState<string | null>(null);
   const [responseFileUrl, setResponseFileUrl] = useState<string | null>(null);
   const [responseFileUploading, setResponseFileUploading] = useState(false);
+  const [scheduledFor, setScheduledFor] = useState("");
+  const [scheduling, setScheduling] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   // Drag reorder state
@@ -498,6 +500,62 @@ export function CarouselEditor() {
         </div>
       )}
 
+      {/* Schedule */}
+      <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3">
+        <label className="block text-xs uppercase tracking-wider text-[var(--color-muted)] mb-1.5 flex items-center gap-1.5">
+          <CalendarClock className="w-3.5 h-3.5" /> Schedule for later
+        </label>
+        <div className="flex items-center gap-2">
+          <input
+            type="datetime-local"
+            value={scheduledFor}
+            onChange={(e) => setScheduledFor(e.target.value)}
+            min={new Date(Date.now() + 60_000).toISOString().slice(0, 16)}
+            className="flex-1 px-3 py-2 rounded-lg bg-[var(--color-surface)] border border-[var(--color-border)] outline-none focus:border-amber-500/50 text-sm"
+          />
+          <button
+            type="button"
+            onClick={async () => {
+              if (!scheduledFor || images.length === 0) return;
+              setScheduling(true);
+              try {
+                let id = draftId;
+                if (!id) {
+                  const fullCaption = ctaKeyword.trim()
+                    ? `${caption}\n\nComment ${ctaKeyword} for the full guide`
+                    : caption;
+                  const d = await saveDraft({
+                    caption: fullCaption,
+                    hashtags,
+                    hookOptions: [],
+                    selectedHook: null,
+                    mediaUrl: packMediaUrls(images, {}),
+                    platforms,
+                    scheduledFor,
+                  });
+                  id = d.id;
+                  setDraftId(id);
+                } else {
+                  await scheduleDraft(id, scheduledFor);
+                }
+                try { window.localStorage.removeItem(PERSIST_KEY); } catch {}
+                router.push("/carousel");
+                router.refresh();
+              } catch (e) {
+                setErr(`Schedule failed: ${e instanceof Error ? e.message : String(e)}`);
+              } finally {
+                setScheduling(false);
+              }
+            }}
+            disabled={scheduling || !scheduledFor || images.length === 0 || platforms.length === 0}
+            className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/20 text-amber-200 border border-amber-500/40 font-medium text-sm hover:bg-amber-500/30 disabled:opacity-50"
+          >
+            <CalendarClock className="w-4 h-4" />
+            {scheduling ? "Scheduling..." : "Schedule"}
+          </button>
+        </div>
+      </div>
+
       {/* Actions */}
       <div className="flex flex-wrap gap-2 pt-3 border-t border-[var(--color-border)]">
         <button
@@ -513,7 +571,7 @@ export function CarouselEditor() {
           className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium text-sm disabled:opacity-50"
         >
           <Send className="w-4 h-4" />
-          {publishing ? "Publishing..." : `Publish to ${platforms.length} platform${platforms.length === 1 ? "" : "s"}`}
+          {publishing ? "Publishing..." : "Publish now"}
         </button>
         {savedAt && (
           <span className="text-xs text-[var(--color-muted)] flex items-center gap-1 ml-auto">
