@@ -233,28 +233,13 @@ export function Composer({
   }
 
   /** Upload a single file to R2.
-   *  Small files (≤ 4 MB): POST to /api/upload (no CORS needed).
-   *  Large files (> 4 MB): presigned PUT directly to R2 (bypasses
-   *  Vercel's 4.5 MB serverless body limit). */
+   *  Videos + large files: always presigned PUT direct to R2 (bypasses
+   *  Vercel's 4.5 MB serverless body limit entirely).
+   *  Small images (≤ 4 MB): POST to /api/upload. */
   const SA_LIMIT = 4 * 1024 * 1024;
   const MAX_UPLOAD = 200 * 1024 * 1024;
 
-  async function uploadOneFile(file: File): Promise<string> {
-    if (file.size > MAX_UPLOAD) {
-      throw new Error(`File is ${(file.size / (1024 * 1024)).toFixed(1)} MB — max is 200 MB.`);
-    }
-    if (file.size <= SA_LIMIT) {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch("/api/upload", { method: "POST", body: fd });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body?.message || body?.error || `HTTP ${res.status}`);
-      }
-      const { url } = (await res.json()) as { url: string };
-      return url;
-    }
-    // Presigned upload for large files
+  async function uploadViaPresign(file: File): Promise<string> {
     const ext = file.name.split(".").pop()?.toLowerCase() ?? "bin";
     const contentType = file.type || "application/octet-stream";
     const presignRes = await fetch("/api/upload/presign", {
@@ -278,11 +263,35 @@ export function Composer({
     if (!putRes.ok) {
       const text = await putRes.text().catch(() => "");
       if (text.includes("Failed to fetch") || text.includes("NetworkError")) {
-        throw new Error("Upload blocked — R2 CORS not configured for your domain.");
+        throw new Error(
+          "Upload blocked — R2 CORS not configured. Go to Cloudflare Dashboard > " +
+          "R2 > bucket > Settings > CORS Policy and allow your domain.",
+        );
       }
       throw new Error(`R2 upload failed (${putRes.status})`);
     }
     return publicUrl;
+  }
+
+  async function uploadOneFile(file: File): Promise<string> {
+    if (file.size > MAX_UPLOAD) {
+      throw new Error(`File is ${(file.size / (1024 * 1024)).toFixed(1)} MB — max is 200 MB.`);
+    }
+    // Videos always go through presigned (Vercel caps body at 4.5 MB).
+    // Large images too. Only small images use the server-side proxy.
+    const isVideo = file.type.startsWith("video/");
+    if (isVideo || file.size > SA_LIMIT) {
+      return uploadViaPresign(file);
+    }
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body?.message || body?.error || `HTTP ${res.status}`);
+    }
+    const { url } = (await res.json()) as { url: string };
+    return url;
   }
 
   /** Core upload routine — accepts a raw File[] so it can be called from

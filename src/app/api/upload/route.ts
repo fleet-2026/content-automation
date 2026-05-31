@@ -5,6 +5,9 @@ import { uploadToR2 } from "@/lib/r2";
 import { sniffFileType } from "@/lib/file-sniff";
 import { rateLimit } from "@/lib/rate-limit";
 
+// Max duration for large uploads (Vercel serverless default is 10s).
+export const maxDuration = 120;
+
 export async function POST(req: Request) {
   // Auth
   let userId: string;
