@@ -3,6 +3,7 @@ import { safe } from "@/lib/safe";
 import { tryGetUser } from "@/lib/auth-helpers";
 import Link from "next/link";
 import { DraftCard, type DraftCardData } from "./draft-card";
+import { PostedSection } from "./posted-section";
 
 export const dynamic = "force-dynamic";
 
@@ -154,62 +155,88 @@ export default async function DraftsPage() {
         </section>
       )}
 
-      {/* ─── Drafts list ─────────────────────────────────────── */}
-      <h2 className="text-lg font-semibold mb-3">Drafts</h2>
+      {/* ─── Drafts list (active: DRAFT / SCHEDULED / APPROVED / PUBLISHING) ─── */}
+      {(() => {
+        const active = drafts.filter((d) =>
+          ["DRAFT", "SCHEDULED", "APPROVED", "PUBLISHING"].includes(d.status),
+        );
+        const posted = drafts.filter((d) =>
+          ["PUBLISHED", "FAILED"].includes(d.status),
+        );
 
-      {drafts.length === 0 ? (
-        <div className="border rounded-xl bg-[var(--color-surface)] p-10 text-center">
-          <h3 className="text-base font-semibold mb-2">No drafts yet</h3>
-          <p className="text-sm text-[var(--color-muted)] mb-5 max-w-md mx-auto">
-            Drafts you save or schedule will live here. Generate hooks,
-            attach media from Studio, and queue posts across IG / TikTok /
-            YouTube.
-          </p>
-          <div className="flex flex-wrap gap-2 justify-center">
-            <Link
-              href="/compose"
-              className="bg-[var(--color-accent)] text-[var(--color-text-on-dark)] hover:opacity-90 rounded-lg px-4 py-2 text-sm font-medium"
-            >
-              Compose your first post →
-            </Link>
-            <Link
-              href="/voice"
-              className="bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] rounded-lg px-4 py-2 text-sm font-medium"
-            >
-              Or dump a thought to Voice →
-            </Link>
-          </div>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {drafts.map((d) => {
-            // Cast the JSON column to our typed shape. Prisma stores publishResults
-            // as `Json?` so the runtime type is `unknown` — narrow it once here so
-            // the client component gets clean typed data.
-            const cardData: DraftCardData = {
-              id: d.id,
-              caption: d.caption,
-              selectedHook: d.selectedHook,
-              mediaUrl: d.mediaUrl,
-              platforms: d.platforms,
-              status: d.status,
-              scheduledFor: d.scheduledFor,
-              updatedAt: d.updatedAt,
-              hashtags: d.hashtags,
-              publishResults: Array.isArray(d.publishResults)
-                ? (d.publishResults as DraftCardData["publishResults"])
-                : null,
-            };
-            return (
-              <DraftCard
-                key={d.id}
-                draft={cardData}
+        function toCardData(d: (typeof drafts)[number]): DraftCardData {
+          return {
+            id: d.id,
+            caption: d.caption,
+            selectedHook: d.selectedHook,
+            mediaUrl: d.mediaUrl,
+            platforms: d.platforms,
+            status: d.status,
+            scheduledFor: d.scheduledFor,
+            updatedAt: d.updatedAt,
+            hashtags: d.hashtags,
+            publishResults: Array.isArray(d.publishResults)
+              ? (d.publishResults as DraftCardData["publishResults"])
+              : null,
+          };
+        }
+
+        return (
+          <>
+            <h2 className="text-lg font-semibold mb-3">
+              Drafts & queue
+              {active.length > 0 && (
+                <span className="ml-2 text-sm font-normal text-[var(--color-muted)]">
+                  {active.length}
+                </span>
+              )}
+            </h2>
+
+            {active.length === 0 ? (
+              <div className="border rounded-xl bg-[var(--color-surface)] p-10 text-center">
+                <h3 className="text-base font-semibold mb-2">No drafts yet</h3>
+                <p className="text-sm text-[var(--color-muted)] mb-5 max-w-md mx-auto">
+                  Drafts you save or schedule will live here. Generate hooks,
+                  attach media from Studio, and queue posts across IG / TikTok /
+                  YouTube.
+                </p>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  <Link
+                    href="/compose"
+                    className="bg-[var(--color-accent)] text-[var(--color-text-on-dark)] hover:opacity-90 rounded-lg px-4 py-2 text-sm font-medium"
+                  >
+                    Compose your first post →
+                  </Link>
+                  <Link
+                    href="/voice"
+                    className="bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] rounded-lg px-4 py-2 text-sm font-medium"
+                  >
+                    Or dump a thought to Voice →
+                  </Link>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {active.map((d) => (
+                  <DraftCard
+                    key={d.id}
+                    draft={toCardData(d)}
+                    accountStateByPlatform={accountStateByPlatform}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* ─── Posted (collapsed by default) ─────────────────── */}
+            {posted.length > 0 && (
+              <PostedSection
+                drafts={posted.map(toCardData)}
                 accountStateByPlatform={accountStateByPlatform}
               />
-            );
-          })}
-        </div>
-      )}
+            )}
+          </>
+        );
+      })()}
     </div>
   );
 }
