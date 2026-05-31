@@ -4,6 +4,7 @@ import Link from "next/link";
 import { tryGetUser } from "@/lib/auth-helpers";
 import { listTrackerGuides } from "@/lib/guides";
 import TrackerTable from "./tracker-table";
+import AddTrackerGuide from "./add-tracker-guide";
 
 export const metadata: Metadata = {
   title: "Quick Daily Posts — Creator OS",
@@ -38,12 +39,15 @@ export default async function TrackerPage() {
             {total} guides · {withScript} scripted · {withMedia} with media · {published} live · {postedToSocial} on socials · {rated} rated
           </p>
         </div>
-        <Link
-          href="/daily-post"
-          className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] underline"
-        >
-          Full editor view →
-        </Link>
+        <div className="flex items-center gap-3">
+          <AddTrackerGuide />
+          <Link
+            href="/daily-post"
+            className="text-xs text-[var(--color-muted)] hover:text-[var(--color-text)] underline"
+          >
+            Full editor view →
+          </Link>
+        </div>
       </div>
 
       {total === 0 ? (
