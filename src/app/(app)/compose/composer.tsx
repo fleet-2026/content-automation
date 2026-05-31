@@ -74,6 +74,8 @@ export function Composer({
     musicUrl: string | null;
     platforms: Platform[];
     scheduledFor: string;
+    ctaKeyword: string;
+    ctaResponse: string;
     savedAt: number;
   }>;
   const [persisted] = useState<PersistedState>(() => {
@@ -147,6 +149,8 @@ export function Composer({
   const [scheduledFor, setScheduledFor] = useState<string>(
     persisted.scheduledFor ?? initialDraft?.scheduledFor ?? "",
   );
+  const [ctaKeyword, setCtaKeyword] = useState(persisted.ctaKeyword ?? "");
+  const [ctaResponse, setCtaResponse] = useState(persisted.ctaResponse ?? "");
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
 
   // Save to localStorage whenever the tracked state changes. Cheap —
@@ -165,6 +169,8 @@ export function Composer({
         musicUrl,
         platforms,
         scheduledFor,
+        ctaKeyword,
+        ctaResponse,
         savedAt: Date.now(),
       };
       window.localStorage.setItem(PERSIST_KEY, JSON.stringify(state));
@@ -172,7 +178,7 @@ export function Composer({
       // Quota exceeded / private mode — silent. User will lose state
       // on navigate but the page itself still works.
     }
-  }, [topic, caption, hashtagsRaw, hooks, selectedHook, mediaUrls, musicUrl, platforms, scheduledFor]);
+  }, [topic, caption, hashtagsRaw, hooks, selectedHook, mediaUrls, musicUrl, platforms, scheduledFor, ctaKeyword, ctaResponse]);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   // Schedule popover state. Replaces the dynamic Publish/Schedule label
@@ -311,6 +317,22 @@ export function Composer({
         newUrls.push(url);
       }
       setMediaUrls((cur) => [...cur, ...newUrls]);
+      // Auto-save so uploaded videos aren't lost if the user navigates away.
+      try {
+        const allMedia = [...mediaUrls, ...newUrls];
+        const d = await saveDraft({
+          draftId: draftId ?? undefined,
+          caption: selectedHook ? `${selectedHook}\n\n${caption}` : caption,
+          hashtags,
+          hookOptions: hooks,
+          selectedHook,
+          mediaUrl: packMediaUrls(allMedia, { musicUrl }),
+          platforms,
+          scheduledFor: scheduledFor || null,
+        });
+        setDraftId(d.id);
+        setSavedAt(new Date());
+      } catch { /* auto-save is best-effort */ }
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : String(e2));
     } finally {
@@ -540,6 +562,49 @@ export function Composer({
               ))}
             </div>
           )}
+        </Field>
+
+        {/* ManyChat CTA — keyword trigger + bot response */}
+        <Field label="ManyChat CTA">
+          <div className="space-y-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 p-3">
+            <div>
+              <label className="block text-[11px] font-semibold mb-1 text-emerald-200">
+                Trigger keyword
+              </label>
+              <input
+                value={ctaKeyword}
+                onChange={(e) => setCtaKeyword(e.target.value.toUpperCase())}
+                placeholder="e.g. GUIDE, DUMB, STACK"
+                className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-emerald-500/50 font-mono uppercase text-sm"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold mb-1 text-emerald-200">
+                Bot reply{ctaKeyword.trim() ? ` when someone comments ${ctaKeyword}` : ""}
+              </label>
+              <textarea
+                value={ctaResponse}
+                onChange={(e) => setCtaResponse(e.target.value)}
+                rows={3}
+                placeholder={ctaKeyword.trim()
+                  ? `You said ${ctaKeyword}! Here it is 🤩\n\nTap the button below to grab the full guide.`
+                  : "What does the bot DM back? Set the keyword first."}
+                className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-emerald-500/50 resize-y text-sm"
+              />
+              {ctaKeyword.trim() && !ctaResponse.trim() && (
+                <button
+                  type="button"
+                  onClick={() => setCtaResponse(`You said ${ctaKeyword}! Here it is 🤩\n\nI put together a full guide for you — tap the button below to grab it.\n\nLet me know if you have questions!`)}
+                  className="mt-1.5 text-[11px] text-emerald-300 hover:underline"
+                >
+                  Generate template →
+                </button>
+              )}
+            </div>
+            <p className="text-[10px] text-[var(--color-muted)] leading-relaxed">
+              Saved with the draft. Copy the keyword into your caption CTA (e.g. &quot;Comment {ctaKeyword || "KEYWORD"} for the full guide&quot;) and paste the reply text into ManyChat.
+            </p>
+          </div>
         </Field>
 
         <Field
@@ -906,7 +971,7 @@ export function Composer({
         <div className="flex flex-wrap gap-2 pt-3 border-t border-[var(--color-border)]">
           <button
             onClick={save}
-            disabled={saving || !caption.trim()}
+            disabled={saving || (!caption.trim() && mediaUrls.length === 0)}
             className="px-4 py-2 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] text-sm disabled:opacity-50"
           >
             {saving ? "Saving…" : "Save draft"}
