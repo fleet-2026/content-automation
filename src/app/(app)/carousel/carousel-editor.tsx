@@ -62,7 +62,7 @@ export function CarouselEditor() {
       if (!raw) return;
       const p = JSON.parse(raw);
       if (Date.now() - (p.savedAt ?? 0) > 24 * 60 * 60 * 1000) return;
-      if (p.images?.length) setImages(p.images);
+      if (Array.isArray(p.images) && p.images.length) setImages(p.images);
       if (p.caption) setCaption(p.caption);
       if (p.hashtagsRaw) setHashtagsRaw(p.hashtagsRaw);
       if (p.ctaKeyword) setCtaKeyword(p.ctaKeyword);

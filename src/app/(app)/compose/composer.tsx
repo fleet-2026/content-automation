@@ -117,7 +117,11 @@ export function Composer({
     if (persisted.hashtagsRaw !== undefined) return persisted.hashtagsRaw;
     return initialDraft ? initialDraft.hashtags.map((h) => `#${h}`).join(" ") : "";
   });
-  const [hooks, setHooks] = useState<Hook[]>(() => persisted.hooks ?? initialDraft?.hookOptions ?? []);
+  const [hooks, setHooks] = useState<Hook[]>(() => {
+    if (Array.isArray(persisted.hooks)) return persisted.hooks;
+    if (Array.isArray(initialDraft?.hookOptions)) return initialDraft.hookOptions;
+    return [];
+  });
   const [selectedHook, setSelectedHook] = useState<string | null>(
     persisted.selectedHook !== undefined ? persisted.selectedHook : initialDraft?.selectedHook ?? null,
   );
@@ -127,7 +131,7 @@ export function Composer({
   // and single-platform publishing fallback (TikTok/YouTube can only post
   // one media; Instagram supports up to 10 in a carousel).
   const [mediaUrls, setMediaUrls] = useState<string[]>(() => {
-    if (persisted.mediaUrls) return persisted.mediaUrls;
+    if (Array.isArray(persisted.mediaUrls) && persisted.mediaUrls.length) return persisted.mediaUrls;
     if (initialDraft) return parseMediaUrls(initialDraft.mediaUrl);
     if (initialMediaUrl) return [initialMediaUrl];
     return [];

@@ -87,7 +87,7 @@ function buildShareableCaption(
     );
   }
 
-  if (draft.hashtags?.length) {
+  if (Array.isArray(draft.hashtags) && draft.hashtags.length) {
     parts.push("");
     parts.push(draft.hashtags.map((h) => (h.startsWith("#") ? h : `#${h}`)).join(" "));
   }
