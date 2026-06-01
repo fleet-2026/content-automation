@@ -2,8 +2,10 @@
 
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { X, GripVertical, Plus, Send, CheckCircle2, CalendarClock } from "lucide-react";
+import { X, GripVertical, Plus, Send, CheckCircle2, CalendarClock, BookOpen, Eye, Pencil } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { saveDraft, publishDraftNow, scheduleDraft, getDraftCaptionUrl } from "../compose/actions";
+import { getDraftGuide, saveDraftGuide } from "./guide-actions";
 import type { Platform } from "@prisma/client";
 import { packMediaUrls } from "@/lib/media-urls";
 import { PLATFORM_INFO, ENABLED_PLATFORMS_ORDERED } from "@/lib/platform-info";
@@ -29,6 +31,18 @@ export function CarouselEditor() {
   const [scheduledFor, setScheduledFor] = useState("");
   const [scheduling, setScheduling] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Guide tab — long-form markdown delivered to subscribers after the email
+  // gate on launchedpost.com/g/<keyword>. Stored on Draft.hookOptions.
+  const [guideMd, setGuideMd] = useState("");
+  const [guideMode, setGuideMode] = useState<"edit" | "preview">("preview");
+  const [guideLoaded, setGuideLoaded] = useState(false);
+  const [guideLoading, setGuideLoading] = useState(false);
+  const [guideSaving, setGuideSaving] = useState(false);
+  const [guideSavedAt, setGuideSavedAt] = useState<Date | null>(null);
+  const [guideUpdatedAt, setGuideUpdatedAt] = useState<string | null>(null);
+  const [guideFile, setGuideFile] = useState<string | null>(null);
+  const [guideErr, setGuideErr] = useState<string | null>(null);
 
   // Drag reorder state
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -68,6 +82,60 @@ export function CarouselEditor() {
       );
     } catch {}
   }, [images, caption, hashtagsRaw, ctaKeyword, ctaResponse, responseFileUrl, draftId]);
+
+  // Load the guide markdown from the server whenever the active draft changes.
+  // Skips if no draftId (this is a brand-new unsaved carousel).
+  useEffect(() => {
+    if (!draftId) {
+      setGuideMd("");
+      setGuideLoaded(false);
+      setGuideUpdatedAt(null);
+      setGuideFile(null);
+      return;
+    }
+    let cancelled = false;
+    setGuideLoading(true);
+    setGuideErr(null);
+    getDraftGuide(draftId)
+      .then((info) => {
+        if (cancelled) return;
+        setGuideMd(info.guideMd);
+        setGuideUpdatedAt(info.updatedAt);
+        setGuideFile(info.guideFile);
+        setGuideLoaded(true);
+        // Default to preview when we have content; edit when starting empty.
+        setGuideMode(info.guideMd.trim() ? "preview" : "edit");
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setGuideErr(`Couldn't load guide: ${e instanceof Error ? e.message : String(e)}`);
+      })
+      .finally(() => {
+        if (!cancelled) setGuideLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [draftId]);
+
+  async function saveGuide() {
+    if (!draftId) {
+      setGuideErr("Save the carousel draft first — the guide attaches to a draft.");
+      return;
+    }
+    setGuideErr(null);
+    setGuideSaving(true);
+    try {
+      const info = await saveDraftGuide(draftId, guideMd);
+      setGuideSavedAt(new Date());
+      setGuideUpdatedAt(info.updatedAt);
+      setGuideFile(info.guideFile);
+    } catch (e) {
+      setGuideErr(`Save failed: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setGuideSaving(false);
+    }
+  }
 
   // Upload via presigned URL (same pattern as compose)
   async function uploadOneFile(file: File): Promise<string> {
@@ -440,6 +508,140 @@ export function CarouselEditor() {
           <p className="mt-1.5 text-[10px] text-[var(--color-muted)]">
             Upload the PDF/image that ManyChat sends as the DM attachment. Copy the URL and paste it as the button link in ManyChat.
           </p>
+        </div>
+      </div>
+
+      {/* Guide — the long-form markdown the subscriber gets after the email gate */}
+      <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-amber-300" />
+            <label className="text-xs uppercase tracking-wider text-amber-200 font-semibold">
+              Guide (what subscribers actually get)
+            </label>
+          </div>
+          <div className="flex items-center gap-2 text-[10px] text-[var(--color-muted)]">
+            {guideMd && (
+              <span>
+                {guideMd.split(/\s+/).filter(Boolean).length} words
+              </span>
+            )}
+            {guideUpdatedAt && (
+              <span>
+                · updated {new Date(guideUpdatedAt).toLocaleDateString()}
+              </span>
+            )}
+            {guideFile && <span>· src: {guideFile}</span>}
+          </div>
+        </div>
+
+        <p className="text-[11px] text-[var(--color-muted)] leading-relaxed">
+          This markdown is what gets rendered at
+          <code className="mx-1 px-1 py-0.5 rounded bg-amber-500/10 text-amber-200">
+            launchedpost.com/guides/&lt;keyword&gt;
+          </code>
+          after a user submits their email. Make every word earn its place — this
+          is the actual deliverable, not the carousel itself.
+        </p>
+
+        {/* Edit / Preview toggle */}
+        <div className="inline-flex rounded-md border border-amber-500/30 overflow-hidden text-xs">
+          <button
+            type="button"
+            onClick={() => setGuideMode("edit")}
+            className={`px-3 py-1.5 inline-flex items-center gap-1.5 ${
+              guideMode === "edit"
+                ? "bg-amber-500/20 text-amber-100 font-semibold"
+                : "text-amber-300 hover:bg-amber-500/10"
+            }`}
+          >
+            <Pencil className="w-3 h-3" />
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => setGuideMode("preview")}
+            className={`px-3 py-1.5 inline-flex items-center gap-1.5 border-l border-amber-500/30 ${
+              guideMode === "preview"
+                ? "bg-amber-500/20 text-amber-100 font-semibold"
+                : "text-amber-300 hover:bg-amber-500/10"
+            }`}
+          >
+            <Eye className="w-3 h-3" />
+            Preview
+          </button>
+        </div>
+
+        {guideLoading && !guideLoaded ? (
+          <div className="rounded-md bg-amber-500/5 border border-amber-500/20 px-3 py-8 text-center text-xs text-amber-200">
+            Loading guide…
+          </div>
+        ) : !draftId ? (
+          <div className="rounded-md bg-amber-500/5 border border-amber-500/20 px-3 py-6 text-center text-xs text-[var(--color-muted)]">
+            Save the carousel draft first — the guide attaches to a saved draft.
+          </div>
+        ) : guideMode === "edit" ? (
+          <textarea
+            value={guideMd}
+            onChange={(e) => setGuideMd(e.target.value)}
+            placeholder={
+              "# The 5-Prompt Sunday Reset\n\n> 20 minutes every Sunday. Saves your whole week.\n\n## Step 1 — Create the Project\n\n```\nPaste this as the system prompt...\n```\n\n... markdown supported ..."
+            }
+            className="w-full min-h-[400px] rounded-md bg-[var(--color-surface)] border border-amber-500/30 px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:border-amber-400"
+            spellCheck={false}
+          />
+        ) : (
+          <div className="rounded-md bg-[var(--color-surface)] border border-amber-500/20 px-5 py-4 max-h-[600px] overflow-y-auto">
+            {guideMd.trim() ? (
+              <div
+                className="
+                  prose prose-sm max-w-none
+                  prose-headings:font-semibold prose-headings:tracking-tight
+                  prose-h1:text-2xl prose-h1:mb-3
+                  prose-h2:text-lg prose-h2:mt-6 prose-h2:mb-2
+                  prose-h2:border-b prose-h2:border-amber-500/20 prose-h2:pb-1
+                  prose-h3:text-base prose-h3:mt-4 prose-h3:mb-1
+                  prose-blockquote:border-l-4 prose-blockquote:border-amber-400
+                  prose-blockquote:not-italic prose-blockquote:text-[var(--color-text)]
+                  prose-code:bg-amber-500/10 prose-code:text-amber-200
+                  prose-code:px-1 prose-code:py-0.5 prose-code:rounded
+                  prose-code:before:content-none prose-code:after:content-none
+                  prose-pre:bg-zinc-900 prose-pre:text-stone-100 prose-pre:rounded-lg
+                  prose-pre:text-xs
+                  prose-a:text-amber-300 hover:prose-a:text-amber-200
+                  prose-strong:text-[var(--color-text)]
+                  prose-hr:border-amber-500/20
+                "
+              >
+                <ReactMarkdown>{guideMd}</ReactMarkdown>
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--color-muted)] italic">
+                No guide content yet. Switch to Edit and paste the markdown
+                deliverable for this carousel.
+              </p>
+            )}
+          </div>
+        )}
+
+        {guideErr && (
+          <div className="text-[11px] text-red-300 bg-red-500/10 border border-red-500/30 rounded px-2 py-1">
+            {guideErr}
+          </div>
+        )}
+
+        <div className="flex items-center justify-between gap-2 pt-1">
+          <span className="text-[10px] text-[var(--color-muted)]">
+            {guideSavedAt && `Saved ${guideSavedAt.toLocaleTimeString()}`}
+          </span>
+          <button
+            type="button"
+            onClick={saveGuide}
+            disabled={guideSaving || !draftId}
+            className="text-xs font-semibold px-3 py-1.5 rounded bg-amber-500 text-stone-900 hover:bg-amber-400 disabled:bg-amber-500/30 disabled:text-amber-200 disabled:cursor-not-allowed"
+          >
+            {guideSaving ? "Saving…" : "Save guide"}
+          </button>
         </div>
       </div>
 
