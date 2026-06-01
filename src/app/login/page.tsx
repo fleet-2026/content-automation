@@ -1,12 +1,10 @@
 "use client";
 
 import { signIn } from "next-auth/react";
-import { Suspense, useState } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginPage() {
-  // useSearchParams forces client-side rendering. Wrap in Suspense so
-  // the static prerender doesn't bail out at build time.
   return (
     <Suspense fallback={<LoginShell loading />}>
       <LoginForm />
@@ -22,6 +20,32 @@ function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  // Auto-redirect: if the dashboard is accessible without login
+  // (AUTH_DEV_OPEN=1), just go straight there.
+  useEffect(() => {
+    fetch("/api/auth/session")
+      .then((r) => r.json())
+      .then((s) => {
+        if (s?.user?.id) {
+          router.push(callbackUrl);
+          return;
+        }
+      })
+      .catch(() => {});
+
+    // Also try hitting the dashboard directly — if dev-open mode is on,
+    // the middleware lets us through without a session.
+    fetch(callbackUrl, { method: "HEAD", redirect: "manual" })
+      .then((r) => {
+        // If we get 200 (not a redirect to /login), we can go there
+        if (r.ok || r.status === 200) {
+          router.push(callbackUrl);
+        }
+      })
+      .catch(() => {});
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -111,12 +135,6 @@ function LoginShell(props: ShellProps) {
         >
           {props.loading ? "Signing in…" : "Sign in"}
         </button>
-
-        <p className="text-xs text-[var(--color-muted)] mt-6">
-          Don&apos;t have an account yet? Run{" "}
-          <code className="text-[var(--color-text)]">npm run seed:user</code> from
-          the project root to create one.
-        </p>
       </form>
     </div>
   );

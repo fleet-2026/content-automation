@@ -2,6 +2,7 @@ import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db";
+import { isDevOpenMode } from "@/lib/default-user";
 
 declare module "next-auth" {
   interface Session {
@@ -57,6 +58,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         pathname.startsWith("/api/auth") ||
         pathname.startsWith("/api/inngest");
       if (isLogin || isPublicAsset) return true;
+      // Single-user mode: skip login when AUTH_DEV_OPEN=1 + ADMIN_EMAIL set.
+      // requireUser() falls back to ensureDefaultUserId() which provisions
+      // the admin user automatically — no session needed.
+      if (isDevOpenMode()) return true;
       return !!session;
     },
   },
