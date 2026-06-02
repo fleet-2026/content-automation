@@ -1,0 +1,126 @@
+// Fleet management data model.
+// Dev uses SQLite for zero-config local runs; switch `provider` to "postgresql"
+// and DATABASE_URL to a Postgres connection string for production.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// People who can sign in. Admins/dispatchers use the web app; drivers and
+/// riders use the mobile app. A Driver row links back to its User account.
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  phone     String?
+  role      String   @default("RIDER") // ADMIN | DISPATCHER | DRIVER | RIDER
+  password  String?  // bcrypt hash; null for invite-pending accounts
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  driver         Driver?
+  requestedTrips Trip[]  @relation("RiderTrips")
+}
+
+/// A car in the fleet.
+model Vehicle {
+  id           String   @id @default(cuid())
+  plateNumber  String   @unique
+  make         String
+  model        String
+  year         Int
+  vin          String?  @unique
+  color        String?
+  seats        Int      @default(4)
+  mileageKm    Int      @default(0)
+  status       String   @default("AVAILABLE") // AVAILABLE | ON_TRIP | MAINTENANCE | OUT_OF_SERVICE
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignedDriver Driver?    @relation("DriverVehicle")
+  documents      Document[]
+  trips          Trip[]
+}
+
+/// A driver profile. Optionally linked to a sign-in User and an assigned Vehicle.
+model Driver {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String
+  email       String?  @unique
+  status      String   @default("ACTIVE") // ACTIVE | INACTIVE | SUSPENDED
+  rating      Float    @default(5.0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userId      String?  @unique
+  user        User?    @relation(fields: [userId], references: [id])
+
+  vehicleId   String?  @unique
+  vehicle     Vehicle? @relation("DriverVehicle", fields: [vehicleId], references: [id])
+
+  documents   Document[]
+  trips       Trip[]
+}
+
+/// A compliance document with an expiry date. Belongs to either a Vehicle or a
+/// Driver. This is the source of truth for the "licenses & expiries" feature.
+model Document {
+  id         String    @id @default(cuid())
+  type       String    // DRIVER_LICENSE | VEHICLE_REGISTRATION | INSURANCE | INSPECTION | PERMIT
+  number     String?
+  issuedOn   DateTime?
+  expiresOn  DateTime
+  notes      String?
+  fileUrl    String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  vehicleId  String?
+  vehicle    Vehicle?  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  driverId   String?
+  driver     Driver?   @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  @@index([expiresOn])
+}
+
+/// A trip request, Uber-style: rider requests, dispatcher/system assigns a
+/// driver + vehicle, status moves to completion.
+model Trip {
+  id             String    @id @default(cuid())
+  status         String    @default("REQUESTED") // REQUESTED | ASSIGNED | EN_ROUTE | IN_PROGRESS | COMPLETED | CANCELLED
+
+  pickupAddress  String
+  pickupLat      Float?
+  pickupLng      Float?
+  dropoffAddress String
+  dropoffLat     Float?
+  dropoffLng     Float?
+
+  distanceKm     Float?
+  fare           Float?
+  notes          String?
+
+  requestedAt    DateTime  @default(now())
+  assignedAt     DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+
+  riderId        String?
+  rider          User?     @relation("RiderTrips", fields: [riderId], references: [id])
+
+  driverId       String?
+  driver         Driver?   @relation(fields: [driverId], references: [id])
+
+  vehicleId      String?
+  vehicle        Vehicle?  @relation(fields: [vehicleId], references: [id])
+
+  @@index([status])
+}

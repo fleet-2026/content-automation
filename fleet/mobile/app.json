@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "Fleet",
+    "slug": "fleet-mobile",
+    "scheme": "fleet",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "plugins": ["expo-router"],
+    "ios": { "supportsTablet": true },
+    "android": { "edgeToEdgeEnabled": true },
+    "extra": {
+      "apiBaseUrl": "http://localhost:3001"
+    }
+  }
+}
