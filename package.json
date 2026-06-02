@@ -13,7 +13,8 @@
     "db:studio": "prisma studio",
     "db:generate": "prisma generate",
     "inngest:dev": "npx inngest-cli@latest dev",
-    "seed:user": "tsx scripts/create-admin-user.ts"
+    "seed:user": "tsx scripts/create-admin-user.ts",
+    "setup": "tsx scripts/setup-buyer.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.30.0",
