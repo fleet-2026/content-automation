@@ -5,7 +5,6 @@ import { tryGetUser } from "@/lib/auth-helpers";
 import { listPosts } from "./data";
 import BulkPublishBar from "./bulk-publish-bar";
 import { PostCard } from "./post-card";
-import { PublishedSection } from "./published-section";
 
 export const metadata: Metadata = {
   title: "Daily Post — Creator OS",
@@ -41,15 +40,23 @@ export default async function DailyPostIndexPage() {
             {posts.length} guides · {ready} ready · {postedToSocial} posted to socials
           </p>
         </div>
-        {/* One-stop teleprompter page — all scripts on one scroll, each
-            with a Copy button so the user can blast through a recording
-            session without clicking into individual editors. */}
-        <Link
-          href="/scripts"
-          className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-text)] text-[var(--color-text-on-dark)] px-4 py-2 text-sm font-semibold hover:opacity-90"
-        >
-          All scripts (copy &amp; record) →
-        </Link>
+        <div className="flex items-center gap-3 flex-wrap">
+          <Link
+            href="/published"
+            className="text-sm text-[var(--color-muted)] hover:text-[var(--color-text)] underline"
+          >
+            Published ({postedToSocial}) →
+          </Link>
+          {/* One-stop teleprompter page — all scripts on one scroll, each
+              with a Copy button so the user can blast through a recording
+              session without clicking into individual editors. */}
+          <Link
+            href="/scripts"
+            className="inline-flex items-center gap-2 rounded-lg bg-[var(--color-text)] text-[var(--color-text-on-dark)] px-4 py-2 text-sm font-semibold hover:opacity-90"
+          >
+            All scripts (copy &amp; record) →
+          </Link>
+        </div>
       </div>
 
       <BulkPublishBar totalDrafts={draftCount} totalPublished={publishedCount} />
@@ -89,8 +96,6 @@ export default async function DailyPostIndexPage() {
             </div>
           )}
 
-          {/* Posted — auto-moved here once posted to social */}
-          <PublishedSection posts={posted} />
         </>
       )}
     </div>

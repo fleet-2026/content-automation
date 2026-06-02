@@ -24,6 +24,7 @@ import {
   Rocket,
   BookOpen,
   Images,
+  CheckCircle2,
   Menu,
   X,
 } from "lucide-react";
@@ -44,6 +45,7 @@ type NavItem = {
 const items: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/daily-post", label: "Daily post", icon: Rocket },
+  { href: "/published", label: "Published", icon: CheckCircle2 },
   { href: "/guides", label: "View guide", icon: BookOpen },
   { href: "/posts", label: "Posts", icon: FileText },
   { href: "/hooks", label: "Hooks", icon: Sparkles },
