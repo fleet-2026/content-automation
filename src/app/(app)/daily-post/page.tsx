@@ -23,11 +23,9 @@ export default async function DailyPostIndexPage() {
   const publishedCount = posts.filter((p) => p.isPublished).length;
   const draftCount = posts.length - publishedCount;
 
-  // "Done" = posted to at least one social platform. These auto-move into
-  // the collapsed Posted section so the active grid only shows what's left.
-  const active = posts.filter((p) => (p.postedPlatforms ?? []).length === 0);
-  const posted = posts.filter((p) => (p.postedPlatforms ?? []).length > 0);
-  const postedToSocial = posted.length;
+  // Published posts leave the daily-post queue entirely and live on
+  // /published. Daily-post only shows what hasn't been published yet.
+  const active = posts.filter((p) => !p.isPublished);
 
   return (
     <div className="px-8 py-10 max-w-7xl">
@@ -37,7 +35,7 @@ export default async function DailyPostIndexPage() {
             Daily <span className="font-italic-accent text-blush">post.</span>
           </h1>
           <p className="text-sm text-[var(--color-muted)] mt-1">
-            {posts.length} guides · {ready} ready · {postedToSocial} posted to socials
+            {active.length} to publish · {ready} ready · {publishedCount} published
           </p>
         </div>
         <div className="flex items-center gap-3 flex-wrap">
@@ -45,7 +43,7 @@ export default async function DailyPostIndexPage() {
             href="/published"
             className="text-sm text-[var(--color-muted)] hover:text-[var(--color-text)] underline"
           >
-            Published ({postedToSocial}) →
+            Published ({publishedCount}) →
           </Link>
           {/* One-stop teleprompter page — all scripts on one scroll, each
               with a Copy button so the user can blast through a recording
@@ -77,16 +75,17 @@ export default async function DailyPostIndexPage() {
         </div>
       ) : (
         <>
-          {/* Active — not yet posted to social */}
+          {/* Active — not yet published. Published posts live on /published. */}
           <h2 className="text-lg font-semibold mb-3">
-            To post
+            To publish
             <span className="ml-2 text-sm font-normal text-[var(--color-muted)]">
               {active.length}
             </span>
           </h2>
           {active.length === 0 ? (
             <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-8 text-center text-sm text-[var(--color-muted)]">
-              🎉 Everything&apos;s posted. New guides will show up here.
+              🎉 Everything&apos;s published. New or unpublished guides show up here ·{" "}
+              <Link href="/published" className="underline">view published →</Link>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

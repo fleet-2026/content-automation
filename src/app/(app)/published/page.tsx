@@ -18,9 +18,10 @@ export default async function PublishedPage() {
   if (!userId) redirect("/login");
 
   const posts = await listPosts();
-  // "Published" = posted to at least one social platform.
+  // "Published" = the Publish toggle is on (live on /guides). Every post you
+  // publish files itself here and drops off the daily-post queue.
   const published = posts
-    .filter((p) => (p.postedPlatforms ?? []).length > 0)
+    .filter((p) => p.isPublished)
     .sort((a, b) => (b.index ?? 0) - (a.index ?? 0));
 
   return (
@@ -31,7 +32,7 @@ export default async function PublishedPage() {
             Published <span className="font-italic-accent text-blush">posts.</span>
           </h1>
           <p className="text-sm text-[var(--color-muted)] mt-1">
-            {published.length} posted to social · auto-filed here once you publish
+            {published.length} published · auto-filed here the moment you publish
           </p>
         </div>
         <Link
@@ -44,8 +45,8 @@ export default async function PublishedPage() {
 
       {published.length === 0 ? (
         <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-12 text-center text-sm text-[var(--color-muted)]">
-          Nothing published yet. Posts move here automatically once you post
-          them to a social platform from the{" "}
+          Nothing published yet. Posts move here automatically the moment you
+          flip the Publish toggle in the{" "}
           <Link href="/daily-post" className="underline">
             daily post editor
           </Link>
