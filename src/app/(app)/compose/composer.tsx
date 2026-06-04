@@ -82,34 +82,20 @@ export function Composer({
     ctaResponse: string;
     savedAt: number;
   }>;
+  // Compose ALWAYS opens blank. The old behavior restored an autosaved
+  // localStorage snapshot of your last session — which meant opening
+  // Compose re-surfaced the previous post's video/caption. That confused
+  // more than it helped, so we never restore. Editing a specific draft
+  // (?draft=<id>) still hydrates from the DB via the initializers below.
+  // We clear any leftover snapshot on mount so old data can't reappear.
   const [persisted] = useState<PersistedState>(() => {
     if (typeof window === "undefined") return {};
-    // "New post" (?new=1) OR editing a specific draft (?draft=<id>) both
-    // mean: ignore the autosaved snapshot. For New post we want a blank
-    // form; for Edit we hydrate from the server draft instead. Either way,
-    // drop the stale localStorage so the last in-progress post doesn't
-    // resurface.
-    if (freshStart || initialDraft) {
-      try {
-        window.localStorage.removeItem(PERSIST_KEY);
-      } catch {}
-      return {};
-    }
     try {
-      const raw = window.localStorage.getItem(PERSIST_KEY);
-      if (!raw) return {};
-      const parsed = JSON.parse(raw) as PersistedState;
-      if (
-        parsed.savedAt &&
-        Date.now() - parsed.savedAt > 24 * 60 * 60 * 1000
-      ) {
-        return {};
-      }
-      return parsed;
-    } catch {
-      return {};
-    }
+      window.localStorage.removeItem(PERSIST_KEY);
+    } catch {}
+    return {};
   });
+  void freshStart;
 
   const [topic, setTopic] = useState(persisted.topic ?? "");
   const [caption, setCaption] = useState(() => {
@@ -162,32 +148,10 @@ export function Composer({
   const [ctaResponse, setCtaResponse] = useState(persisted.ctaResponse ?? "");
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
 
-  // Save to localStorage whenever the tracked state changes. Cheap —
-  // it's a JSON.stringify of ~10 small fields, runs once per render
-  // when any of them flips. No debounce because it's already cheap.
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      const state: PersistedState = {
-        topic,
-        caption,
-        hashtagsRaw,
-        hooks,
-        selectedHook,
-        mediaUrls,
-        musicUrl,
-        platforms,
-        scheduledFor,
-        ctaKeyword,
-        ctaResponse,
-        savedAt: Date.now(),
-      };
-      window.localStorage.setItem(PERSIST_KEY, JSON.stringify(state));
-    } catch {
-      // Quota exceeded / private mode — silent. User will lose state
-      // on navigate but the page itself still works.
-    }
-  }, [topic, caption, hashtagsRaw, hooks, selectedHook, mediaUrls, musicUrl, platforms, scheduledFor, ctaKeyword, ctaResponse]);
+  // (Autosave-to-localStorage intentionally removed — Compose now always
+  // opens blank so a previous post's media/caption never resurfaces.
+  // Use "Save draft" to persist work; it's stored in the DB and reachable
+  // from /drafts → Edit.)
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [overlayOpen, setOverlayOpen] = useState(false);
   // Schedule popover state. Replaces the dynamic Publish/Schedule label
