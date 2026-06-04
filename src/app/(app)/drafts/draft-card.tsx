@@ -1040,7 +1040,8 @@ export function DraftCard({
         )}
         <Link
           href={`/compose?draft=${draft.id}`}
-          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium"
+          className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border border-[var(--color-accent)]/40 bg-[var(--color-accent)]/10 text-[var(--color-accent)] hover:bg-[var(--color-accent)]/20 font-semibold"
+          title="Edit caption, hook, hashtags, media, platforms"
         >
           <Edit className="w-3.5 h-3.5" />
           Edit

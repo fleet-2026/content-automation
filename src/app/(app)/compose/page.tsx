@@ -9,10 +9,15 @@ export const dynamic = "force-dynamic";
 export default async function ComposePage({
   searchParams,
 }: {
-  searchParams: Promise<{ draft?: string; prefill?: string; mediaUrl?: string }>;
+  searchParams: Promise<{ draft?: string; prefill?: string; mediaUrl?: string; new?: string }>;
 }) {
   const sp = await searchParams;
   const userId = (await tryGetUser()) ?? undefined;
+
+  // "?new=1" means the user clicked "New post" — start with a blank
+  // composer and ignore any autosaved localStorage snapshot from a
+  // previous draft they were working on.
+  const freshStart = !!sp.new;
 
   // Allowlist mediaUrl: only http(s) URLs are accepted. This is reflected
   // into form state on the client, so untrusted upstream content (e.g. a
@@ -103,6 +108,7 @@ export default async function ComposePage({
         initialDraft={initialDraft}
         initialCaptionPrefill={sp.prefill ?? null}
         initialMediaUrl={initialMediaUrl}
+        freshStart={freshStart}
       />
     </div>
   );

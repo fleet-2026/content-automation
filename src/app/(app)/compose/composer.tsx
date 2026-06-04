@@ -36,6 +36,7 @@ export function Composer({
   initialDraft,
   initialCaptionPrefill,
   initialMediaUrl,
+  freshStart,
 }: {
   connectedPlatforms: Platform[];
   initialDraft?: InitialDraft;
@@ -45,6 +46,9 @@ export function Composer({
    * applied when no initialDraft is provided so we don't clobber an existing
    * draft's media. */
   initialMediaUrl?: string | null;
+  /** "?new=1" — user clicked "New post". Start blank and drop any autosaved
+   * snapshot so they don't reopen the draft they just made. */
+  freshStart?: boolean;
 }) {
   const router = useRouter();
   // If we're hydrating from a draft, strip the selected hook off the front
@@ -80,11 +84,12 @@ export function Composer({
   }>;
   const [persisted] = useState<PersistedState>(() => {
     if (typeof window === "undefined") return {};
-    // When the user clicked "Edit" on a specific draft (/compose?draft=<id>),
-    // initialDraft is non-null. They want THAT draft loaded — not their
-    // last in-progress local-only state. Drop any persisted snapshot and
-    // hydrate fresh from the server data instead.
-    if (initialDraft) {
+    // "New post" (?new=1) OR editing a specific draft (?draft=<id>) both
+    // mean: ignore the autosaved snapshot. For New post we want a blank
+    // form; for Edit we hydrate from the server draft instead. Either way,
+    // drop the stale localStorage so the last in-progress post doesn't
+    // resurface.
+    if (freshStart || initialDraft) {
       try {
         window.localStorage.removeItem(PERSIST_KEY);
       } catch {}

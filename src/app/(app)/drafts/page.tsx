@@ -91,7 +91,7 @@ export default async function DraftsPage() {
           Drafts &amp; <span className="font-italic-accent text-blush">queue.</span>
         </h1>
         <Link
-          href="/compose"
+          href="/compose?new=1"
           className="text-sm px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium"
         >
           New post
