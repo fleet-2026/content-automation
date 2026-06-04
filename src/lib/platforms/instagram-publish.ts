@@ -245,7 +245,9 @@ export async function igPublish(
   if (input.imageUrls && input.imageUrls.length >= 2) {
     const carouselDeadline = Date.now() + 53_000;
     const childIds: string[] = [];
-    for (const url of input.imageUrls.slice(0, 10)) {
+    // Instagram raised the carousel cap from 10 to 20 (2025). We cap at 15
+    // to match the composer/carousel UI limit.
+    for (const url of input.imageUrls.slice(0, 15)) {
       const isVid = /\.(mp4|mov|m4v|webm)(\?|$)/i.test(url);
       const childParams = new URLSearchParams({ access_token: pageAccessToken });
       childParams.set("is_carousel_item", "true");

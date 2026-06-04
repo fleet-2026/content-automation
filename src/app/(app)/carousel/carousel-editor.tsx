@@ -171,8 +171,8 @@ export function CarouselEditor() {
     const newUrls: string[] = [];
     try {
       for (const file of files) {
-        if (images.length + newUrls.length >= 10) {
-          throw new Error("Max 10 images per carousel.");
+        if (images.length + newUrls.length >= 15) {
+          throw new Error("Max 15 images per carousel.");
         }
         if (!file.type.startsWith("image/")) continue;
         const url = await uploadOneFile(file);
@@ -363,11 +363,11 @@ export function CarouselEditor() {
                 await uploadFiles(Array.from(e.target.files ?? []));
                 e.target.value = "";
               }}
-              disabled={images.length >= 10}
+              disabled={images.length >= 15}
             />
           </label>
           <span className="text-xs text-[var(--color-muted)]">
-            {images.length}/10 slides · drag to reorder · first = cover
+            {images.length}/15 slides · drag to reorder · first = cover
           </span>
         </div>
       </div>
