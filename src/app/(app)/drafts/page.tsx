@@ -3,7 +3,6 @@ import { safe } from "@/lib/safe";
 import { tryGetUser } from "@/lib/auth-helpers";
 import Link from "next/link";
 import { DraftCard, type DraftCardData } from "./draft-card";
-import { PostedSection } from "./posted-section";
 
 export const dynamic = "force-dynamic";
 
@@ -84,18 +83,34 @@ export default async function DraftsPage() {
     };
   }
 
+  // Published/failed drafts now live on their own page (/drafts/published).
+  // We only need the count here to render the "Posted (N) →" link.
+  const postedCount = drafts.filter((d) =>
+    ["PUBLISHED", "FAILED"].includes(d.status),
+  ).length;
+
   return (
     <div className="px-8 py-10 max-w-5xl">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap mb-6">
         <h1 className="font-display text-3xl sm:text-4xl">
           Drafts &amp; <span className="font-italic-accent text-blush">queue.</span>
         </h1>
-        <Link
-          href="/compose?new=1"
-          className="text-sm px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium"
-        >
-          New post
-        </Link>
+        <div className="flex items-center gap-3 flex-wrap">
+          {postedCount > 0 && (
+            <Link
+              href="/drafts/published"
+              className="text-sm text-[var(--color-muted)] hover:text-[var(--color-text)] underline"
+            >
+              Posted ({postedCount}) →
+            </Link>
+          )}
+          <Link
+            href="/compose?new=1"
+            className="text-sm px-4 py-2 rounded-lg bg-[var(--color-accent)] text-[var(--color-text-on-dark)] font-medium"
+          >
+            New post
+          </Link>
+        </div>
       </div>
 
       {/* ─── Recent generations ─────────────────────────────────
@@ -160,9 +175,6 @@ export default async function DraftsPage() {
         const active = drafts.filter((d) =>
           ["DRAFT", "SCHEDULED", "APPROVED", "PUBLISHING"].includes(d.status),
         );
-        const posted = drafts.filter((d) =>
-          ["PUBLISHED", "FAILED"].includes(d.status),
-        );
 
         function toCardData(d: (typeof drafts)[number]): DraftCardData {
           return {
@@ -225,14 +237,6 @@ export default async function DraftsPage() {
                   />
                 ))}
               </div>
-            )}
-
-            {/* ─── Posted (collapsed by default) ─────────────────── */}
-            {posted.length > 0 && (
-              <PostedSection
-                drafts={posted.map(toCardData)}
-                accountStateByPlatform={accountStateByPlatform}
-              />
             )}
           </>
         );

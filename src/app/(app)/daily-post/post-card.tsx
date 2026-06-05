@@ -20,36 +20,38 @@ export function PostCard({ p }: { p: DailyPost }) {
         </span>
         <div className="flex items-center gap-1.5 flex-wrap">
           {platforms.includes("INSTAGRAM") && (
-            <span className="text-[10px] rounded border px-1.5 py-0.5 font-semibold bg-pink-500/10 text-pink-300 border-pink-500/30">
+            <span className="text-[10px] rounded px-1.5 py-0.5 font-bold bg-pink-600 text-white">
               IG ✓
             </span>
           )}
           {platforms.includes("TIKTOK") && (
-            <span className="text-[10px] rounded border px-1.5 py-0.5 font-semibold bg-cyan-500/10 text-cyan-300 border-cyan-500/30">
+            <span className="text-[10px] rounded px-1.5 py-0.5 font-bold bg-cyan-700 text-white">
               TT ✓
             </span>
           )}
           {platforms.includes("FACEBOOK") && (
-            <span className="text-[10px] rounded border px-1.5 py-0.5 font-semibold bg-blue-500/10 text-blue-300 border-blue-500/30">
+            <span className="text-[10px] rounded px-1.5 py-0.5 font-bold bg-blue-600 text-white">
               FB ✓
             </span>
           )}
           {platforms.includes("LINKEDIN") && (
-            <span className="text-[10px] rounded border px-1.5 py-0.5 font-semibold bg-sky-500/10 text-sky-300 border-sky-500/30">
+            <span className="text-[10px] rounded px-1.5 py-0.5 font-bold bg-sky-600 text-white">
               LI ✓
             </span>
           )}
+          {/* Solid, high-contrast status so it's unmistakable on the light
+              theme: green = published, dark = draft, grey = no script yet. */}
           {p.isPublished ? (
-            <span className="text-[10px] rounded border px-1.5 py-0.5 uppercase font-semibold bg-emerald-500/10 text-emerald-300 border-emerald-500/30">
-              live
+            <span className="text-[10px] rounded px-2 py-0.5 uppercase font-bold bg-emerald-600 text-white">
+              ✓ Published
             </span>
           ) : ready ? (
-            <span className="text-[10px] rounded border px-1.5 py-0.5 uppercase font-semibold bg-amber-500/10 text-amber-300 border-amber-500/30">
-              draft
+            <span className="text-[10px] rounded px-2 py-0.5 uppercase font-bold bg-stone-800 text-white">
+              Draft
             </span>
           ) : (
-            <span className="text-[10px] rounded border px-1.5 py-0.5 uppercase font-semibold bg-zinc-500/10 text-zinc-400 border-zinc-500/30">
-              pending
+            <span className="text-[10px] rounded px-2 py-0.5 uppercase font-bold bg-stone-500 text-white">
+              Pending
             </span>
           )}
         </div>

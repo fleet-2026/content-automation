@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { tryGetUser } from "@/lib/auth-helpers";
-import { listPosts } from "../daily-post/data";
+import { listPosts, isPostPublished } from "../daily-post/data";
 import { PostCard } from "../daily-post/post-card";
 
 export const metadata: Metadata = {
@@ -18,10 +18,11 @@ export default async function PublishedPage() {
   if (!userId) redirect("/login");
 
   const posts = await listPosts();
-  // "Published" = the Publish toggle is on (live on /guides). Every post you
-  // publish files itself here and drops off the daily-post queue.
+  // "Published" = live on /guides OR already posted to a social platform.
+  // Every post you publish (or post to IG/TikTok/etc.) files itself here and
+  // drops off the daily-post queue.
   const published = posts
-    .filter((p) => p.isPublished)
+    .filter(isPostPublished)
     .sort((a, b) => (b.index ?? 0) - (a.index ?? 0));
 
   return (

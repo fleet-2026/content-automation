@@ -598,13 +598,13 @@ export default function PostEditor({ post }: { post: DailyPost }) {
             <span>· {post.generated_at.slice(0, 10)}</span>
           )}
           <span
-            className={`rounded border px-1.5 py-0.5 text-[10px] uppercase font-semibold ${
+            className={`rounded px-2 py-0.5 text-[10px] uppercase font-bold ${
               published
-                ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
-                : "bg-zinc-500/10 text-zinc-400 border-zinc-500/30"
+                ? "bg-emerald-600 text-white"
+                : "bg-stone-800 text-white"
             }`}
           >
-            {published ? "live on /guides" : "draft"}
+            {published ? "✓ live on /guides" : "draft — not published"}
           </span>
         </div>
         <div className="flex items-center gap-2">

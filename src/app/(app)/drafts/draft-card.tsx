@@ -196,13 +196,16 @@ export type DraftCardData = {
 const IMG_RE = /\.(jpg|jpeg|png|webp|gif|avif)(\?|$)/i;
 const VIDEO_RE = /\.(mp4|mov|m4v|webm)(\?|$)/i;
 
+// Solid, high-contrast badges so each state reads clearly on the light
+// theme. Green = published, dark = draft, the rest are bold + white text
+// instead of the old pale pastels the user couldn't see.
 const STATUS_COLORS: Record<string, string> = {
-  DRAFT: "bg-[var(--color-surface-2)] text-[var(--color-muted)]",
-  APPROVED: "bg-blue-100 text-blue-800",
-  SCHEDULED: "bg-amber-100 text-amber-800",
-  PUBLISHING: "bg-purple-100 text-purple-800",
-  PUBLISHED: "bg-emerald-100 text-emerald-800",
-  FAILED: "bg-red-100 text-red-800",
+  DRAFT: "bg-stone-700 text-white",
+  APPROVED: "bg-blue-600 text-white",
+  SCHEDULED: "bg-amber-700 text-white",
+  PUBLISHING: "bg-purple-600 text-white",
+  PUBLISHED: "bg-emerald-600 text-white",
+  FAILED: "bg-red-600 text-white",
 };
 
 /** Account state snapshot per platform — passed in from the server so
@@ -737,7 +740,7 @@ export function DraftCard({
               let cls = STATUS_COLORS[draft.status] ?? "";
               if (draft.status === "FAILED" && visibleOks > 0 && visibleFails > 0) {
                 label = "partial";
-                cls = "bg-amber-100 text-amber-800";
+                cls = "bg-amber-700 text-white";
               } else if (
                 draft.status === "FAILED" &&
                 visibleOks > 0 &&

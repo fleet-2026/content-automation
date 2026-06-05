@@ -66,6 +66,20 @@ export async function listPosts(): Promise<DailyPost[]> {
   return guides.map(toDailyPost);
 }
 
+/**
+ * A post counts as "published" — and therefore leaves the daily-post
+ * queue for /published — if EITHER:
+ *   - the /guides Publish toggle is on (isPublished), OR
+ *   - it's been posted to at least one social platform (postedPlatforms).
+ *
+ * The second case is what the user means by "published": once a guide is
+ * live on Instagram/TikTok/etc. it shouldn't sit in the "to publish" queue
+ * anymore, even if the public /guides toggle was never flipped.
+ */
+export function isPostPublished(p: DailyPost): boolean {
+  return !!p.isPublished || (p.postedPlatforms?.length ?? 0) > 0;
+}
+
 export async function getPost(slug: string): Promise<DailyPost | null> {
   const g = await getGuideAdmin(slug);
   return g ? toDailyPost(g) : null;

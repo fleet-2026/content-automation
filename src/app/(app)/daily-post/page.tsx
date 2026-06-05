@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { tryGetUser } from "@/lib/auth-helpers";
-import { listPosts } from "./data";
+import { listPosts, isPostPublished } from "./data";
 import BulkPublishBar from "./bulk-publish-bar";
 import { PostCard } from "./post-card";
 
@@ -20,12 +20,13 @@ export default async function DailyPostIndexPage() {
 
   const posts = await listPosts();
   const ready = posts.filter((p) => !!p.generated?.script).length;
-  const publishedCount = posts.filter((p) => p.isPublished).length;
+  const publishedCount = posts.filter(isPostPublished).length;
   const draftCount = posts.length - publishedCount;
 
   // Published posts leave the daily-post queue entirely and live on
-  // /published. Daily-post only shows what hasn't been published yet.
-  const active = posts.filter((p) => !p.isPublished);
+  // /published. "Published" = live on /guides OR already posted to a
+  // social platform — daily-post only shows what's still to post.
+  const active = posts.filter((p) => !isPostPublished(p));
 
   return (
     <div className="px-8 py-10 max-w-7xl">
@@ -59,7 +60,7 @@ export default async function DailyPostIndexPage() {
 
       <BulkPublishBar totalDrafts={draftCount} totalPublished={publishedCount} />
 
-      <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm text-amber-200 leading-relaxed">
+      <div className="mb-6 rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900 leading-relaxed">
         <strong>How this works.</strong> Each card is a guide with a hook,
         talking-head script, caption, hashtags, and ManyChat keyword already
         generated. Flip the <em>Publish</em> toggle on each (or use the

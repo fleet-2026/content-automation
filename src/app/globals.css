@@ -13,7 +13,9 @@
   --color-muted: #7a6957;       /* warm grey-brown — secondary text, readable on white */
 
   /* ─── Brand accents ──────────────────────────────────────────── */
-  --color-accent: #b58a5a;      /* mustard / olive — primary accent */
+  --color-accent: #6f4518;      /* deep bronze — darkened from light mustard so
+                                   primary buttons read clearly on the cream theme
+                                   (cream text on bronze = high contrast) */
   --color-accent-2: #8a9678;    /* deeper sage — secondary accent */
   --color-accent-3: #b8857a;    /* dusty rose — tertiary accent */
 
