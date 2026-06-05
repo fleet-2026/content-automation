@@ -9,6 +9,7 @@ import {
   listAllGuidesAdmin,
   setGuidePublished,
   updateGuide,
+  deleteGuide,
 } from "@/lib/guides";
 import { generateVideoPromptText } from "@/lib/ai/video-prompt";
 import { rateHookForVirality, type HookRating } from "@/lib/ai/rate-hook";
@@ -42,6 +43,28 @@ export async function updatePost(
   // show up without waiting for the 5-min ISR cache to expire.
   revalidatePath(`/guides/${slug}`);
   return { ok };
+}
+
+/** Permanently delete a guide/post from the daily-post library. Used by
+ *  the trash button on each card. Auth-gated; revalidates every surface
+ *  the guide could appear on so it disappears immediately. */
+export async function deletePost(
+  slug: string,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    await requireUser();
+  } catch {
+    return { ok: false, error: "unauthenticated" };
+  }
+  const ok = await deleteGuide(slug);
+  if (!ok) return { ok: false, error: "Post not found (already deleted?)" };
+  revalidatePath(`/daily-post`);
+  revalidatePath(`/published`);
+  revalidatePath(`/tracker`);
+  revalidatePath(`/guides`);
+  revalidatePath(`/guides/${slug}`);
+  revalidatePath(`/sitemap.xml`);
+  return { ok: true };
 }
 
 /** Single-guide publish/unpublish — used by the per-post editor toggle. */

@@ -165,6 +165,18 @@ export async function setGuidePublished(slug: string, published: boolean): Promi
   return updateGuide(slug, { isPublished: published });
 }
 
+/** Permanently delete a guide by slug. Returns false if no row matched
+ *  (e.g. already deleted) instead of throwing. DailyGuide has no FK
+ *  relations, so the row deletes cleanly. */
+export async function deleteGuide(slug: string): Promise<boolean> {
+  try {
+    await prisma.dailyGuide.delete({ where: { slug } });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // ─── shape helpers ────────────────────────────────────────────────
 
 type RawGuide = {
