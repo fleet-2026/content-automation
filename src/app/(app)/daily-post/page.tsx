@@ -4,7 +4,7 @@ import Link from "next/link";
 import { tryGetUser } from "@/lib/auth-helpers";
 import { listPosts, isPostPublished } from "./data";
 import BulkPublishBar from "./bulk-publish-bar";
-import { PostCard } from "./post-card";
+import { FilteredList } from "./filtered-list";
 
 export const metadata: Metadata = {
   title: "Daily Post — Creator OS",
@@ -89,11 +89,7 @@ export default async function DailyPostIndexPage() {
               <Link href="/published" className="underline">view published →</Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {active.map((p) => (
-                <PostCard key={p.slug} p={p} />
-              ))}
-            </div>
+            <FilteredList posts={active} />
           )}
 
         </>
