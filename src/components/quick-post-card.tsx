@@ -18,6 +18,7 @@ import type { Platform } from "@prisma/client";
 import { saveDraft, publishDraftNow, scheduleDraft } from "@/app/(app)/compose/actions";
 import { packMediaUrls, isImageUrl, isVideoUrl } from "@/lib/media-urls";
 import { PLATFORM_INFO, ENABLED_PLATFORMS_ORDERED } from "@/lib/platform-info";
+import { TikTokCaptionQr } from "@/components/tiktok-caption-qr";
 
 /**
  * Compact dashboard-resident composer. Lets the user write a caption, attach
@@ -52,6 +53,9 @@ export function QuickPostCard({
   const [err, setErr] = useState<string | null>(null);
   const [savedDraftId, setSavedDraftId] = useState<string | null>(null);
   const [published, setPublished] = useState(false);
+  // Just-published draft id — used to show the TikTok caption QR in the
+  // success state when TikTok was a target.
+  const [publishedDraftId, setPublishedDraftId] = useState<string | null>(null);
   // Inline two-stage confirm (browser confirm() can auto-block after a
   // few dialogs and leave the button looking dead).
   const [pubConfirm, setPubConfirm] = useState(false);
@@ -111,6 +115,7 @@ export function QuickPostCard({
     setScheduledFor("");
     setSavedDraftId(null);
     setPublished(false);
+    setPublishedDraftId(null);
     setErr(null);
   }
 
@@ -165,6 +170,7 @@ export function QuickPostCard({
           platforms,
         });
         await publishDraftNow(d.id);
+        setPublishedDraftId(d.id);
         setPublished(true);
         router.refresh();
       } catch (e) {
@@ -215,9 +221,14 @@ export function QuickPostCard({
         <CheckCircle2 className="w-8 h-8 text-emerald-700 mx-auto mb-2" />
         <p className="font-medium">Published to {platforms.join(", ")}.</p>
         <p className="text-xs text-[var(--color-muted)] mt-1">
-          Posts will appear in your feed shortly. Check /drafts for delivery
-          status if anything failed.
+          Filed to your Published page. Check there for delivery status if
+          anything failed.
         </p>
+        {publishedDraftId && platforms.includes("TIKTOK" as Platform) && (
+          <div className="mt-4 flex justify-center">
+            <TikTokCaptionQr draftId={publishedDraftId} caption={caption} autoOpen />
+          </div>
+        )}
         <div className="flex justify-center gap-2 mt-4">
           <button
             onClick={reset}
@@ -226,10 +237,10 @@ export function QuickPostCard({
             Post another
           </button>
           <Link
-            href="/drafts"
+            href="/published"
             className="text-xs px-3 py-1.5 rounded-md bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium"
           >
-            View drafts
+            View Published
           </Link>
         </div>
       </div>

@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { Platform, DraftStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { suggestHooks, type HookVariant } from "@/lib/ai/hook-suggester";
@@ -67,7 +68,19 @@ export async function publishDraftNow(
   const userId = await requireUser();
   await ownedDraft(userId, draftId);
   await prisma.draft.update({ where: { id: draftId }, data: { status: DraftStatus.PUBLISHING } });
-  return publishNow(draftId, forceRetryPlatforms);
+  const results = await publishNow(draftId, forceRetryPlatforms);
+  // A published draft now lands on the unified /published page and leaves
+  // the active queues. Revalidate every surface it could appear on so it
+  // shows up there immediately instead of behind a stale client cache.
+  revalidatePath("/published");
+  revalidatePath("/drafts");
+  revalidatePath("/drafts/published");
+  revalidatePath("/posts");
+  revalidatePath("/carousel");
+  revalidatePath("/schedule");
+  revalidatePath("/tracker");
+  revalidatePath("/dashboard");
+  return results;
 }
 
 export async function scheduleDraft(draftId: string, when: string) {

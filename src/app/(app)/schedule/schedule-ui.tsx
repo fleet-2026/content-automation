@@ -28,6 +28,7 @@ import {
   type DemoRecurringSlot,
 } from "@/lib/demo-data";
 import { publishDraftNow, deleteDraft, saveDraft } from "../compose/actions";
+import { TikTokCaptionQr } from "@/components/tiktok-caption-qr";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const PLATFORM_COLORS: Record<string, string> = {
@@ -320,6 +321,9 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
   const [pubConfirm, setPubConfirm] = useState(false);
   const [delConfirm, setDelConfirm] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Keep the card mounted after a TikTok publish so the caption QR stays
+  // visible (a refresh would drop the now-published item from the calendar).
+  const [ttPublished, setTtPublished] = useState(false);
 
   // mediaUrl may be a newline-packed carousel — pull primary + count.
   // Music URL (if attached) is packed in the same field with `audio::`.
@@ -351,7 +355,11 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
     startPub(async () => {
       try {
         await publishDraftNow(item.id);
-        router.refresh();
+        if (item.platforms.includes("TIKTOK")) {
+          setTtPublished(true); // show QR, defer refresh so the card stays
+        } else {
+          router.refresh();
+        }
       } catch (e) {
         setErr(String((e as Error).message ?? e));
       }
@@ -560,6 +568,24 @@ function ScheduledCard({ item }: { item: ScheduledItem }) {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {ttPublished && (
+        <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-2">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="text-xs font-semibold text-emerald-700">
+              ✓ Published — grab your TikTok caption:
+            </span>
+            <button
+              type="button"
+              onClick={() => router.refresh()}
+              className="text-[11px] underline text-[var(--color-muted)] hover:text-[var(--color-text)]"
+            >
+              Done
+            </button>
+          </div>
+          <TikTokCaptionQr draftId={item.id} caption={item.caption} autoOpen />
         </div>
       )}
 

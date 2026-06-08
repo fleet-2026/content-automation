@@ -10,6 +10,7 @@ import { HookOverlayEditor } from "./hook-overlay-editor";
 import { PostPreview } from "./post-preview";
 import { parseMediaUrls, parseMusicUrl, packMediaUrls, isImageUrl, isVideoUrl } from "@/lib/media-urls";
 import { PLATFORM_INFO, ENABLED_PLATFORMS_ORDERED } from "@/lib/platform-info";
+import { TikTokCaptionQr } from "@/components/tiktok-caption-qr";
 
 type Hook = {
   text: string;
@@ -147,6 +148,10 @@ export function Composer({
   const [ctaKeyword, setCtaKeyword] = useState(persisted.ctaKeyword ?? "");
   const [ctaResponse, setCtaResponse] = useState(persisted.ctaResponse ?? "");
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
+  // After a TikTok publish we stay on the page and show the caption QR
+  // (TikTok delivers to the inbox without a caption — the user pastes it
+  // from their phone). Holds the just-published draft id.
+  const [ttPublishedId, setTtPublishedId] = useState<string | null>(null);
 
   // (Autosave-to-localStorage intentionally removed — Compose now always
   // opens blank so a previous post's media/caption never resurfaces.
@@ -441,8 +446,16 @@ export function Composer({
         try {
           window.localStorage.removeItem(PERSIST_KEY);
         } catch {}
-        router.push("/drafts");
-        router.refresh();
+        // If TikTok was a target, stay here and surface the caption QR so
+        // the user can paste it on their phone. Otherwise jump straight to
+        // the unified Published page. Either way the post is now filed there.
+        if (platforms.includes("TIKTOK" as Platform)) {
+          setTtPublishedId(id);
+          router.refresh();
+        } else {
+          router.push("/published");
+          router.refresh();
+        }
       } catch (e) {
         setErr(`Publish failed: ${e instanceof Error ? e.message : String(e)}`);
       }
@@ -498,6 +511,27 @@ export function Composer({
             >
               Dismiss
             </button>
+          </div>
+        )}
+        {ttPublishedId && (
+          <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 p-4 space-y-2">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span className="text-sm font-semibold text-emerald-700">
+                ✓ Published — filed to your Published page.
+              </span>
+              <Link href="/published" className="text-xs underline font-semibold text-emerald-700 hover:opacity-80">
+                View Published →
+              </Link>
+            </div>
+            <TikTokCaptionQr
+              draftId={ttPublishedId}
+              caption={
+                (selectedHook ? `${selectedHook}\n\n` : "") +
+                caption +
+                (hashtagsRaw.trim() ? `\n\n${hashtagsRaw.trim()}` : "")
+              }
+              autoOpen
+            />
           </div>
         )}
         <Field label="Topic">

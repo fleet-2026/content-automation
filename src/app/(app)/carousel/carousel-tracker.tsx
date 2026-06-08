@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { CalendarClock, Trash2, Send } from "lucide-react";
 import { deleteDraft, publishDraftNow, scheduleDraft } from "../compose/actions";
+import { TikTokCaptionQr } from "@/components/tiktok-caption-qr";
 
 type CarouselDraft = {
   id: string;
@@ -79,6 +80,10 @@ function CarouselRow({ draft, onRefresh }: { draft: CarouselDraft; onRefresh: ()
   const [scheduleInput, setScheduleInput] = useState("");
   const [showSchedule, setShowSchedule] = useState(false);
   const [busy, setBusy] = useState(false);
+  // When TikTok is a target we keep the row mounted after publishing so the
+  // caption QR stays visible (a refresh would move the row to "Posted" and
+  // unmount it). The "Done" button refreshes once the user has the caption.
+  const [ttPublished, setTtPublished] = useState(false);
 
   const preview = (draft.selectedHook ?? draft.caption ?? "").slice(0, 80);
 
@@ -86,7 +91,11 @@ function CarouselRow({ draft, onRefresh }: { draft: CarouselDraft; onRefresh: ()
     setBusy(true);
     try {
       await publishDraftNow(draft.id);
-      onRefresh();
+      if (draft.platforms.includes("TIKTOK")) {
+        setTtPublished(true); // show QR, defer refresh so the row stays
+      } else {
+        onRefresh();
+      }
     } catch {} finally { setBusy(false); }
   }
 
@@ -109,6 +118,7 @@ function CarouselRow({ draft, onRefresh }: { draft: CarouselDraft; onRefresh: ()
   }
 
   return (
+    <div className="space-y-2">
     <div className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3">
       {/* Thumbnail */}
       {draft.firstImage ? (
@@ -211,6 +221,25 @@ function CarouselRow({ draft, onRefresh }: { draft: CarouselDraft; onRefresh: ()
           </div>
         </div>
       )}
+    </div>
+
+    {ttPublished && (
+      <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-2">
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-emerald-300">
+            ✓ Published — grab your TikTok caption:
+          </span>
+          <button
+            type="button"
+            onClick={onRefresh}
+            className="text-[11px] underline text-[var(--color-muted)] hover:text-[var(--color-text)]"
+          >
+            Done
+          </button>
+        </div>
+        <TikTokCaptionQr draftId={draft.id} caption={draft.caption} autoOpen />
+      </div>
+    )}
     </div>
   );
 }

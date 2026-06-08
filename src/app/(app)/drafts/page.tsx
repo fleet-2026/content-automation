@@ -98,7 +98,7 @@ export default async function DraftsPage() {
         <div className="flex items-center gap-3 flex-wrap">
           {postedCount > 0 && (
             <Link
-              href="/drafts/published"
+              href="/published"
               className="text-sm text-[var(--color-muted)] hover:text-[var(--color-text)] underline"
             >
               Posted ({postedCount}) →

@@ -467,15 +467,6 @@ export async function publishToSocial(
 
     const results = await publishDraft(draft.id);
 
-    // Check if all targeted platforms succeeded.
-    const allOk = results.every((r) => r.ok);
-    if (!allOk) {
-      await prisma.draft.update({
-        where: { id: draft.id },
-        data: { status: DraftStatus.FAILED },
-      });
-    }
-
     // Save successfully-published platforms back to DailyGuide so the
     // list page can show IG/TT/FB badges. Merge with any previously
     // posted platforms (e.g. user published IG first, TT later).
@@ -495,6 +486,11 @@ export async function publishToSocial(
         data: { postedPlatforms: merged },
       });
     }
+
+    // The Draft was only scaffolding to drive publishDraft(). Delete it so
+    // it doesn't show up as a duplicate of this guide on the unified
+    // /published page. The Post rows + postedPlatforms persist independently.
+    await prisma.draft.delete({ where: { id: draft.id } }).catch(() => {});
 
     revalidatePath(`/daily-post/${slug}`);
     revalidatePath(`/daily-post`);
