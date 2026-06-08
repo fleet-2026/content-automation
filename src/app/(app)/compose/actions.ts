@@ -119,7 +119,9 @@ export async function setDraftPlatforms(
 
 /** Build a time-limited QR URL for the mobile TikTok caption page (draft variant). */
 export async function getDraftCaptionUrl(draftId: string): Promise<string> {
-  const { captionHmac } = await import("@/app/api/tt-caption/route");
+  // Shared lib, not the route handler — see getTikTokCaptionUrl in
+  // daily-post/actions.ts for why importing from route.ts breaks in prod.
+  const { captionHmac } = await import("@/lib/tt-caption");
   const { h, t } = captionHmac(draftId);
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://creator-os-delta.vercel.app";
   return `${base}/api/tt-caption?draft=${encodeURIComponent(draftId)}&h=${h}&t=${t}`;

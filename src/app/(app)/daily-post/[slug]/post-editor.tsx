@@ -343,7 +343,11 @@ export default function PostEditor({ post }: { post: DailyPost }) {
         try {
           const url = await getTikTokCaptionUrl(post.slug);
           setTtCaptionQr(url);
-        } catch { /* non-critical */ }
+        } catch (e) {
+          // Non-fatal — the caption preview + desktop copy button still
+          // render. Log so a broken QR isn't completely silent.
+          console.error("[publish] TikTok caption QR failed:", e);
+        }
       }
     } catch (e) {
       setPublishError((e as Error).message);
@@ -1602,6 +1606,24 @@ export default function PostEditor({ post }: { post: DailyPost }) {
         {publishError && (
           <div className="rounded border border-red-500/30 bg-red-500/5 p-2.5 text-xs text-red-300">
             {publishError}
+          </div>
+        )}
+
+        {/* Success banner — a post that's been posted to any platform counts
+            as "published" and drops off the Daily Post queue onto /published.
+            Plain <a> = hard nav, so the Published page loads fresh. */}
+        {publishResults && publishResults.some((r) => r.ok) && (
+          <div className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-200 flex items-center gap-3 flex-wrap">
+            <span className="font-semibold">✓ Filed to Published.</span>
+            <span className="text-emerald-300/90">
+              This post moved out of the Daily Post queue.
+            </span>
+            <a
+              href="/published"
+              className="ml-auto underline font-semibold hover:text-emerald-100"
+            >
+              View Published →
+            </a>
           </div>
         )}
 

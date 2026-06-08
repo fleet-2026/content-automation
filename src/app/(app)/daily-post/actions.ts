@@ -72,6 +72,10 @@ export async function setPublished(slug: string, published: boolean) {
   const ok = await setGuidePublished(slug, published);
   revalidatePath(`/daily-post/${slug}`);
   revalidatePath(`/daily-post`);
+  // /published filters on isPublished too — revalidate it so the post
+  // shows up (or drops off) there immediately instead of serving a stale
+  // client-cached page.
+  revalidatePath(`/published`);
   revalidatePath(`/guides`);
   revalidatePath(`/guides/${slug}`);
   revalidatePath(`/sitemap.xml`);
@@ -95,6 +99,7 @@ export async function publishAllReady() {
     published++;
   }
   revalidatePath(`/daily-post`);
+  revalidatePath(`/published`);
   revalidatePath(`/guides`);
   revalidatePath(`/sitemap.xml`);
   return { ok: true, published, skipped };
@@ -493,6 +498,10 @@ export async function publishToSocial(
 
     revalidatePath(`/daily-post/${slug}`);
     revalidatePath(`/daily-post`);
+    // A successful social post counts as "published" (postedPlatforms is
+    // now non-empty) so the post moves to /published — revalidate it so it
+    // actually appears there without a stale-cache delay.
+    revalidatePath(`/published`);
     revalidatePath(`/drafts`);
     return { ok: true, results };
   } catch (e) {
@@ -620,6 +629,7 @@ export async function unpublishAll() {
     unpublished++;
   }
   revalidatePath(`/daily-post`);
+  revalidatePath(`/published`);
   revalidatePath(`/guides`);
   revalidatePath(`/sitemap.xml`);
   return { ok: true, unpublished };
@@ -627,7 +637,11 @@ export async function unpublishAll() {
 
 /** Build a time-limited URL for the mobile TikTok caption page. */
 export async function getTikTokCaptionUrl(slug: string): Promise<string> {
-  const { captionHmac } = await import("@/app/api/tt-caption/route");
+  // Import from the shared lib, NOT from the route handler — importing a
+  // non-handler export out of a Next.js route.ts returns undefined in
+  // production, which silently broke QR-code generation (the call threw
+  // and the editor swallowed it, so no QR appeared).
+  const { captionHmac } = await import("@/lib/tt-caption");
   const { h, t } = captionHmac(slug);
   const base = process.env.NEXT_PUBLIC_APP_URL ?? "https://creator-os-delta.vercel.app";
   return `${base}/api/tt-caption?slug=${encodeURIComponent(slug)}&h=${h}&t=${t}`;

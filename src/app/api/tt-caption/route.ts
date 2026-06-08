@@ -12,44 +12,16 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "node:crypto";
 import { prisma } from "@/lib/db";
-
-const SECRET = () => process.env.AUTH_SECRET ?? "fallback-caption-secret";
-
-/** Generate an HMAC for a slug + time bucket (valid for ~1 hour). */
-export function captionHmac(slug: string): { h: string; t: string } {
-  const t = String(Math.floor(Date.now() / 3_600_000)); // hour bucket
-  const h = crypto
-    .createHmac("sha256", SECRET())
-    .update(`${slug}:${t}`)
-    .digest("hex")
-    .slice(0, 16);
-  return { h, t };
-}
-
-function verify(slug: string, h: string, t: string): boolean {
-  // Allow current hour and previous hour (so links don't break mid-hour)
-  const now = Math.floor(Date.now() / 3_600_000);
-  for (const bucket of [String(now), String(now - 1)]) {
-    const expected = crypto
-      .createHmac("sha256", SECRET())
-      .update(`${slug}:${bucket}`)
-      .digest("hex")
-      .slice(0, 16);
-    if (h === expected) return true;
-  }
-  return false;
-}
+import { verifyCaptionHmac } from "@/lib/tt-caption";
 
 export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get("slug") ?? "";
   const draftId = req.nextUrl.searchParams.get("draft") ?? "";
   const h = req.nextUrl.searchParams.get("h") ?? "";
-  const t = req.nextUrl.searchParams.get("t") ?? "";
 
   const key = slug || draftId;
-  if (!key || !h || !verify(key, h, t)) {
+  if (!key || !h || !verifyCaptionHmac(key, h)) {
     return new NextResponse("Link expired or invalid. Publish again to get a fresh QR code.", {
       status: 403,
       headers: { "Content-Type": "text/plain" },
@@ -67,7 +39,7 @@ export async function GET(req: NextRequest) {
     if (!guide) {
       return new NextResponse("Post not found.", { status: 404, headers: { "Content-Type": "text/plain" } });
     }
-    title = title;
+    title = guide.title;
     fullCaption = [
       guide.caption?.trim(),
       guide.hashtags?.length
