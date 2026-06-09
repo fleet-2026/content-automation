@@ -88,3 +88,27 @@ tr:hover td { background: var(--panel-2); }
 .btn:hover { filter: brightness(1.08); }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn.ghost { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+
+.sidebar { display: flex; flex-direction: column; }
+.sidebar-foot { margin-top: auto; padding: 12px 12px 4px; border-top: 1px solid var(--border); }
+
+.login-wrap { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+}
+.login-label { color: var(--muted); font-size: 13px; margin: 12px 0 4px; }
+.login-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 11px 12px;
+  color: var(--text);
+  font-size: 15px;
+}

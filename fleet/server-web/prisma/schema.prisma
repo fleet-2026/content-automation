@@ -20,6 +20,7 @@ model User {
   phone     String?
   role      String   @default("RIDER") // ADMIN | DISPATCHER | DRIVER | RIDER
   password  String?  // bcrypt hash; null for invite-pending accounts
+  pushToken String?  // Expo push token for notifications
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -87,7 +88,22 @@ model Document {
   driverId   String?
   driver     Driver?   @relation(fields: [driverId], references: [id], onDelete: Cascade)
 
+  reminders  Reminder[]
+
   @@index([expiresOn])
+}
+
+/// Tracks expiry reminders already sent for a document so the scheduled job is
+/// idempotent and doesn't spam. `kind` is the milestone: SOON (<=30d) or EXPIRED.
+model Reminder {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  kind       String   // SOON | EXPIRED
+  channel    String   @default("log") // log | email | push
+  sentAt     DateTime @default(now())
+
+  @@unique([documentId, kind])
 }
 
 /// A trip request, Uber-style: rider requests, dispatcher/system assigns a

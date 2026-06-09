@@ -1,6 +1,24 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { sendPush, type PushMessage } from "@/lib/push";
+
+// Push the rider (and optionally the assigned driver) about a status change.
+async function notifyTrip(tripId: string, opts: { rider?: string; driver?: string }) {
+  const trip = await prisma.trip.findUnique({
+    where: { id: tripId },
+    include: { rider: true, driver: { include: { user: true } } },
+  });
+  if (!trip) return;
+  const messages: PushMessage[] = [];
+  if (opts.rider && trip.rider?.pushToken) {
+    messages.push({ to: trip.rider.pushToken, title: "Your trip", body: opts.rider, data: { tripId } });
+  }
+  if (opts.driver && trip.driver?.user?.pushToken) {
+    messages.push({ to: trip.driver.user.pushToken, title: "Dispatch", body: opts.driver, data: { tripId } });
+  }
+  await sendPush(messages);
+}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -60,6 +78,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       }),
       prisma.vehicle.update({ where: { id: vId }, data: { status: "ON_TRIP" } }),
     ]);
+    await notifyTrip(id, {
+      rider: `Driver assigned: ${updated.driver?.name ?? "on the way"}`,
+      driver: `New trip: ${updated.pickupAddress} → ${updated.dropoffAddress}`,
+    });
     return NextResponse.json(updated);
   }
 
@@ -68,6 +90,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       where: { id },
       data: { status: "IN_PROGRESS", startedAt: new Date() },
     });
+    await notifyTrip(id, { rider: "Your trip has started." });
     return NextResponse.json(updated);
   }
 
@@ -79,6 +102,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     if (updated.vehicleId) {
       await prisma.vehicle.update({ where: { id: updated.vehicleId }, data: { status: "AVAILABLE" } });
     }
+    await notifyTrip(id, { rider: "Trip completed. Thanks for riding!" });
     return NextResponse.json(updated);
   }
 

@@ -48,10 +48,18 @@ async function main() {
   });
   console.log(`Created admin: ${admin.email} / admin1234`);
 
-  // --- A couple of riders (mobile app) -------------------------------------
+  // --- A rider account (mobile app) ----------------------------------------
+  const sharedPassword = await bcrypt.hash("password", 10);
   const rider = await prisma.user.create({
-    data: { email: "rider@fleet.local", name: "Sample Rider", role: "RIDER", phone: "+20100000000" },
+    data: {
+      email: "rider@fleet.local",
+      name: "Sample Rider",
+      role: "RIDER",
+      phone: "+20100000000",
+      password: sharedPassword,
+    },
   });
+  console.log("Created rider: rider@fleet.local / password");
 
   // --- 300 vehicles --------------------------------------------------------
   console.log("Creating 300 vehicles…");
@@ -100,6 +108,21 @@ async function main() {
         vehicleId: vehicleIds[i - 1],
       },
     });
+
+    // Give the first driver a sign-in account so the mobile driver app works.
+    if (i === 1) {
+      const driverUser = await prisma.user.create({
+        data: {
+          email: "driver@fleet.local",
+          name: driver.name,
+          role: "DRIVER",
+          phone: driver.phone,
+          password: sharedPassword,
+        },
+      });
+      await prisma.driver.update({ where: { id: driver.id }, data: { userId: driverUser.id } });
+      console.log("Created driver login: driver@fleet.local / password");
+    }
 
     const licOffset = Math.random() < 0.18 ? randInt(-30, 25) : randInt(90, 1200);
     await prisma.document.create({

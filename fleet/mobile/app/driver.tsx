@@ -11,8 +11,8 @@ import {
 import { api, type Trip } from "@/api";
 import { colors, statusColor } from "@/theme";
 
-// Shows trips that have been assigned and are in progress. In a full build this
-// would be scoped to the signed-in driver; the MVP shows the active board.
+// Shows the signed-in driver's assigned / in-progress trips (scoped server-side
+// via ?mine=driver).
 const ACTIVE = ["ASSIGNED", "EN_ROUTE", "IN_PROGRESS"];
 
 export default function Driver() {
@@ -22,7 +22,7 @@ export default function Driver() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const all = await api.listTrips();
+      const all = await api.listTrips({ mine: "driver" });
       setTrips(all.filter((t) => ACTIVE.includes(t.status)));
     } finally {
       setLoading(false);

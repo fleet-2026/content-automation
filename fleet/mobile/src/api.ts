@@ -7,21 +7,37 @@ const BASE_URL: string =
   (Constants.expoConfig?.extra as { apiBaseUrl?: string } | undefined)?.apiBaseUrl ??
   "http://localhost:3001";
 
+export type SessionUser = { id: string; email: string; name: string; role: string };
+
 export type Trip = {
   id: string;
   status: string;
   pickupAddress: string;
   dropoffAddress: string;
+  pickupLat?: number | null;
+  pickupLng?: number | null;
+  dropoffLat?: number | null;
+  dropoffLng?: number | null;
   fare?: number | null;
   distanceKm?: number | null;
   driver?: { name: string } | null;
   vehicle?: { plateNumber: string; make: string; model: string } | null;
 };
 
+// The current bearer token, injected by the auth provider after sign-in.
+let authToken: string | null = null;
+export function setAuthToken(token: string | null) {
+  authToken = token;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
-    headers: { "Content-Type": "application/json" },
     ...init,
+    headers: {
+      "Content-Type": "application/json",
+      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...(init?.headers ?? {}),
+    },
   });
   if (!res.ok) {
     const body = await res.text();
@@ -33,7 +49,26 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 export const api = {
   baseUrl: BASE_URL,
 
-  requestTrip(input: { pickupAddress: string; dropoffAddress: string; riderId?: string }) {
+  login(email: string, password: string) {
+    return request<{ token: string; user: SessionUser }>("/api/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    });
+  },
+
+  registerPushToken(pushToken: string) {
+    return request<{ ok: boolean }>("/api/auth/push-token", {
+      method: "POST",
+      body: JSON.stringify({ pushToken }),
+    });
+  },
+
+  requestTrip(input: {
+    pickupAddress: string;
+    dropoffAddress: string;
+    pickupLat?: number;
+    pickupLng?: number;
+  }) {
     return request<Trip>("/api/trips", { method: "POST", body: JSON.stringify(input) });
   },
 
@@ -41,8 +76,12 @@ export const api = {
     return request<Trip>(`/api/trips/${id}`);
   },
 
-  listTrips(status?: string) {
-    return request<Trip[]>(`/api/trips${status ? `?status=${status}` : ""}`);
+  listTrips(params?: { status?: string; mine?: "rider" | "driver" }) {
+    const q = new URLSearchParams();
+    if (params?.status) q.set("status", params.status);
+    if (params?.mine) q.set("mine", params.mine);
+    const qs = q.toString();
+    return request<Trip[]>(`/api/trips${qs ? `?${qs}` : ""}`);
   },
 
   tripAction(id: string, action: "assign" | "start" | "complete" | "cancel") {
