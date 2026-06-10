@@ -31,15 +31,19 @@ export type TTPublishInput = {
  * Calculate chunk parameters for TikTok's FILE_UPLOAD.
  *
  * For videos ≤ 64 MB: single chunk (chunk_size = video_size).
- * For videos > 64 MB: use a fixed 10 MB chunk size. TikTok's API
- * rejects computed even-split sizes ("total chunk count is invalid")
- * but accepts a standard fixed chunk_size with the last chunk smaller.
+ * For videos > 64 MB: fixed 10 MB chunk size.
+ *
+ * TikTok requires total_chunk_count = FLOOR(video_size / chunk_size). The
+ * leftover bytes ride along on the FINAL chunk, so the last chunk is larger
+ * than chunk_size (between 1× and 2× chunk_size) — it is NOT an extra short
+ * chunk. Using Math.ceil sends one chunk too many and init fails with
+ * `invalid_params: "The total chunk count is invalid"`.
  */
 function computeChunks(videoSize: number) {
   if (videoSize <= TT_MAX_CHUNK) {
     return { chunkSize: videoSize, totalChunks: 1 };
   }
-  const totalChunks = Math.ceil(videoSize / TT_STD_CHUNK);
+  const totalChunks = Math.floor(videoSize / TT_STD_CHUNK);
   return { chunkSize: TT_STD_CHUNK, totalChunks };
 }
 
@@ -106,7 +110,10 @@ export async function ttPublishToInbox(
     const buf = input.videoBuffer;
     for (let i = 0; i < totalChunks; i++) {
       const start = i * chunkSize;
-      const end = Math.min(start + chunkSize, videoSize);
+      // The final chunk runs to the end of the file and absorbs the remainder
+      // (TikTok puts leftover bytes on the last chunk — see computeChunks).
+      // Capping it at start+chunkSize would silently drop the tail bytes.
+      const end = i === totalChunks - 1 ? videoSize : start + chunkSize;
       const chunk = new Uint8Array(buf.slice(start, end));
       const uploadRes = await fetch(init.data.upload_url, {
         method: "PUT",
