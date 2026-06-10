@@ -31,6 +31,9 @@ export type InitialDraft = {
   scheduledFor: string; // "YYYY-MM-DDTHH:MM" or empty
 };
 
+// localStorage key for the cross-navigation autosave snapshot. Module-scoped
+// so it's a stable reference (not recreated per render) for the autosave effect.
+const PERSIST_KEY = "compose:state-v1";
 
 export function Composer({
   connectedPlatforms,
@@ -67,8 +70,7 @@ export function Composer({
   // losing what they typed. Loaded once on mount via the lazy state
   // initializers below; cleared after a successful publish. Drops
   // anything older than 24h so a forgotten browser doesn't surface a
-  // week-old half-draft.
-  const PERSIST_KEY = "compose:state-v1";
+  // week-old half-draft. (PERSIST_KEY is module-scoped above.)
   type PersistedState = Partial<{
     topic: string;
     caption: string;
@@ -83,20 +85,41 @@ export function Composer({
     ctaResponse: string;
     savedAt: number;
   }>;
-  // Compose ALWAYS opens blank. The old behavior restored an autosaved
-  // localStorage snapshot of your last session — which meant opening
-  // Compose re-surfaced the previous post's video/caption. That confused
-  // more than it helped, so we never restore. Editing a specific draft
-  // (?draft=<id>) still hydrates from the DB via the initializers below.
-  // We clear any leftover snapshot on mount so old data can't reappear.
+  // Cross-navigation restore: a free-form NEW post snapshot is restored when
+  // you leave /compose and come back, so in-progress work isn't lost. Guarded
+  // so the old "previous post silently resurfaces" problem can't happen:
+  //   • editing a specific draft (?draft=<id>) → DB is the source of truth
+  //   • "New post" (?new=1, freshStart)        → start blank, wipe snapshot
+  // Otherwise we restore the snapshot (if < 24h old) and show a dismissible
+  // banner so the user always knows why fields are pre-filled.
+  const useLocalSnapshot = !initialDraft && !freshStart;
   const [persisted] = useState<PersistedState>(() => {
     if (typeof window === "undefined") return {};
     try {
-      window.localStorage.removeItem(PERSIST_KEY);
-    } catch {}
-    return {};
+      if (!useLocalSnapshot) {
+        window.localStorage.removeItem(PERSIST_KEY);
+        return {};
+      }
+      const raw = window.localStorage.getItem(PERSIST_KEY);
+      if (!raw) return {};
+      const parsed = JSON.parse(raw) as PersistedState;
+      // Expire stale snapshots so a long-forgotten tab can't resurface a
+      // week-old half-draft.
+      if (!parsed.savedAt || Date.now() - parsed.savedAt > 24 * 60 * 60 * 1000) {
+        window.localStorage.removeItem(PERSIST_KEY);
+        return {};
+      }
+      return parsed;
+    } catch {
+      return {};
+    }
   });
-  void freshStart;
+  // Did we actually rehydrate meaningful work? Drives the restore banner.
+  const restoredInitially =
+    useLocalSnapshot &&
+    (!!persisted.caption?.trim() ||
+      (persisted.mediaUrls?.length ?? 0) > 0 ||
+      !!persisted.topic?.trim());
 
   const [topic, setTopic] = useState(persisted.topic ?? "");
   const [caption, setCaption] = useState(() => {
@@ -153,11 +176,11 @@ export function Composer({
   // from their phone). Holds the just-published draft id.
   const [ttPublishedId, setTtPublishedId] = useState<string | null>(null);
 
-  // (Autosave-to-localStorage intentionally removed — Compose now always
-  // opens blank so a previous post's media/caption never resurfaces.
-  // Use "Save draft" to persist work; it's stored in the DB and reachable
-  // from /drafts → Edit.)
+  // "Save draft" persists to the DB (reachable from /drafts → Edit). Separately,
+  // an effect below autosaves the working state to localStorage so navigating
+  // away and back doesn't lose anything — see useLocalSnapshot above.
   const [savedAt, setSavedAt] = useState<Date | null>(null);
+  const [showRestoredBanner, setShowRestoredBanner] = useState(restoredInitially);
   const [overlayOpen, setOverlayOpen] = useState(false);
   // Schedule popover state. Replaces the dynamic Publish/Schedule label
   // pattern that confused users — clicking "Schedule or publish" now
@@ -186,6 +209,70 @@ export function Composer({
       document.removeEventListener("keydown", onKey);
     };
   }, [scheduleOpen]);
+
+  // ─── Cross-navigation autosave ───────────────────────────────
+  // Mirror the working draft into localStorage on every change so leaving
+  // /compose (to grab a link, check Trends, etc.) and coming back restores
+  // it. Free-form new posts only — editing a saved draft relies on the DB.
+  // Cleared on publish/schedule and on Discard.
+  useEffect(() => {
+    if (!useLocalSnapshot) return;
+    const hasContent =
+      caption.trim() || mediaUrls.length > 0 || topic.trim() || hashtagsRaw.trim();
+    try {
+      if (hasContent) {
+        const snapshot: PersistedState = {
+          topic,
+          caption,
+          hashtagsRaw,
+          hooks,
+          selectedHook,
+          mediaUrls,
+          musicUrl,
+          platforms,
+          scheduledFor,
+          ctaKeyword,
+          ctaResponse,
+          savedAt: Date.now(),
+        };
+        window.localStorage.setItem(PERSIST_KEY, JSON.stringify(snapshot));
+      }
+    } catch {
+      /* localStorage full / disabled — autosave is best-effort */
+    }
+  }, [
+    useLocalSnapshot,
+    topic,
+    caption,
+    hashtagsRaw,
+    hooks,
+    selectedHook,
+    mediaUrls,
+    musicUrl,
+    platforms,
+    scheduledFor,
+    ctaKeyword,
+    ctaResponse,
+  ]);
+
+  /** Discard the restored snapshot and reset the editor to blank. */
+  function discardRestored() {
+    setTopic("");
+    setCaption("");
+    setHashtagsRaw("");
+    setHooks([]);
+    setSelectedHook(null);
+    setMediaUrls([]);
+    setMusicUrl(null);
+    setCtaKeyword("");
+    setCtaResponse("");
+    setScheduledFor("");
+    setDraftId(null);
+    setShowRestoredBanner(false);
+    try {
+      window.localStorage.removeItem(PERSIST_KEY);
+    } catch {}
+  }
 
   const [generating, startGen] = useTransition();
   const [saving, startSave] = useTransition();
@@ -427,19 +514,24 @@ export function Composer({
     setErr(null);
     startPub(async () => {
       try {
-        let id = draftId;
-        if (!id) {
-          const d = await saveDraft({
-            caption: selectedHook ? `${selectedHook}\n\n${caption}` : caption,
-            hashtags,
-            hookOptions: hooks,
-            selectedHook,
-            mediaUrl: packMediaUrls(mediaUrls, { musicUrl }),
-            platforms,
-          });
-          id = d.id;
-          setDraftId(id);
-        }
+        // ALWAYS persist the on-screen state first, passing the existing
+        // draftId so this UPDATES the row instead of creating a duplicate.
+        // Before, we only saved when draftId was null — so a draft that was
+        // auto-created during media upload (caption still empty at that
+        // moment) would publish stale/empty text, and the TikTok caption QR
+        // (which re-reads the draft from the DB) came back blank. Re-saving
+        // here keeps the DB row in lockstep with the editor.
+        const d = await saveDraft({
+          draftId: draftId ?? undefined,
+          caption: selectedHook ? `${selectedHook}\n\n${caption}` : caption,
+          hashtags,
+          hookOptions: hooks,
+          selectedHook,
+          mediaUrl: packMediaUrls(mediaUrls, { musicUrl }),
+          platforms,
+        });
+        const id = d.id;
+        setDraftId(id);
         await publishDraftNow(id);
         // Clear the persisted draft now that it's gone live so the
         // next visit to /compose starts blank.
@@ -467,25 +559,23 @@ export function Composer({
     setErr(null);
     startPub(async () => {
       try {
-        let id = draftId;
-        if (!id) {
-          const d = await saveDraft({
-            caption: selectedHook ? `${selectedHook}\n\n${caption}` : caption,
-            hashtags,
-            hookOptions: hooks,
-            selectedHook,
-            mediaUrl: packMediaUrls(mediaUrls, { musicUrl }),
-            platforms,
-            scheduledFor,
-          });
-          id = d.id;
-          setDraftId(id);
-        } else {
-          await scheduleDraft(id, scheduledFor);
-        }
-        // Same cleanup as publish — the working draft has been
-        // committed to the schedule, so the autosave snapshot is no
-        // longer relevant.
+        // Persist the on-screen state (update, not create) so the scheduled
+        // post fires with the caption/media actually shown — not a stale
+        // auto-saved version. saveDraft sets status=SCHEDULED + scheduledFor;
+        // scheduleDraft then dispatches the timed Inngest publish.
+        const d = await saveDraft({
+          draftId: draftId ?? undefined,
+          caption: selectedHook ? `${selectedHook}\n\n${caption}` : caption,
+          hashtags,
+          hookOptions: hooks,
+          selectedHook,
+          mediaUrl: packMediaUrls(mediaUrls, { musicUrl }),
+          platforms,
+          scheduledFor,
+        });
+        setDraftId(d.id);
+        await scheduleDraft(d.id, scheduledFor);
+        // The working draft is committed to the schedule — drop the snapshot.
         try {
           window.localStorage.removeItem(PERSIST_KEY);
         } catch {}
@@ -502,6 +592,21 @@ export function Composer({
     <div className="grid grid-cols-1 lg:grid-cols-[1fr_400px] gap-6">
       {/* Left: editor */}
       <div className="space-y-4">
+        {showRestoredBanner && (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-amber-300 bg-amber-50 text-amber-900 text-sm px-3 py-2">
+            <span className="leading-relaxed">
+              Restored your unsaved draft from your last session. Keep editing —
+              or discard to start fresh.
+            </span>
+            <button
+              type="button"
+              onClick={discardRestored}
+              className="text-xs font-semibold underline hover:opacity-80 shrink-0"
+            >
+              Discard
+            </button>
+          </div>
+        )}
         {err && (
           <div className="bg-red-100 border border-red-300 text-red-900 text-sm rounded-lg p-3 flex justify-between items-start gap-3">
             <span className="leading-relaxed">{err}</span>
