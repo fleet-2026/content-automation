@@ -487,10 +487,19 @@ export async function publishToSocial(
       });
     }
 
-    // The Draft was only scaffolding to drive publishDraft(). Delete it so
-    // it doesn't show up as a duplicate of this guide on the unified
-    // /published page. The Post rows + postedPlatforms persist independently.
-    await prisma.draft.delete({ where: { id: draft.id } }).catch(() => {});
+    // The Draft was only scaffolding to drive publishDraft(). Delete it
+    // ONLY when every targeted platform succeeded — a fully-published guide
+    // already shows via postedPlatforms + Post rows, so the draft would be a
+    // duplicate on /published. On ANY failure KEEP the draft: publishDraft
+    // already marked it FAILED with the per-platform errors in publishResults,
+    // so the error is preserved (we never lose a TikTok failure again) and the
+    // post stays retryable from /drafts — publishDraft's skip-on-success logic
+    // re-attempts only the failed platform. The /published page hides this
+    // draft via the caption-match dedup either way, so no duplicate appears.
+    const allOk = results.length > 0 && results.every((r) => r.ok);
+    if (allOk) {
+      await prisma.draft.delete({ where: { id: draft.id } }).catch(() => {});
+    }
 
     revalidatePath(`/daily-post/${slug}`);
     revalidatePath(`/daily-post`);
