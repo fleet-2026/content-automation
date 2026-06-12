@@ -25,6 +25,7 @@ import {
   BookOpen,
   Images,
   CheckCircle2,
+  Clapperboard,
   Menu,
   X,
 } from "lucide-react";
@@ -55,6 +56,12 @@ const items: NavItem[] = [
   { href: "/flip", label: "Flip", icon: Zap },
   { href: "/voice", label: "Voice", icon: BrainCircuit },
   { href: "/studio", label: "Studio", icon: Wand2 },
+  {
+    href: "https://avatar-studio-cc1g.onrender.com",
+    label: "Avatar Studio",
+    icon: Clapperboard,
+    external: true,
+  },
   { href: "/carousel", label: "Carousel", icon: Images },
   { href: "/compose", label: "Compose", icon: PenLine },
   { href: "/drafts", label: "Drafts", icon: ClipboardList },
