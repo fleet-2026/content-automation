@@ -22,6 +22,7 @@ import {
   ListChecks,
   ListTodo,
   Rocket,
+  CalendarDays,
   BookOpen,
   Images,
   CheckCircle2,
@@ -46,6 +47,7 @@ type NavItem = {
 const items: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/daily-post", label: "Daily post", icon: Rocket },
+  { href: "/30-days", label: "30 days", icon: CalendarDays },
   { href: "/published", label: "Published", icon: CheckCircle2 },
   { href: "/guides", label: "View guide", icon: BookOpen },
   { href: "/posts", label: "Posts", icon: FileText },
