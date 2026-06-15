@@ -7,7 +7,7 @@ import TrackerTable from "./tracker-table";
 import AddTrackerGuide from "./add-tracker-guide";
 
 export const metadata: Metadata = {
-  title: "Quick Daily Posts — Creator OS",
+  title: "Quick Daily Posts — Descon Fleet",
   description: "All daily guides at a glance. Track media, socials, and ManyChat status.",
   robots: { index: false, follow: false },
 };

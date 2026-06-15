@@ -6,7 +6,7 @@ import { tryGetUser } from "@/lib/auth-helpers";
 import LogTable, { type LogItem } from "./log-table";
 
 export const metadata: Metadata = {
-  title: "Inspo Log — Creator OS",
+  title: "Inspo Log — Descon Fleet",
   description:
     "Every scraped post + diffed guide in one table — pick keywords, copy URLs, build ManyChat triggers.",
   robots: { index: false, follow: false },
