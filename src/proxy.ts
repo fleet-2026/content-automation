@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/auth";
+import { auth } from "@/auth-edge";
 import { rateLimit, RATE_LIMITS } from "@/lib/rate-limit";
 
 /**
