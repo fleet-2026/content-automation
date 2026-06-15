@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/db";
 import { allPlanDays, planDayBySlug, PLAN_SOURCE, type PlanDay } from "./plan";
+import { PLAN_CONTENT } from "./content";
 
 /**
  * Server-side seeding for the 30-day plan. Each plan day maps to one
@@ -12,17 +13,20 @@ import { allPlanDays, planDayBySlug, PLAN_SOURCE, type PlanDay } from "./plan";
  */
 
 function seedData(d: PlanDay) {
+  const c = PLAN_CONTENT[d.slug];
   return {
     slug: d.slug,
     title: d.step,
     index: d.day,
     hook: d.hook,
-    // Caption seeds the written hook plus the CTA. Script stays empty for the
-    // user to fill when they record.
-    caption: `${d.caption}\n\n${d.cta}`,
-    script: "",
-    hashtags: [] as string[],
+    // Pre-fill the finished caption + talking-head script + hashtags so the day
+    // is postable immediately. Falls back to the brief if content is missing.
+    caption: c?.caption ?? `${d.caption}\n\n${d.cta}`,
+    script: c?.script ?? "",
+    hashtags: c?.hashtags ?? ([] as string[]),
     manychatKeyword: d.keyword,
+    // The DM auto-reply sent when someone comments the keyword.
+    responseText: c?.dmReply ?? "",
     // Keep the on-screen text beat with the guide so it isn't lost.
     body: `On-screen text: ${d.onScreen}`,
     videoPrompt: "",
@@ -80,4 +84,39 @@ export async function seedAllPlanGuides(): Promise<{
     return { created, existing, error: (e as Error).message };
   }
   return { created, existing };
+}
+
+/**
+ * Backfill the finished content (script, caption, hashtags, DM reply) into plan
+ * rows that were created before the content existed. Only touches rows whose
+ * script is still empty — the signal that a day hasn't been written or edited
+ * yet — so anything the user has already recorded or rewritten is preserved.
+ * Never throws; returns how many rows were filled.
+ */
+export async function backfillPlanContent(): Promise<{ filled: number; error?: string }> {
+  let filled = 0;
+  try {
+    // Cheap after the first pass: only un-written plan rows come back.
+    const rows = await prisma.dailyGuide.findMany({
+      where: { source: PLAN_SOURCE, script: "" },
+      select: { id: true, slug: true },
+    });
+    for (const r of rows) {
+      const c = PLAN_CONTENT[r.slug];
+      if (!c) continue;
+      await prisma.dailyGuide.update({
+        where: { id: r.id },
+        data: {
+          script: c.script,
+          caption: c.caption,
+          hashtags: c.hashtags,
+          responseText: c.dmReply,
+        },
+      });
+      filled++;
+    }
+  } catch (e) {
+    return { filled, error: (e as Error).message };
+  }
+  return { filled };
 }

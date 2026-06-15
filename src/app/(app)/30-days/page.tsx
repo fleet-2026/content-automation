@@ -5,7 +5,7 @@ import { listPlanGuides } from "@/lib/guides";
 import { PLAN } from "./plan";
 import { PlanCard, type PlanGuideStatus } from "./plan-card";
 import { SetupBar } from "./setup-bar";
-import { seedAllPlanGuides } from "./seed";
+import { seedAllPlanGuides, backfillPlanContent } from "./seed";
 
 export const metadata: Metadata = {
   title: "30 Days — Creator OS",
@@ -30,6 +30,11 @@ export default async function ThirtyDaysPage() {
     await seedAllPlanGuides();
     guides = await listPlanGuides();
   }
+  // Fill the finished script/caption/hashtags/DM-reply into any day that's
+  // still blank (e.g. rows created before the content existed). Only touches
+  // un-written days, so recorded/edited days are left alone.
+  const { filled } = await backfillPlanContent();
+  if (filled > 0) guides = await listPlanGuides();
 
   // Live guide rows for the plan, keyed by slug so each static day can be
   // matched to its postable record.
