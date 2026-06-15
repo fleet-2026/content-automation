@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireUser } from "@/lib/auth-helpers";
 import { setGuidePublished } from "@/lib/guides";
-import { allPlanDays, PLAN_SOURCE } from "./plan";
+import { PLAN_SOURCE } from "./plan";
+import { seedAllPlanGuides } from "./seed";
 
 /**
  * Idempotently create the 30 plan day-guides in the DB.
@@ -27,48 +28,8 @@ export async function setupThirtyDayPlan(): Promise<{
     return { ok: false, created: 0, existing: 0, error: "unauthenticated" };
   }
 
-  let created = 0;
-  let existing = 0;
-
-  try {
-    for (const d of allPlanDays()) {
-      const found = await prisma.dailyGuide.findUnique({
-        where: { slug: d.slug },
-        select: { id: true },
-      });
-      if (found) {
-        existing++;
-        continue;
-      }
-      await prisma.dailyGuide.create({
-        data: {
-          slug: d.slug,
-          title: d.step,
-          index: d.day,
-          hook: d.hook,
-          // Caption seeds the written hook plus the CTA — the two text beats
-          // that go straight into the post caption. Script stays empty for the
-          // user to fill when they record.
-          caption: `${d.caption}\n\n${d.cta}`,
-          script: "",
-          hashtags: [],
-          manychatKeyword: d.keyword,
-          // Keep the on-screen text beat with the guide so it isn't lost.
-          body: `On-screen text: ${d.onScreen}`,
-          videoPrompt: "",
-          source: PLAN_SOURCE,
-        },
-      });
-      created++;
-    }
-  } catch (e) {
-    return {
-      ok: false,
-      created,
-      existing,
-      error: (e as Error).message,
-    };
-  }
+  const { created, existing, error } = await seedAllPlanGuides();
+  if (error) return { ok: false, created, existing, error };
 
   revalidatePath("/30-days");
   return { ok: true, created, existing };
