@@ -1,4 +1,4 @@
-# Creator OS
+# Creator OS 
 
 Your single AI dashboard for everything you post and everyone you watch.
 
