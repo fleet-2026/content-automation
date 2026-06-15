@@ -29,7 +29,7 @@ export default async function AccessPage({
       >
         <div className="mb-6">
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)] mb-4" />
-          <h1 className="text-2xl font-semibold tracking-tight">Creator OS</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Descon Fleet</h1>
           <p className="text-sm text-[var(--color-muted)] mt-1">
             Enter the shared access password to continue.
           </p>

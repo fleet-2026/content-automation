@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { env } from "@/lib/env";
 
 export const metadata: Metadata = {
-  title: "Privacy Policy — Creator OS",
+  title: "Privacy Policy — Descon Fleet",
   description:
-    "How Creator OS collects, uses, and protects your data. Plain-language summary of OAuth scopes, encryption, and your right to delete.",
+    "How Descon Fleet collects, uses, and protects your data. Plain-language summary of OAuth scopes, encryption, and your right to delete.",
   robots: { index: true, follow: true },
 };
 
@@ -28,7 +28,7 @@ export default function PrivacyPage() {
 
       <h2 className="font-display text-xl mt-10 mb-3">What this is</h2>
       <p className="leading-relaxed">
-        Creator OS is a content dashboard you use to compose, schedule, and
+        Descon Fleet is a content dashboard you use to compose, schedule, and
         publish short-form video to your own connected social-media accounts
         (Instagram, TikTok, Facebook). This page explains what data we hold
         about you, why, and how to remove it.
@@ -120,7 +120,7 @@ export default function PrivacyPage() {
       <p className="leading-relaxed">
         You can disconnect any social account from the dashboard at any time
         — that immediately deletes the access token + refresh token + openId
-        from our database. To delete your full Creator OS account
+        from our database. To delete your full Descon Fleet account
         (everything: drafts, media URLs, publish history, social connections),
         email{" "}
         <a

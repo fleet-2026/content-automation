@@ -3,7 +3,7 @@ import { Playfair_Display, Fraunces, Inter } from "next/font/google";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Creator OS",
+  title: "Descon Fleet",
   description: "AI dashboard for everything you post and everyone you watch.",
 };
 

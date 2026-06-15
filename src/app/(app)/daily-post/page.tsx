@@ -7,7 +7,7 @@ import BulkPublishBar from "./bulk-publish-bar";
 import { FilteredList } from "./filtered-list";
 
 export const metadata: Metadata = {
-  title: "Daily Post — Creator OS",
+  title: "Daily Post — Descon Fleet",
   description: "All scraped guides with ready-to-post hooks, scripts, captions, and hashtags.",
   robots: { index: false, follow: false },
 };
