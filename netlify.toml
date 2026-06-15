@@ -1,0 +1,13 @@
+# Netlify build configuration for this Next.js app.
+# Netlify auto-detects Next.js, but pinning these makes the build reliable.
+
+[build]
+  command = "npm run build"
+
+[build.environment]
+  # Next.js 16 + Prisma build best on Node 20.
+  NODE_VERSION = "20"
+
+# Official Netlify adapter for Next.js (handles routing, server functions, etc.)
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
