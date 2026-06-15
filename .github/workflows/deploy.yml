@@ -22,7 +22,10 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    # Bumped from 15m: Vercel server-side builds were hitting the cap and the
+    # job got cancelled mid-build, so production never updated. 30m gives a
+    # slow/queued build room to finish.
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,5 +44,8 @@ jobs:
       # rejected with ENOENT. Letting Vercel build it on their infra is slower
       # by ~30s but matches the manual `vercel deploy --prod` workflow and is
       # the path Vercel actively maintains.
+      # --logs streams Vercel's build output into the Actions log so a hung or
+      # failing build (e.g. a build-time error or a billing/usage block) is
+      # visible here instead of silently sitting on "Building…" until timeout.
       - name: Deploy to Vercel
-        run: vercel deploy --prod --yes --token=${{ secrets.VERCEL_TOKEN }}
+        run: vercel deploy --prod --yes --logs --token=${{ secrets.VERCEL_TOKEN }}
