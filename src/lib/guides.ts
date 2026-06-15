@@ -83,11 +83,30 @@ export async function getPublishedGuide(slug: string): Promise<GuidePublic | nul
 export async function listAllGuidesAdmin(): Promise<GuideAdmin[]> {
   try {
     const rows = await prisma.dailyGuide.findMany({
+      // Exclude the 30-day plan guides — they live exclusively on /30-days
+      // and would otherwise clutter the main Daily post library.
+      where: { source: { not: "30days" } },
       orderBy: [{ index: "asc" }, { createdAt: "desc" }],
     });
     return rows.map(toAdmin);
   } catch (e) {
     console.warn("[guides] listAllGuidesAdmin failed:", (e as Error).message);
+    return [];
+  }
+}
+
+/** 30-day plan variant — returns only guides with source = "30days".
+ *  Used by /30-days so its postable day-guides stay separate from the
+ *  main Daily post library. */
+export async function listPlanGuides(): Promise<GuideAdmin[]> {
+  try {
+    const rows = await prisma.dailyGuide.findMany({
+      where: { source: "30days" },
+      orderBy: [{ index: "asc" }, { createdAt: "asc" }],
+    });
+    return rows.map(toAdmin);
+  } catch (e) {
+    console.warn("[guides] listPlanGuides failed:", (e as Error).message);
     return [];
   }
 }

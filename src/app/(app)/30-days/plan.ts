@@ -1,19 +1,28 @@
 // 30-day "Claude Code" content plan. Static teaching plan — one entry per
 // day — grouped into four modules (Website → Funnel → App → Ship & Grow).
 // Each day is a short-form video brief: the teaching step plus the four
-// scripting beats the daily-post workflow uses (verbal hook, on-screen text,
-// caption hook, CTA). Pure data so the page stays a server component.
+// scripting beats (verbal hook, on-screen text, caption hook, CTA).
+//
+// These entries are ALSO the seed for real, postable guide records: the
+// /30-days "Set up the plan" action upserts one DailyGuide per day (tagged
+// source = PLAN_SOURCE) so each day opens in the same editor as Daily post
+// and posts to social through the same pipeline. `slug` is the stable key
+// that ties a plan day to its guide row; `keyword` seeds the ManyChat keyword.
 
 export type PlanDay = {
   /** Global day number, 1–30. */
   day: number;
-  /** The teaching step — what the viewer learns to do that day. */
+  /** Stable slug — the DailyGuide row's primary key for this day. */
+  slug: string;
+  /** ManyChat keyword seeded onto the guide. */
+  keyword: string;
+  /** The teaching step — what the viewer learns to do that day. Seeds title. */
   step: string;
-  /** Spoken opening line that stops the scroll. */
+  /** Spoken opening line that stops the scroll. Seeds the guide hook. */
   hook: string;
   /** Big on-screen text overlay for the clip. */
   onScreen: string;
-  /** First line of the caption — the written hook. */
+  /** First line of the caption — the written hook. Seeds the guide caption. */
   caption: string;
   /** Call to action that closes the video / caption. */
   cta: string;
@@ -31,6 +40,10 @@ export type PlanModule = {
   days: PlanDay[];
 };
 
+/** `source` value stamped on every plan guide row. Used to list them on
+ *  /30-days and to keep them out of the main Daily post library. */
+export const PLAN_SOURCE = "30days";
+
 export const PLAN: PlanModule[] = [
   {
     id: "website",
@@ -40,6 +53,8 @@ export const PLAN: PlanModule[] = [
     days: [
       {
         day: 1,
+        slug: "30day-01-install-claude-code",
+        keyword: "BUILD",
         step: "Install Claude Code & open your first project",
         hook: "You don't need to learn to code to build a website in 2026 — you just need to talk.",
         onScreen: "Day 1 · Install Claude Code",
@@ -48,6 +63,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 2,
+        slug: "30day-02-describe-your-site",
+        keyword: "PROMPT",
         step: "Describe your dream site in one prompt",
         hook: "Whatever website is in your head — you can describe it in 3 sentences and watch it appear.",
         onScreen: "Day 2 · Describe it, don't design it",
@@ -56,6 +73,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 3,
+        slug: "30day-03-generate-homepage",
+        keyword: "HOMEPAGE",
         step: "Generate your homepage",
         hook: "This is the moment a blank folder becomes an actual website on your screen.",
         onScreen: "Day 3 · Your first homepage",
@@ -64,6 +83,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 4,
+        slug: "30day-04-brand-colors-fonts",
+        keyword: "BRAND",
         step: "Add your brand colors & fonts",
         hook: "Your website looks generic? Two lines and it's suddenly yours.",
         onScreen: "Day 4 · Make it yours",
@@ -72,6 +93,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 5,
+        slug: "30day-05-mobile-responsive",
+        keyword: "MOBILE",
         step: "Make it responsive on mobile",
         hook: "80% of your visitors are on their phone — here's how to make sure it looks perfect there.",
         onScreen: "Day 5 · Mobile-perfect",
@@ -80,6 +103,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 6,
+        slug: "30day-06-about-contact-pages",
+        keyword: "PAGES",
         step: "Add an About & Contact page",
         hook: "A website with one page looks like a hobby. Here's how to make it a business.",
         onScreen: "Day 6 · More pages, zero stress",
@@ -88,6 +113,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 7,
+        slug: "30day-07-custom-domain",
+        keyword: "DOMAIN",
         step: "Connect a custom domain",
         hook: "Stop sending people a long ugly link — here's how to get yourname.com.",
         onScreen: "Day 7 · Your own domain",
@@ -96,6 +123,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 8,
+        slug: "30day-08-deploy-website",
+        keyword: "LIVE",
         step: "Deploy your website live",
         hook: "Today your website stops being on your laptop and goes live for the whole world.",
         onScreen: "Day 8 · Website is LIVE 🚀",
@@ -112,6 +141,8 @@ export const PLAN: PlanModule[] = [
     days: [
       {
         day: 9,
+        slug: "30day-09-what-is-a-funnel",
+        keyword: "FUNNEL",
         step: "Understand what a funnel actually is",
         hook: "A pretty website that makes no money isn't a website — it's a hobby. Let's fix that.",
         onScreen: "Day 9 · Funnels, explained",
@@ -120,6 +151,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 10,
+        slug: "30day-10-landing-page",
+        keyword: "PAGE",
         step: "Build a landing page that converts",
         hook: "This is the single page that does all the selling while you sleep.",
         onScreen: "Day 10 · The money page",
@@ -128,6 +161,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 11,
+        slug: "30day-11-email-optin",
+        keyword: "OPTIN",
         step: "Add an email opt-in",
         hook: "If you're not collecting emails, you're letting customers walk out the door forever.",
         onScreen: "Day 11 · Capture every visitor",
@@ -136,6 +171,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 12,
+        slug: "30day-12-lead-magnet",
+        keyword: "MAGNET",
         step: "Create a lead magnet",
         hook: "Nobody gives their email for nothing — here's the free thing that makes them say yes.",
         onScreen: "Day 12 · The irresistible freebie",
@@ -144,6 +181,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 13,
+        slug: "30day-13-thank-you-page",
+        keyword: "THANKYOU",
         step: "Wire up the thank-you page",
         hook: "The page nobody builds is the one that makes the most extra sales.",
         onScreen: "Day 13 · The forgotten page",
@@ -152,6 +191,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 14,
+        slug: "30day-14-email-sequence",
+        keyword: "EMAILS",
         step: "Set up an automated email sequence",
         hook: "Imagine emails that sell for you on autopilot, 24/7, without you lifting a finger.",
         onScreen: "Day 14 · Sells while you sleep",
@@ -160,6 +201,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 15,
+        slug: "30day-15-checkout-payments",
+        keyword: "PAY",
         step: "Add checkout & payments",
         hook: "Today your funnel can actually take money — let me show you how easy it is.",
         onScreen: "Day 15 · Get paid 💸",
@@ -176,6 +219,8 @@ export const PLAN: PlanModule[] = [
     days: [
       {
         day: 16,
+        slug: "30day-16-app-spec",
+        keyword: "SPEC",
         step: "Turn your idea into an app spec",
         hook: "Everyone has a million-dollar app idea. Here's the first step almost nobody takes.",
         onScreen: "Day 16 · Idea → spec",
@@ -184,6 +229,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 17,
+        slug: "30day-17-scaffold-app",
+        keyword: "SCAFFOLD",
         step: "Scaffold the app with Claude Code",
         hook: "Watch a real, working app skeleton appear from a single description.",
         onScreen: "Day 17 · The app appears",
@@ -192,6 +239,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 18,
+        slug: "30day-18-user-login-auth",
+        keyword: "AUTH",
         step: "Add user login & auth",
         hook: "\"How do people sign up for my app?\" — the scary part, made simple.",
         onScreen: "Day 18 · Logins, done",
@@ -200,6 +249,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 19,
+        slug: "30day-19-core-feature",
+        keyword: "FEATURE",
         step: "Build the core feature",
         hook: "This is the one thing your app actually does — and today we build it.",
         onScreen: "Day 19 · The main event",
@@ -208,6 +259,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 20,
+        slug: "30day-20-add-database",
+        keyword: "DATABASE",
         step: "Add a database",
         hook: "Where does all your app's data actually live? Let's give it a home.",
         onScreen: "Day 20 · Save the data",
@@ -216,6 +269,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 21,
+        slug: "30day-21-style-the-ui",
+        keyword: "UI",
         step: "Style the UI",
         hook: "Functional but ugly? Here's how to make your app look like a real product.",
         onScreen: "Day 21 · Make it beautiful",
@@ -224,6 +279,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 22,
+        slug: "30day-22-test-and-debug",
+        keyword: "DEBUG",
         step: "Test & fix bugs with Claude",
         hook: "Something's broken and you have no idea why? Watch this.",
         onScreen: "Day 22 · Squash the bugs",
@@ -232,6 +289,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 23,
+        slug: "30day-23-deploy-app",
+        keyword: "APP",
         step: "Deploy your app",
         hook: "Today your app leaves your laptop and goes live for real users.",
         onScreen: "Day 23 · App is LIVE 🚀",
@@ -248,6 +307,8 @@ export const PLAN: PlanModule[] = [
     days: [
       {
         day: 24,
+        slug: "30day-24-ship-mvp",
+        keyword: "SHIP",
         step: "Ship your MVP publicly",
         hook: "Done is better than perfect — today we hit publish even though it's scary.",
         onScreen: "Day 24 · Ship it 🚢",
@@ -256,6 +317,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 25,
+        slug: "30day-25-collect-feedback",
+        keyword: "FEEDBACK",
         step: "Collect user feedback",
         hook: "Your first users will tell you exactly what to build next — if you ask right.",
         onScreen: "Day 25 · Listen first",
@@ -264,6 +327,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 26,
+        slug: "30day-26-add-analytics",
+        keyword: "DATA",
         step: "Add analytics",
         hook: "You can't grow what you can't see — here's how to know exactly what users do.",
         onScreen: "Day 26 · See everything",
@@ -272,6 +337,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 27,
+        slug: "30day-27-build-in-public",
+        keyword: "CONTENT",
         step: "Build a content engine around building it",
         hook: "The best marketing for your product is showing yourself build it. Meta, right?",
         onScreen: "Day 27 · Build in public",
@@ -280,6 +347,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 28,
+        slug: "30day-28-first-users",
+        keyword: "USERS",
         step: "Get your first 10 users",
         hook: "Your first 10 users are the hardest and the most important — here's where to find them.",
         onScreen: "Day 28 · First 10 users",
@@ -288,6 +357,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 29,
+        slug: "30day-29-iterate",
+        keyword: "ITERATE",
         step: "Iterate from feedback",
         hook: "The magic isn't the launch — it's the loop. Build, learn, repeat.",
         onScreen: "Day 29 · The loop",
@@ -296,6 +367,8 @@ export const PLAN: PlanModule[] = [
       },
       {
         day: 30,
+        slug: "30day-30-scale-monetize",
+        keyword: "SCALE",
         step: "Scale & monetize",
         hook: "30 days ago you couldn't code. Today you have a product that makes money.",
         onScreen: "Day 30 · You did it 🎉",
@@ -305,3 +378,13 @@ export const PLAN: PlanModule[] = [
     ],
   },
 ];
+
+/** Flat list of all 30 days, in order. */
+export function allPlanDays(): PlanDay[] {
+  return PLAN.flatMap((m) => m.days);
+}
+
+/** Look up a plan day by its slug. */
+export function planDayBySlug(slug: string): PlanDay | undefined {
+  return allPlanDays().find((d) => d.slug === slug);
+}

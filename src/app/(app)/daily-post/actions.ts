@@ -39,6 +39,8 @@ export async function updatePost(
   const ok = await savePost(slug, p);
   revalidatePath(`/daily-post/${slug}`);
   revalidatePath(`/daily-post`);
+  // 30-day plan guides share this editor — keep their cards in sync too.
+  revalidatePath(`/30-days`);
   // Also revalidate the public page so body edits on a published guide
   // show up without waiting for the 5-min ISR cache to expire.
   revalidatePath(`/guides/${slug}`);
@@ -59,6 +61,7 @@ export async function deletePost(
   const ok = await deleteGuide(slug);
   if (!ok) return { ok: false, error: "Post not found (already deleted?)" };
   revalidatePath(`/daily-post`);
+  revalidatePath(`/30-days`);
   revalidatePath(`/published`);
   revalidatePath(`/tracker`);
   revalidatePath(`/guides`);
@@ -72,6 +75,7 @@ export async function setPublished(slug: string, published: boolean) {
   const ok = await setGuidePublished(slug, published);
   revalidatePath(`/daily-post/${slug}`);
   revalidatePath(`/daily-post`);
+  revalidatePath(`/30-days`);
   // /published filters on isPublished too — revalidate it so the post
   // shows up (or drops off) there immediately instead of serving a stale
   // client-cached page.
@@ -503,6 +507,8 @@ export async function publishToSocial(
 
     revalidatePath(`/daily-post/${slug}`);
     revalidatePath(`/daily-post`);
+    // 30-day plan guides post through this same action — refresh their cards.
+    revalidatePath(`/30-days`);
     // A successful social post counts as "published" (postedPlatforms is
     // now non-empty) so the post moves to /published — revalidate it so it
     // actually appears there without a stale-cache delay.
