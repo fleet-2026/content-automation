@@ -2,7 +2,7 @@ import NextAuth, { type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 import { prisma } from "@/lib/db";
-import { isDevOpenMode } from "@/lib/default-user";
+import { authConfig } from "@/auth.config";
 
 declare module "next-auth" {
   interface Session {
@@ -13,8 +13,7 @@ declare module "next-auth" {
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  session: { strategy: "jwt" },
-  pages: { signIn: "/login" },
+  ...authConfig,
   providers: [
     Credentials({
       credentials: {
@@ -25,44 +24,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const email = String(credentials?.email ?? "").toLowerCase().trim();
         const password = String(credentials?.password ?? "");
         if (!email || !password) return null;
-
-        // Single-tenant gate: only ADMIN_EMAIL can sign in.
         const adminEmail = process.env.ADMIN_EMAIL?.toLowerCase().trim();
         if (adminEmail && email !== adminEmail) return null;
-
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user) return null;
-
         const ok = await compare(password, user.passwordHash);
         if (!ok) return null;
-
         return { id: user.id, email: user.email, name: user.name ?? undefined };
       },
     }),
   ],
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) token.id = user.id;
-      return token;
-    },
-    async session({ session, token }) {
-      if (token?.id) session.user.id = token.id as string;
-      return session;
-    },
-    authorized({ auth: session, request }) {
-      const { pathname } = request.nextUrl;
-      const isLogin = pathname === "/login";
-      const isPublicAsset =
-        pathname.startsWith("/_next") ||
-        pathname.startsWith("/favicon") ||
-        pathname.startsWith("/api/auth") ||
-        pathname.startsWith("/api/inngest");
-      if (isLogin || isPublicAsset) return true;
-      // Single-user mode: skip login when AUTH_DEV_OPEN=1 + ADMIN_EMAIL set.
-      // requireUser() falls back to ensureDefaultUserId() which provisions
-      // the admin user automatically — no session needed.
-      if (isDevOpenMode()) return true;
-      return !!session;
-    },
-  },
 });
