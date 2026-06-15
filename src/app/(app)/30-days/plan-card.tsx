@@ -31,14 +31,14 @@ export function PlanCard({
 
   return (
     <article className="relative rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition hover:border-[var(--color-text)]/30">
-      {/* Whole-card click target into the editor — only when set up. */}
-      {guide && (
-        <Link
-          href={`/daily-post/${guide.slug}`}
-          aria-label={`Open day ${d.day} editor`}
-          className="absolute inset-0 z-0 rounded-xl"
-        />
-      )}
+      {/* Whole-card click target into the editor. Always links by plan slug —
+          the editor creates the post row on first open if it doesn't exist
+          yet, so a day is clickable even before the bulk "Set up" runs. */}
+      <Link
+        href={`/daily-post/${d.slug}`}
+        aria-label={`Open day ${d.day} editor`}
+        className="absolute inset-0 z-0 rounded-xl"
+      />
       {guide && (
         <DeleteGuideButton
           slug={guide.slug}
@@ -93,16 +93,14 @@ export function PlanCard({
           )}
         </div>
 
-        {guide && (
-          <div className="pointer-events-auto mt-3">
-            <Link
-              href={`/daily-post/${guide.slug}`}
-              className="relative z-10 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-text)] px-3 py-1.5 text-xs font-semibold text-[var(--color-text-on-dark)] hover:opacity-90"
-            >
-              Edit &amp; post →
-            </Link>
-          </div>
-        )}
+        <div className="pointer-events-auto mt-3">
+          <Link
+            href={`/daily-post/${d.slug}`}
+            className="relative z-10 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-text)] px-3 py-1.5 text-xs font-semibold text-[var(--color-text-on-dark)] hover:opacity-90"
+          >
+            Edit &amp; post →
+          </Link>
+        </div>
       </div>
     </article>
   );
