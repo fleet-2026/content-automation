@@ -5,6 +5,7 @@ import { listPlanGuides } from "@/lib/guides";
 import { PLAN } from "./plan";
 import { PlanCard, type PlanGuideStatus } from "./plan-card";
 import { SetupBar } from "./setup-bar";
+import { seedAllPlanGuides } from "./seed";
 
 export const metadata: Metadata = {
   title: "30 Days — Creator OS",
@@ -19,9 +20,19 @@ export default async function ThirtyDaysPage() {
   const userId = await tryGetUser();
   if (!userId) redirect("/login");
 
+  const totalDays = PLAN.reduce((n, m) => n + m.days.length, 0);
+
+  // Auto-create the plan's posts the first time the page is opened, so it
+  // behaves exactly like Daily post — the days are just there, no setup step
+  // and no dependency on client-side JavaScript. Idempotent and never throws.
+  let guides = await listPlanGuides();
+  if (guides.length < totalDays) {
+    await seedAllPlanGuides();
+    guides = await listPlanGuides();
+  }
+
   // Live guide rows for the plan, keyed by slug so each static day can be
   // matched to its postable record.
-  const guides = await listPlanGuides();
   const bySlug = new Map<string, PlanGuideStatus>(
     guides.map((g) => [
       g.slug,
@@ -37,7 +48,6 @@ export default async function ThirtyDaysPage() {
     ]),
   );
 
-  const totalDays = PLAN.reduce((n, m) => n + m.days.length, 0);
   const setupCount = PLAN.flatMap((m) => m.days).filter((d) => bySlug.has(d.slug)).length;
   const publishedCount = guides.filter((g) => g.isPublished).length;
   const postedCount = guides.filter((g) => g.postedPlatforms.length > 0).length;
