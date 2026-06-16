@@ -22,11 +22,15 @@ export default async function ThirtyDaysPage() {
 
   const totalDays = PLAN.reduce((n, m) => n + m.days.length, 0);
 
-  // Auto-create the plan's posts the first time the page is opened, so it
-  // behaves exactly like Daily post — the days are just there, no setup step
-  // and no dependency on client-side JavaScript. Idempotent and never throws.
+  // Auto-create the plan's posts the FIRST time the page is opened (empty
+  // state), so it behaves like Daily post — the days are just there, no setup
+  // step. We intentionally seed ONLY when there are zero plan guides, not
+  // whenever the count is below 30: re-seeding on every partial count would
+  // silently re-create any day the user deleted, making the delete button look
+  // broken (the day reappears on the next load). To re-add days after deleting,
+  // use the "Set up" button (SetupBar → seedAllPlanGuides). Idempotent + safe.
   let guides = await listPlanGuides();
-  if (guides.length < totalDays) {
+  if (guides.length === 0) {
     await seedAllPlanGuides();
     guides = await listPlanGuides();
   }
