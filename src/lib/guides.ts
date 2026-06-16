@@ -191,7 +191,11 @@ export async function deleteGuide(slug: string): Promise<boolean> {
   try {
     await prisma.dailyGuide.delete({ where: { slug } });
     return true;
-  } catch {
+  } catch (e) {
+    // Don't swallow silently — a failed delete (missing row, DB error,
+    // permission) used to return false with no trace, which made the UI's
+    // delete button look broken. Log the real reason so it's diagnosable.
+    console.error(`[deleteGuide] failed for slug="${slug}":`, (e as Error)?.message ?? e);
     return false;
   }
 }

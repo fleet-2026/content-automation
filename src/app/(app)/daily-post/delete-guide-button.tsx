@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { deletePost } from "./actions";
 
@@ -20,6 +21,7 @@ export function DeleteGuideButton({
   const [confirm, setConfirm] = useState(false);
   const [busy, start] = useTransition();
   const [err, setErr] = useState<string | null>(null);
+  const router = useRouter();
 
   const handleClick = (e: React.MouseEvent) => {
     // Belt-and-suspenders: never let the click bubble to the card's
@@ -29,14 +31,36 @@ export function DeleteGuideButton({
     setErr(null);
     if (!confirm) {
       setConfirm(true);
-      // Auto-disarm after 4s so a stray first click doesn't stay armed.
-      setTimeout(() => setConfirm(false), 4000);
+      // Auto-disarm after 5s so a stray first click doesn't stay armed.
+      setTimeout(() => setConfirm(false), 5000);
       return;
     }
     start(async () => {
-      const res = await deletePost(slug);
-      if (!res.ok) setErr(res.error ?? "Delete failed");
-      setConfirm(false);
+      try {
+        const res = await deletePost(slug);
+        if (!res.ok) {
+          const msg = res.error ?? "Delete failed";
+          setErr(msg);
+          // Make a server-side failure VISIBLE instead of dying silently in
+          // a tooltip — this is why "delete does nothing" went unnoticed.
+          if (typeof window !== "undefined") {
+            window.alert(`Couldn't delete "${title}": ${msg}`);
+          }
+        } else {
+          // Force the queue to re-fetch. revalidatePath alone sometimes
+          // doesn't repaint the client list, leaving the deleted card on
+          // screen — which reads as "delete didn't work."
+          router.refresh();
+        }
+      } catch (e2) {
+        const msg = (e2 as Error)?.message ?? "Delete failed";
+        setErr(msg);
+        if (typeof window !== "undefined") {
+          window.alert(`Couldn't delete "${title}": ${msg}`);
+        }
+      } finally {
+        setConfirm(false);
+      }
     });
   };
 
