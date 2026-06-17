@@ -5,7 +5,7 @@ import { listPlanGuides } from "@/lib/guides";
 import { PLAN } from "./plan";
 import { PlanCard, type PlanGuideStatus } from "./plan-card";
 import { SetupBar } from "./setup-bar";
-import { seedAllPlanGuides, backfillPlanContent } from "./seed";
+import { backfillPlanContent } from "./seed";
 
 export const metadata: Metadata = {
   title: "30 Days — Creator OS",
@@ -22,21 +22,15 @@ export default async function ThirtyDaysPage() {
 
   const totalDays = PLAN.reduce((n, m) => n + m.days.length, 0);
 
-  // Auto-create the plan's posts the FIRST time the page is opened (empty
-  // state), so it behaves like Daily post — the days are just there, no setup
-  // step. We intentionally seed ONLY when there are zero plan guides, not
-  // whenever the count is below 30: re-seeding on every partial count would
-  // silently re-create any day the user deleted, making the delete button look
-  // broken (the day reappears on the next load). To re-add days after deleting,
-  // use the "Set up" button (SetupBar → seedAllPlanGuides). Idempotent + safe.
+  // No auto-seed on page load. Auto-creating plan rows here (and in the editor
+  // on open) resurrected days the user had deleted, which made the delete
+  // button look broken. The plan is created/synced ONLY via the "Set up the
+  // 30-day plan" button (SetupBar) now, so deletes are permanent. An empty plan
+  // simply shows that setup prompt.
   let guides = await listPlanGuides();
-  if (guides.length === 0) {
-    await seedAllPlanGuides();
-    guides = await listPlanGuides();
-  }
   // Fill the finished script/caption/hashtags/DM-reply into any day that's
-  // still blank (e.g. rows created before the content existed). Only touches
-  // un-written days, so recorded/edited days are left alone.
+  // still blank. This only UPDATES existing rows — it never creates one — so it
+  // cannot bring back a deleted day.
   const { filled } = await backfillPlanContent();
   if (filled > 0) guides = await listPlanGuides();
 

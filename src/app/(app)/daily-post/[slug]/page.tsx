@@ -3,7 +3,6 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { tryGetUser } from "@/lib/auth-helpers";
 import { getPost } from "../data";
-import { ensurePlanGuide } from "../../30-days/seed";
 import PostEditor from "./post-editor";
 
 export const metadata: Metadata = {
@@ -24,14 +23,11 @@ export default async function PostDetailPage({
   const userId = await tryGetUser();
   if (!userId) redirect("/login");
 
-  let post = await getPost(slug);
-  // 30-day plan days are created on demand: if the slug is a known plan day
-  // that hasn't been seeded yet, create its row now so the editor opens
-  // straight from a /30-days card without a separate setup step.
-  if (!post) {
-    const seeded = await ensurePlanGuide(slug);
-    if (seeded) post = await getPost(slug);
-  }
+  const post = await getPost(slug);
+  // Intentionally do NOT auto-create a missing plan-day row here. Re-creating
+  // on open resurrected days the user had deleted (opening a deleted day's URL
+  // re-seeded it). Plan days are (re)built only via the "Set up the 30-day
+  // plan" button — a missing/deleted day now 404s instead of coming back.
   if (!post) notFound();
 
   return (
