@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { Platform, DraftStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { suggestHooks, type HookVariant } from "@/lib/ai/hook-suggester";
+import { rateContentQuality } from "@/lib/ai/rate-content";
 import { publishDraft as publishNow } from "@/lib/publish";
 import { requireUser } from "@/lib/auth-helpers";
 import { enforceRateLimit, RATE_LIMITS } from "@/lib/rate-limit";
@@ -14,6 +15,48 @@ export async function generateHookVariants(input: { topic: string; caption?: str
   await enforceRateLimit(`hookgen:${userId}`, { ...RATE_LIMITS.HOOK_GEN, label: "hook generation" });
   const variants = await suggestHooks({ userId, ...input });
   return variants;
+}
+
+/**
+ * AI-rate the script/caption typed in the composer. Unlike the daily-post
+ * editor's rateContent (which reads a saved DailyGuide by slug), this scores
+ * the RAW text on the page so the user can rate a brand-new post before it's
+ * ever saved. Compose has a single "Caption / script" field, so we feed it to
+ * the scorer as both the script and the caption. Returns the structured rating
+ * or an error string (never throws to the client).
+ */
+export async function rateComposeContent(input: {
+  topic: string;
+  hook: string | null;
+  caption: string;
+  hashtags: string[];
+}) {
+  let userId: string;
+  try {
+    userId = await requireUser();
+  } catch {
+    return { ok: false as const, error: "unauthenticated" };
+  }
+  if (!input.caption.trim()) {
+    return { ok: false as const, error: "Write your caption / script first." };
+  }
+  try {
+    await enforceRateLimit(`ratecompose:${userId}`, { ...RATE_LIMITS.HOOK_GEN, label: "content rating" });
+  } catch (e) {
+    return { ok: false as const, error: (e as Error).message };
+  }
+  try {
+    const rating = await rateContentQuality({
+      title: input.topic.trim() || "Untitled post",
+      hook: input.hook?.trim() || "",
+      script: input.caption,
+      caption: input.caption,
+      hashtags: input.hashtags,
+    });
+    return { ok: true as const, rating };
+  } catch (e) {
+    return { ok: false as const, error: (e as Error).message };
+  }
 }
 
 /**

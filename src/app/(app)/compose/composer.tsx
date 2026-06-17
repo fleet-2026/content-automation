@@ -4,7 +4,7 @@ import { useState, useTransition, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles, Upload, Send, CalendarClock, CheckCircle2, Type, X, Plus, Music2, ExternalLink } from "lucide-react";
 import Link from "next/link";
-import { generateHookVariants, saveDraft, publishDraftNow, scheduleDraft } from "./actions";
+import { generateHookVariants, saveDraft, publishDraftNow, scheduleDraft, rateComposeContent } from "./actions";
 import type { Platform } from "@prisma/client";
 import { HookOverlayEditor } from "./hook-overlay-editor";
 import { PostPreview } from "./post-preview";
@@ -18,6 +18,17 @@ type Hook = {
   predictedER: number | null;
   similarHookIds: string[];
   reasoning?: string;
+};
+
+/** Mirrors ContentRating from @/lib/ai/rate-content. Defined locally so the
+ *  client bundle doesn't import the server-only rating module. */
+type ContentRating = {
+  scriptScore: number;
+  captionScore: number;
+  verdict: string;
+  strengths: string[];
+  improvements: string[];
+  captionRewrites: string[];
 };
 
 export type InitialDraft = {
@@ -280,10 +291,26 @@ export function Composer({
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
+  // Script/caption AI rating (same scorer as the daily-post editor, but on the
+  // raw text typed here — no save required).
+  const [rating, startRate] = useTransition();
+  const [contentRating, setContentRating] = useState<ContentRating | null>(null);
+  const [rateErr, setRateErr] = useState<string | null>(null);
+
   const hashtags = hashtagsRaw
     .split(/[,\s]+/)
     .map((s) => s.replace(/^#/, "").trim().toLowerCase())
     .filter(Boolean);
+
+  function runRate() {
+    setRateErr(null);
+    setContentRating(null);
+    startRate(async () => {
+      const res = await rateComposeContent({ topic, hook: selectedHook, caption, hashtags });
+      if (res.ok && res.rating) setContentRating(res.rating as ContentRating);
+      else setRateErr(res.error ?? "Rating failed");
+    });
+  }
 
   function generate() {
     if (!topic.trim()) return;
@@ -656,6 +683,79 @@ export function Composer({
             placeholder="Write your post body. The selected hook will be prepended on publish."
             className="w-full px-3 py-2 rounded-lg bg-[var(--color-surface-2)] border outline-none focus:border-[var(--color-accent)] resize-y"
           />
+          {/* AI quality rating for the script/caption above — no save needed. */}
+          <div className="mt-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={runRate}
+                disabled={rating || !caption.trim()}
+                className="inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg bg-[var(--color-surface-2)] hover:bg-[var(--color-border)] font-medium disabled:opacity-50"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                {rating ? "Rating…" : "Rate script & caption"}
+              </button>
+              {contentRating && (
+                <span className="flex items-center gap-2">
+                  <ScorePill label="Script" score={contentRating.scriptScore} />
+                  <ScorePill label="Caption" score={contentRating.captionScore} />
+                </span>
+              )}
+            </div>
+
+            {rateErr && <p className="mt-2 text-xs text-red-700">{rateErr}</p>}
+
+            {contentRating && (
+              <div className="mt-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-3 space-y-3 text-sm">
+                <p className="font-medium">{contentRating.verdict}</p>
+
+                {contentRating.improvements.length > 0 && (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-[var(--color-muted)] mb-1">
+                      Improvements
+                    </p>
+                    <ul className="list-disc pl-5 space-y-1 text-xs text-[var(--color-muted)]">
+                      {contentRating.improvements.map((s, i) => (
+                        <li key={i}>{s}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {contentRating.captionRewrites.length > 0 && (
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wider text-[var(--color-muted)] mb-1">
+                      Rewrites — tap one to use it
+                    </p>
+                    <div className="space-y-2">
+                      {contentRating.captionRewrites.map((rw, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => {
+                            setCaption(rw);
+                            setContentRating(null);
+                          }}
+                          className="block w-full text-left text-xs p-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] hover:border-[var(--color-accent)]"
+                          title="Replace your caption with this rewrite"
+                        >
+                          {rw}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setContentRating(null)}
+                  className="text-[11px] text-[var(--color-muted)] hover:text-[var(--color-text)]"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
+          </div>
         </Field>
 
         <Field label="Hashtags">
@@ -1266,6 +1366,15 @@ export function Composer({
       />
     )}
     </>
+  );
+}
+
+function ScorePill({ label, score }: { label: string; score: number }) {
+  const color = score >= 8 ? "bg-emerald-600" : score >= 5 ? "bg-amber-500" : "bg-red-600";
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold text-white ${color}`}>
+      {label} {score}/10
+    </span>
   );
 }
 
