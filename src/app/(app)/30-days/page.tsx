@@ -106,27 +106,35 @@ export default async function ThirtyDaysPage() {
       </div>
 
       <div className="space-y-10">
-        {PLAN.map((m) => (
-          <section key={m.id} id={m.id} className="scroll-mt-6">
-            <div className="mb-3">
-              <h2 className="text-lg font-semibold">
-                <span className="text-[var(--color-muted)] font-normal">
-                  Module {m.number} ·{" "}
-                </span>
-                {m.title}
-                <span className="ml-2 text-sm font-normal text-[var(--color-muted)]">
-                  {m.days.length} days
-                </span>
-              </h2>
-              <p className="text-sm text-[var(--color-muted)] mt-0.5">{m.subtitle}</p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {m.days.map((d) => (
-                <PlanCard key={d.day} d={d} guide={bySlug.get(d.slug)} />
-              ))}
-            </div>
-          </section>
-        ))}
+        {PLAN.map((m) => {
+          // Only render days that still have a guide row. Deleting a day removes
+          // its guide, so the card drops off the grid entirely instead of
+          // lingering as an empty "Pending" slot. Re-add deleted days anytime
+          // with the "Set up the 30-day plan" button (it recreates missing days).
+          const days = m.days.filter((d) => bySlug.has(d.slug));
+          if (days.length === 0) return null;
+          return (
+            <section key={m.id} id={m.id} className="scroll-mt-6">
+              <div className="mb-3">
+                <h2 className="text-lg font-semibold">
+                  <span className="text-[var(--color-muted)] font-normal">
+                    Module {m.number} ·{" "}
+                  </span>
+                  {m.title}
+                  <span className="ml-2 text-sm font-normal text-[var(--color-muted)]">
+                    {days.length} {days.length === 1 ? "day" : "days"}
+                  </span>
+                </h2>
+                <p className="text-sm text-[var(--color-muted)] mt-0.5">{m.subtitle}</p>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {days.map((d) => (
+                  <PlanCard key={d.day} d={d} guide={bySlug.get(d.slug)} />
+                ))}
+              </div>
+            </section>
+          );
+        })}
       </div>
     </div>
   );
