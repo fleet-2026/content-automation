@@ -9,7 +9,7 @@
  * rewrites with copy-to-clipboard buttons per suggestion.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropic, MODELS, assertAnthropicConfigured } from "./claude";
 
 export type RateHookInput = {
   title: string;
@@ -39,7 +39,7 @@ export type HookRating = {
   rewrites: string[];
 };
 
-const MODEL = process.env.RATE_HOOK_MODEL ?? "claude-sonnet-4-6";
+const MODEL = MODELS.default;
 
 const SYSTEM_PROMPT = `You are a viral-content strategist who has analyzed millions of Reels and TikToks.
 Your job: rate the HOOK of a piece of content for scroll-stopping power on a 1-10
@@ -119,12 +119,11 @@ function parseRating(raw: string): HookRating {
 }
 
 export async function rateHookForVirality(input: RateHookInput): Promise<HookRating> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    throw new Error("ANTHROPIC_API_KEY missing (server env).");
-  }
-  const client = new Anthropic({ apiKey: key });
-  const msg = await client.messages.create({
+  // Shared client from ./claude — sanitizes the key (strips BOM/quotes/hidden
+  // chars). The raw process.env value broke the Authorization header in prod
+  // and surfaced as a misleading "Connection error."
+  assertAnthropicConfigured();
+  const msg = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 1500,
     system: SYSTEM_PROMPT,

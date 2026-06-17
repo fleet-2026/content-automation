@@ -9,7 +9,7 @@
  * Uses the same Anthropic SDK pattern as rate-hook.ts.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { anthropic, MODELS, assertAnthropicConfigured } from "./claude";
 
 export type RateContentInput = {
   title: string;
@@ -53,7 +53,7 @@ export type ContentRating = {
   captionRewrites: string[];
 };
 
-const MODEL = process.env.RATE_HOOK_MODEL ?? "claude-sonnet-4-6";
+const MODEL = MODELS.default;
 
 const SYSTEM_PROMPT = `You are a social-media content coach who has analyzed tens of thousands of viral Reels, TikToks, and Shorts.
 
@@ -146,12 +146,13 @@ function parseRating(raw: string): ContentRating {
 export async function rateContentQuality(
   input: RateContentInput,
 ): Promise<ContentRating> {
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (!key) {
-    throw new Error("ANTHROPIC_API_KEY missing (server env).");
-  }
-  const client = new Anthropic({ apiKey: key });
-  const msg = await client.messages.create({
+  // Use the SHARED client from ./claude — it reads the key via env() which
+  // strips BOM / quotes / hidden control chars. The raw process.env value can
+  // carry a U+FEFF byte that makes Node reject the Authorization header, which
+  // the SDK reports as a misleading "Connection error." (worked locally where
+  // the key is clean, failed in prod where it wasn't).
+  assertAnthropicConfigured();
+  const msg = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 2000,
     system: SYSTEM_PROMPT,
