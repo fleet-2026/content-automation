@@ -36,6 +36,51 @@ export async function setupThirtyDayPlan(): Promise<{
 }
 
 /**
+ * Create a blank CUSTOM day on the 30-day page — a DailyGuide tagged
+ * source = PLAN_SOURCE whose slug is NOT one of the predefined plan slugs. It
+ * appears in the "Your own posts" section of /30-days and opens in the standard
+ * editor (hook, script, caption, ManyChat wiring, rating, publish). Returns the
+ * new slug so the client can navigate straight into the editor to fill it in.
+ */
+export async function createCustomPlanDay(): Promise<{
+  ok: boolean;
+  slug?: string;
+  error?: string;
+}> {
+  try {
+    await requireUser();
+  } catch {
+    return { ok: false, error: "unauthenticated" };
+  }
+  // URL-safe slug — getPost() sanitizes to [a-z0-9_-], so keep to that set.
+  const slug = `custom-${Date.now().toString(36)}`;
+  // Sort custom posts after the 30 predefined days.
+  const top = await prisma.dailyGuide.aggregate({
+    where: { source: PLAN_SOURCE },
+    _max: { index: true },
+  });
+  const index = Math.max(top._max.index ?? 0, 30) + 1;
+  try {
+    await prisma.dailyGuide.create({
+      data: {
+        slug,
+        title: "Untitled post",
+        index,
+        hook: "",
+        script: "",
+        caption: "",
+        manychatKeyword: "",
+        source: PLAN_SOURCE,
+      },
+    });
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
+  revalidatePath("/30-days");
+  return { ok: true, slug };
+}
+
+/**
  * Bulk-publish to the public /guides site — scoped to the 30-day plan only,
  * so it never touches the main Daily post library. Publishes every plan guide
  * that has a non-empty script.

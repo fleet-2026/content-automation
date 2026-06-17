@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { tryGetUser } from "@/lib/auth-helpers";
 import { listPlanGuides } from "@/lib/guides";
 import { PLAN } from "./plan";
 import { PlanCard, type PlanGuideStatus } from "./plan-card";
 import { SetupBar } from "./setup-bar";
 import { backfillPlanContent } from "./seed";
+import { DeleteGuideButton } from "../daily-post/delete-guide-button";
 
 export const metadata: Metadata = {
   title: "30 Days — Creator OS",
@@ -51,6 +53,13 @@ export default async function ThirtyDaysPage() {
     ]),
   );
 
+  // Custom posts the user added themselves ("Add your own post") — any 30days
+  // guide whose slug isn't one of the predefined plan days.
+  const planSlugs = new Set(PLAN.flatMap((m) => m.days).map((d) => d.slug));
+  const customGuides = guides
+    .filter((g) => !planSlugs.has(g.slug))
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0));
+
   const setupCount = PLAN.flatMap((m) => m.days).filter((d) => bySlug.has(d.slug)).length;
   const publishedCount = guides.filter((g) => g.isPublished).length;
   const postedCount = guides.filter((g) => g.postedPlatforms.length > 0).length;
@@ -68,7 +77,7 @@ export default async function ThirtyDaysPage() {
             <span className="font-italic-accent text-blush">Claude Code.</span>
           </h1>
           <p className="text-sm text-[var(--color-muted)] mt-1">
-            {setupCount} / {totalDays} set up · {postedCount} posted · {publishedCount} on /guides · website → funnel → app → growth
+            {setupCount} / {totalDays} set up · {postedCount} posted · {publishedCount} on /guides · 30 short videos, beginner → confident
           </p>
         </div>
         <nav className="flex items-center gap-2 flex-wrap">
@@ -130,6 +139,77 @@ export default async function ThirtyDaysPage() {
           );
         })}
       </div>
+
+      {/* Your own posts — custom days added via "Add your own post". Each opens
+          the same editor and posts through the same pipeline as the plan days. */}
+      {customGuides.length > 0 && (
+        <div className="mt-12">
+          <h2 className="text-lg font-semibold mb-3">
+            Your own posts
+            <span className="ml-2 text-sm font-normal text-[var(--color-muted)]">
+              {customGuides.length}
+            </span>
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {customGuides.map((g) => (
+              <article
+                key={g.slug}
+                className="relative rounded-xl border border-[var(--color-border)] bg-[var(--color-surface)] p-4 transition hover:border-[var(--color-text)]/30"
+              >
+                <Link
+                  href={`/daily-post/${g.slug}`}
+                  aria-label={`Edit ${g.title}`}
+                  className="absolute inset-0 z-0 rounded-xl"
+                />
+                <DeleteGuideButton
+                  slug={g.slug}
+                  title={g.title}
+                  className="absolute top-3 right-3 z-20"
+                />
+                <div className="relative z-10 pointer-events-none">
+                  <div className="mb-2 flex items-start justify-between gap-2">
+                    <span className="text-[10px] uppercase tracking-wider text-[var(--color-muted)]">
+                      Custom
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap pr-8">
+                      {g.postedPlatforms.includes("INSTAGRAM") && (
+                        <span className="rounded bg-pink-600 px-1.5 py-0.5 text-[10px] font-bold text-white">IG ✓</span>
+                      )}
+                      {g.postedPlatforms.includes("TIKTOK") && (
+                        <span className="rounded bg-cyan-700 px-1.5 py-0.5 text-[10px] font-bold text-white">TT ✓</span>
+                      )}
+                      {g.isPublished ? (
+                        <span className="rounded bg-emerald-600 px-2 py-0.5 text-[10px] font-bold uppercase text-white">✓ Published</span>
+                      ) : g.script?.trim() ? (
+                        <span className="rounded bg-stone-800 px-2 py-0.5 text-[10px] font-bold uppercase text-white">Draft</span>
+                      ) : (
+                        <span className="rounded bg-stone-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">Pending</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="mb-3 font-semibold leading-snug">{g.title}</div>
+                  {g.hook?.trim() && (
+                    <p className="text-xs text-[var(--color-muted)] leading-relaxed line-clamp-3">{g.hook}</p>
+                  )}
+                  {g.manychatKeyword?.trim() && (
+                    <div className="mt-3 inline-block rounded bg-[var(--color-text)]/5 px-2 py-0.5 text-[10px] font-mono">
+                      keyword: {g.manychatKeyword}
+                    </div>
+                  )}
+                  <div className="pointer-events-auto mt-3">
+                    <Link
+                      href={`/daily-post/${g.slug}`}
+                      className="relative z-10 inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-text)] px-3 py-1.5 text-xs font-semibold text-[var(--color-text-on-dark)] hover:opacity-90"
+                    >
+                      Edit &amp; post →
+                    </Link>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
