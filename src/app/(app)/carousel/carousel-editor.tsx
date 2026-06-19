@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { X, GripVertical, Plus, Send, CheckCircle2, CalendarClock, BookOpen, Eye, Pencil } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { saveDraft, publishDraftNow, scheduleDraft, getDraftCaptionUrl } from "../compose/actions";
-import { getDraftGuide, saveDraftGuide } from "./guide-actions";
+import { getDraftGuide, saveDraftGuide, saveDraftGuideFile } from "./guide-actions";
 import type { Platform } from "@prisma/client";
 import { packMediaUrls } from "@/lib/media-urls";
 import { PLATFORM_INFO, ENABLED_PLATFORMS_ORDERED } from "@/lib/platform-info";
@@ -118,6 +118,9 @@ export function CarouselEditor({ initialDraft }: { initialDraft?: InitialDraft |
         setGuideMd(info.guideMd);
         setGuideUpdatedAt(info.updatedAt);
         setGuideFile(info.guideFile);
+        // Reflect the persisted guide file in the upload control so it shows
+        // what's actually attached to this post (not just browser localStorage).
+        setResponseFileUrl(info.guideFile);
         setGuideLoaded(true);
         // Default to preview when we have content; edit when starting empty.
         setGuideMode(info.guideMd.trim() ? "preview" : "edit");
@@ -491,7 +494,11 @@ export function CarouselEditor({ initialDraft }: { initialDraft?: InitialDraft |
               </button>
               <button
                 type="button"
-                onClick={() => setResponseFileUrl(null)}
+                onClick={async () => {
+                  setResponseFileUrl(null);
+                  setGuideFile(null);
+                  if (draftId) { try { await saveDraftGuideFile(draftId, null); } catch {} }
+                }}
                 className="text-[11px] px-2 py-1 rounded bg-red-500/10 text-red-300 border border-red-500/30 hover:bg-red-500/20"
               >
                 Remove
@@ -511,6 +518,14 @@ export function CarouselEditor({ initialDraft }: { initialDraft?: InitialDraft |
                   try {
                     const url = await uploadOneFile(file);
                     setResponseFileUrl(url);
+                    // Persist to the post so the keyword DM can actually deliver
+                    // this file — not just hold it in the browser.
+                    if (draftId) {
+                      await saveDraftGuideFile(draftId, url);
+                      setGuideFile(url);
+                    } else {
+                      setErr("Save the carousel first, then upload — the file attaches to the saved post.");
+                    }
                   } catch {
                     setErr("Response file upload failed");
                   } finally {

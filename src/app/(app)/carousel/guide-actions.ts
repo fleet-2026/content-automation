@@ -105,3 +105,42 @@ export async function saveDraftGuide(
       : null,
   };
 }
+
+/** Persist (or clear) the guide FILE the bot delivers when someone comments the
+ *  keyword. Surgical — only touches trackerMeta.guide_file, preserving the
+ *  markdown and everything else. Pass null to remove it. */
+export async function saveDraftGuideFile(
+  draftId: string,
+  fileUrl: string | null,
+): Promise<GuideInfo> {
+  const userId = await requireUser();
+  await assertOwned(userId, draftId);
+
+  const existing = await prisma.draft.findFirst({
+    where: { id: draftId, userId },
+    select: { hookOptions: true },
+  });
+  const hookOptions = asObject(existing?.hookOptions);
+  const trackerMeta: TrackerMeta = asObject(hookOptions.trackerMeta);
+
+  if (fileUrl) trackerMeta.guide_file = fileUrl;
+  else delete trackerMeta.guide_file;
+  hookOptions.trackerMeta = trackerMeta;
+
+  await prisma.draft.update({
+    where: { id: draftId },
+    data: { hookOptions: hookOptions as object },
+  });
+
+  const guideMd = typeof trackerMeta.guide_md === "string" ? (trackerMeta.guide_md as string) : "";
+  return {
+    guideMd,
+    wordCount: typeof trackerMeta.guide_word_count === "number"
+      ? (trackerMeta.guide_word_count as number)
+      : guideMd.split(/\s+/).filter(Boolean).length,
+    updatedAt: typeof trackerMeta.guide_updated_at === "string"
+      ? (trackerMeta.guide_updated_at as string)
+      : null,
+    guideFile: fileUrl,
+  };
+}
