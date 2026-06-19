@@ -10,15 +10,27 @@ import type { Platform } from "@prisma/client";
 import { packMediaUrls } from "@/lib/media-urls";
 import { PLATFORM_INFO, ENABLED_PLATFORMS_ORDERED } from "@/lib/platform-info";
 
-export function CarouselEditor() {
+type InitialDraft = {
+  id: string;
+  images: string[];
+  caption: string;
+  hashtags: string[];
+  keyword: string;
+  botReply: string;
+  platforms: Platform[];
+};
+
+export function CarouselEditor({ initialDraft }: { initialDraft?: InitialDraft | null }) {
   const router = useRouter();
-  const [images, setImages] = useState<string[]>([]);
-  const [caption, setCaption] = useState("");
-  const [hashtagsRaw, setHashtagsRaw] = useState("");
-  const [ctaKeyword, setCtaKeyword] = useState("");
-  const [ctaResponse, setCtaResponse] = useState("");
-  const [platforms, setPlatforms] = useState<Platform[]>(["INSTAGRAM" as Platform]);
-  const [draftId, setDraftId] = useState<string | null>(null);
+  const [images, setImages] = useState<string[]>(initialDraft?.images ?? []);
+  const [caption, setCaption] = useState(initialDraft?.caption ?? "");
+  const [hashtagsRaw, setHashtagsRaw] = useState(initialDraft?.hashtags.join(" ") ?? "");
+  const [ctaKeyword, setCtaKeyword] = useState(initialDraft?.keyword ?? "");
+  const [ctaResponse, setCtaResponse] = useState(initialDraft?.botReply ?? "");
+  const [platforms, setPlatforms] = useState<Platform[]>(
+    initialDraft?.platforms?.length ? initialDraft.platforms : ["INSTAGRAM" as Platform],
+  );
+  const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
   const [uploading, setUploading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -57,6 +69,10 @@ export function CarouselEditor() {
   const PERSIST_KEY = "carousel:state-v1";
   useEffect(() => {
     if (typeof window === "undefined") return;
+    // When opening a specific saved draft (?draft=<id>), that draft's data is
+    // the source of truth — don't let stale localStorage from a previous
+    // carousel overwrite it.
+    if (initialDraft) return;
     try {
       const raw = window.localStorage.getItem(PERSIST_KEY);
       if (!raw) return;

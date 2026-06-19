@@ -15,7 +15,12 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-export default async function CarouselPage() {
+export default async function CarouselPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ draft?: string }>;
+}) {
+  const { draft: draftParam } = await searchParams;
   const userId = await tryGetUser();
   if (!userId) redirect("/login");
 
@@ -47,6 +52,30 @@ export default async function CarouselPage() {
       updatedAt: d.updatedAt.toISOString(),
     }));
 
+  // When ?draft=<id> is present, hydrate the editor with that saved carousel so
+  // the user can open ("View"/edit) it from the Queue — not just publish/delete.
+  const editing = draftParam ? allDrafts.find((d) => d.id === draftParam) : null;
+  const initialDraft = editing
+    ? (() => {
+        const ho = (editing.hookOptions ?? {}) as Record<string, unknown>;
+        const tm = (ho.trackerMeta ?? {}) as Record<string, unknown>;
+        // The saved caption has "Comment <KEYWORD> for the full guide" appended
+        // on save — strip it so editing doesn't double it up.
+        const caption = (editing.caption ?? "")
+          .replace(/\n+Comment\s+\S+\s+for the full guide\s*$/i, "")
+          .trimEnd();
+        return {
+          id: editing.id,
+          images: parseMediaUrls(editing.mediaUrl),
+          caption,
+          hashtags: editing.hashtags,
+          keyword: typeof tm.cta_keyword === "string" ? tm.cta_keyword : "",
+          botReply: typeof tm.cta_response === "string" ? tm.cta_response : "",
+          platforms: editing.platforms,
+        };
+      })()
+    : null;
+
   return (
     <div className="px-8 py-10 max-w-5xl">
       <h1 className="font-display text-3xl sm:text-4xl mb-6">
@@ -58,10 +87,12 @@ export default async function CarouselPage() {
         <CarouselTracker drafts={carouselDrafts} />
       )}
 
-      {/* Editor — create new */}
-      <div className="mt-8">
-        <h2 className="text-lg font-semibold mb-4">New carousel</h2>
-        <CarouselEditor />
+      {/* Editor — create new, or edit the carousel from ?draft=<id> */}
+      <div id="editor" className="mt-8 scroll-mt-6">
+        <h2 className="text-lg font-semibold mb-4">
+          {initialDraft ? "Edit carousel" : "New carousel"}
+        </h2>
+        <CarouselEditor key={draftParam ?? "new"} initialDraft={initialDraft} />
       </div>
     </div>
   );

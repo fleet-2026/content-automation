@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarClock, Trash2, Send } from "lucide-react";
+import { CalendarClock, Trash2, Send, Eye } from "lucide-react";
 import { deleteDraft, publishDraftNow, scheduleDraft } from "../compose/actions";
 import { TikTokCaptionQr } from "@/components/tiktok-caption-qr";
 
@@ -154,6 +154,13 @@ function CarouselRow({ draft, onRefresh }: { draft: CarouselDraft; onRefresh: ()
 
       {/* Actions */}
       <div className="flex items-center gap-1.5 shrink-0">
+        <Link
+          href={`/carousel?draft=${draft.id}#editor`}
+          className="p-1.5 rounded hover:bg-[var(--color-border)] text-[var(--color-muted)] hover:text-[var(--color-text)] transition"
+          title="View / edit"
+        >
+          <Eye className="w-4 h-4" />
+        </Link>
         {draft.status === "DRAFT" && (
           <>
             <button
