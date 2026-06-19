@@ -94,6 +94,7 @@ export function Composer({
     scheduledFor: string;
     ctaKeyword: string;
     ctaResponse: string;
+    guideFileUrl: string | null;
     savedAt: number;
   }>;
   // Cross-navigation restore: a free-form NEW post snapshot is restored when
@@ -181,6 +182,8 @@ export function Composer({
   );
   const [ctaKeyword, setCtaKeyword] = useState(persisted.ctaKeyword ?? "");
   const [ctaResponse, setCtaResponse] = useState(persisted.ctaResponse ?? "");
+  const [guideFileUrl, setGuideFileUrl] = useState<string | null>(persisted.guideFileUrl ?? null);
+  const [guideFileUploading, setGuideFileUploading] = useState(false);
   const [draftId, setDraftId] = useState<string | null>(initialDraft?.id ?? null);
   // After a TikTok publish we stay on the page and show the caption QR
   // (TikTok delivers to the inbox without a caption — the user pastes it
@@ -244,6 +247,7 @@ export function Composer({
           scheduledFor,
           ctaKeyword,
           ctaResponse,
+          guideFileUrl,
           savedAt: Date.now(),
         };
         window.localStorage.setItem(PERSIST_KEY, JSON.stringify(snapshot));
@@ -264,6 +268,7 @@ export function Composer({
     scheduledFor,
     ctaKeyword,
     ctaResponse,
+    guideFileUrl,
   ]);
 
   /** Discard the restored snapshot and reset the editor to blank. */
@@ -277,6 +282,7 @@ export function Composer({
     setMusicUrl(null);
     setCtaKeyword("");
     setCtaResponse("");
+    setGuideFileUrl(null);
     setScheduledFor("");
     setDraftId(null);
     setShowRestoredBanner(false);
@@ -813,8 +819,65 @@ export function Composer({
                 </button>
               )}
             </div>
+
+            {/* Guide file — the file the bot DMs when someone comments the keyword */}
+            <div>
+              <label className="block text-[11px] font-semibold mb-1 text-emerald-200">
+                Guide file (the file the bot sends)
+              </label>
+              {guideFileUrl ? (
+                <div className="flex gap-2 items-center">
+                  <a
+                    href={guideFileUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex-1 truncate rounded border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 text-xs font-mono hover:underline text-emerald-200"
+                  >
+                    {guideFileUrl.split("/").pop()}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={async () => { try { await navigator.clipboard.writeText(guideFileUrl); } catch {} }}
+                    className="text-[11px] px-2 py-1 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-500/40 hover:bg-emerald-500/30"
+                  >
+                    Copy URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setGuideFileUrl(null)}
+                    className="text-[11px] px-2 py-1 rounded bg-red-500/10 text-red-300 border border-red-500/30 hover:bg-red-500/20"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <label className="cursor-pointer inline-flex items-center gap-2 rounded border border-dashed border-emerald-500/30 bg-emerald-500/5 px-4 py-2 text-xs font-semibold text-emerald-200 hover:bg-emerald-500/10 transition">
+                  {guideFileUploading ? "Uploading…" : "Upload guide file (PDF, image, doc)"}
+                  <input
+                    type="file"
+                    hidden
+                    accept=".pdf,.png,.jpg,.jpeg,.gif,.webp,.doc,.docx,.zip"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setGuideFileUploading(true);
+                      try {
+                        const url = await uploadOneFile(file);
+                        setGuideFileUrl(url);
+                      } catch {
+                        setErr("Guide file upload failed");
+                      } finally {
+                        setGuideFileUploading(false);
+                        e.target.value = "";
+                      }
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+
             <p className="text-[10px] text-[var(--color-muted)] leading-relaxed">
-              Saved with the draft. Copy the keyword into your caption CTA (e.g. &quot;Comment {ctaKeyword || "KEYWORD"} for the full guide&quot;) and paste the reply text into ManyChat.
+              Saved with the draft. Copy the keyword into your caption CTA (e.g. &quot;Comment {ctaKeyword || "KEYWORD"} for the full guide&quot;), paste the reply into ManyChat, and use the guide file&apos;s <strong className="text-emerald-300">Copy URL</strong> as the ManyChat button link — that&apos;s the file people receive.
             </p>
           </div>
         </Field>
