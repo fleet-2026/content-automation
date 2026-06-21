@@ -168,10 +168,10 @@ function Row({ g }: { g: GuideRow }) {
               <span
                 className={`inline-block rounded border px-1 py-0.5 text-[9px] font-bold ${
                   g.scriptScore >= 8
-                    ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                    ? "bg-emerald-600 text-white border-transparent"
                     : g.scriptScore >= 6
-                    ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
-                    : "bg-red-500/10 text-red-300 border-red-500/30"
+                    ? "bg-amber-600 text-white border-transparent"
+                    : "bg-red-600 text-white border-transparent"
                 }`}
               >
                 S:{g.scriptScore}
@@ -181,10 +181,10 @@ function Row({ g }: { g: GuideRow }) {
               <span
                 className={`inline-block rounded border px-1 py-0.5 text-[9px] font-bold ${
                   g.captionScore >= 8
-                    ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                    ? "bg-emerald-600 text-white border-transparent"
                     : g.captionScore >= 6
-                    ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
-                    : "bg-red-500/10 text-red-300 border-red-500/30"
+                    ? "bg-amber-600 text-white border-transparent"
+                    : "bg-red-600 text-white border-transparent"
                 }`}
               >
                 C:{g.captionScore}
@@ -199,15 +199,15 @@ function Row({ g }: { g: GuideRow }) {
       {/* Media status */}
       <div className="text-center">
         {g.hasVideo ? (
-          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-purple-500/10 text-purple-300 border-purple-500/30">
+          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-purple-600 text-white border-transparent">
             Video
           </span>
         ) : g.imageCount > 0 ? (
-          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-blue-500/10 text-blue-300 border-blue-500/30">
+          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-blue-600 text-white border-transparent">
             {g.imageCount} img
           </span>
         ) : (
-          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-zinc-500/10 text-zinc-500 border-zinc-500/30">
+          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-stone-500 text-white border-transparent">
             None
           </span>
         )}
@@ -220,22 +220,22 @@ function Row({ g }: { g: GuideRow }) {
         ) : (
           <>
             {platforms.includes("INSTAGRAM") && (
-              <span className="rounded border px-1 py-0.5 text-[9px] font-bold bg-pink-500/10 text-pink-300 border-pink-500/30">
+              <span className="rounded border px-1 py-0.5 text-[9px] font-bold bg-pink-600 text-white border-transparent">
                 IG
               </span>
             )}
             {platforms.includes("TIKTOK") && (
-              <span className="rounded border px-1 py-0.5 text-[9px] font-bold bg-cyan-500/10 text-cyan-300 border-cyan-500/30">
+              <span className="rounded border px-1 py-0.5 text-[9px] font-bold bg-cyan-700 text-white border-transparent">
                 TT
               </span>
             )}
             {platforms.includes("FACEBOOK") && (
-              <span className="rounded border px-1 py-0.5 text-[9px] font-bold bg-blue-500/10 text-blue-300 border-blue-500/30">
+              <span className="rounded border px-1 py-0.5 text-[9px] font-bold bg-blue-600 text-white border-transparent">
                 FB
               </span>
             )}
             {platforms.includes("LINKEDIN") && (
-              <span className="rounded border px-1 py-0.5 text-[9px] font-bold bg-sky-500/10 text-sky-300 border-sky-500/30">
+              <span className="rounded border px-1 py-0.5 text-[9px] font-bold bg-sky-600 text-white border-transparent">
                 LI
               </span>
             )}
@@ -246,15 +246,15 @@ function Row({ g }: { g: GuideRow }) {
       {/* Published to /guides site */}
       <div className="text-center">
         {g.isPublished ? (
-          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-500/10 text-emerald-300 border-emerald-500/30">
+          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-600 text-white border-transparent">
             Live
           </span>
         ) : g.hasScript && g.hasCaption ? (
-          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-amber-500/10 text-amber-300 border-amber-500/30">
+          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-amber-600 text-white border-transparent">
             Draft
           </span>
         ) : (
-          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-zinc-500/10 text-zinc-500 border-zinc-500/30">
+          <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-stone-500 text-white border-transparent">
             WIP
           </span>
         )}
@@ -263,7 +263,7 @@ function Row({ g }: { g: GuideRow }) {
       {/* ManyChat keyword */}
       <div className="text-center">
         {g.keyword ? (
-          <span className="inline-block font-mono text-[10px] text-amber-300 bg-amber-500/10 rounded px-1.5 py-0.5 truncate max-w-[4.5rem]">
+          <span className="inline-block font-mono text-[10px] font-bold text-white bg-amber-600 rounded px-1.5 py-0.5 truncate max-w-[4.5rem]">
             {g.keyword}
           </span>
         ) : (
