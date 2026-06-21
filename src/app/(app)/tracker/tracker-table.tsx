@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { DeleteGuideButton } from "../daily-post/delete-guide-button";
 
 type GuideRow = {
   slug: string;
@@ -107,7 +108,7 @@ export default function TrackerTable({ guides }: { guides: GuideRow[] }) {
       {/* Table */}
       <div className="rounded-xl border border-[var(--color-border)] overflow-hidden">
         {/* Header */}
-        <div className="grid grid-cols-[3rem_1fr_5.5rem_5rem_6rem_5rem_5rem] gap-0 bg-[var(--color-surface)] border-b border-[var(--color-border)] px-4 py-2.5 text-[10px] uppercase tracking-wider text-[var(--color-muted)] font-semibold">
+        <div className="grid grid-cols-[3rem_1fr_5.5rem_5rem_6rem_5rem_5rem_5rem] gap-0 bg-[var(--color-surface)] border-b border-[var(--color-border)] px-4 py-2.5 text-[10px] uppercase tracking-wider text-[var(--color-muted)] font-semibold">
           <div>#</div>
           <div>Title / Hook</div>
           <div className="text-center">Quality</div>
@@ -115,6 +116,7 @@ export default function TrackerTable({ guides }: { guides: GuideRow[] }) {
           <div className="text-center">Socials</div>
           <div className="text-center">Site</div>
           <div className="text-center">CTA</div>
+          <div className="text-center">Del</div>
         </div>
 
         {/* Rows */}
@@ -139,17 +141,24 @@ function Row({ g }: { g: GuideRow }) {
   const platforms = g.postedPlatforms;
 
   return (
-    <Link
-      href={`/daily-post/${g.slug}`}
-      className="grid grid-cols-[3rem_1fr_5.5rem_5rem_6rem_5rem_5rem] gap-0 px-4 py-3 border-b border-[var(--color-border)] last:border-b-0 hover:bg-[var(--color-surface)]/50 transition items-center"
-    >
+    <div className="relative grid grid-cols-[3rem_1fr_5.5rem_5rem_6rem_5rem_5rem_5rem] gap-0 px-4 py-3 border-b border-[var(--color-border)] last:border-b-0 hover:bg-[var(--color-surface)]/50 transition items-center">
+      {/* Whole-row click target into the editor. Sits beneath the cells; the
+          cells are pointer-events-none so clicks fall through to it, while the
+          delete button re-enables pointer events for itself so deleting never
+          opens the editor. */}
+      <Link
+        href={`/daily-post/${g.slug}`}
+        aria-label={`Open ${g.title}`}
+        className="absolute inset-0 z-0"
+      />
+
       {/* Day number */}
-      <div className="text-sm font-semibold text-[var(--color-muted)]">
+      <div className="relative z-10 pointer-events-none text-sm font-semibold text-[var(--color-muted)]">
         {g.index}
       </div>
 
       {/* Title + hook */}
-      <div className="min-w-0 pr-4">
+      <div className="relative z-10 pointer-events-none min-w-0 pr-4">
         <div className="text-sm font-medium leading-snug truncate">
           {g.title}
         </div>
@@ -161,7 +170,7 @@ function Row({ g }: { g: GuideRow }) {
       </div>
 
       {/* Quality scores (AI-rated script + caption) */}
-      <div className="text-center">
+      <div className="relative z-10 pointer-events-none text-center">
         {g.scriptScore != null || g.captionScore != null ? (
           <div className="flex flex-col items-center gap-0.5">
             {g.scriptScore != null && (
@@ -197,7 +206,7 @@ function Row({ g }: { g: GuideRow }) {
       </div>
 
       {/* Media status */}
-      <div className="text-center">
+      <div className="relative z-10 pointer-events-none text-center">
         {g.hasVideo ? (
           <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-purple-600 text-white border-transparent">
             Video
@@ -214,7 +223,7 @@ function Row({ g }: { g: GuideRow }) {
       </div>
 
       {/* Social platforms */}
-      <div className="flex justify-center gap-1 flex-wrap">
+      <div className="relative z-10 pointer-events-none flex justify-center gap-1 flex-wrap">
         {platforms.length === 0 ? (
           <span className="text-[10px] text-zinc-500">—</span>
         ) : (
@@ -244,7 +253,7 @@ function Row({ g }: { g: GuideRow }) {
       </div>
 
       {/* Published to /guides site */}
-      <div className="text-center">
+      <div className="relative z-10 pointer-events-none text-center">
         {g.isPublished ? (
           <span className="inline-block rounded border px-1.5 py-0.5 text-[10px] font-semibold bg-emerald-600 text-white border-transparent">
             Live
@@ -261,7 +270,7 @@ function Row({ g }: { g: GuideRow }) {
       </div>
 
       {/* ManyChat keyword */}
-      <div className="text-center">
+      <div className="relative z-10 pointer-events-none text-center">
         {g.keyword ? (
           <span className="inline-block font-mono text-[10px] font-bold text-white bg-amber-600 rounded px-1.5 py-0.5 truncate max-w-[4.5rem]">
             {g.keyword}
@@ -270,6 +279,12 @@ function Row({ g }: { g: GuideRow }) {
           <span className="text-[10px] text-zinc-500">—</span>
         )}
       </div>
-    </Link>
+
+      {/* Delete — two-click confirm; re-enables pointer events so it never
+          triggers the row's open-on-click. */}
+      <div className="relative z-20 flex justify-end">
+        <DeleteGuideButton slug={g.slug} title={g.title} />
+      </div>
+    </div>
   );
 }
