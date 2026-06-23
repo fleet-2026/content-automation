@@ -59,7 +59,7 @@ export async function POST(req: Request) {
         {
           error: "unsupported_type",
           message:
-            "Allowed: JPEG, PNG, WebP, GIF, MP4, MOV, WebM, MP3, M4A, WAV",
+            "Allowed: JPEG, PNG, WebP, GIF, MP4, MOV, WebM, MP3, M4A, WAV, PDF, DOC, DOCX, ZIP",
         },
         { status: 415 },
       );

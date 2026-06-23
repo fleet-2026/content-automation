@@ -864,8 +864,11 @@ export function Composer({
                       try {
                         const url = await uploadOneFile(file);
                         setGuideFileUrl(url);
-                      } catch {
-                        setErr("Guide file upload failed");
+                      } catch (e) {
+                        setErr(
+                          "Guide file upload failed: " +
+                            ((e as Error)?.message ?? "unknown error"),
+                        );
                       } finally {
                         setGuideFileUploading(false);
                         e.target.value = "";

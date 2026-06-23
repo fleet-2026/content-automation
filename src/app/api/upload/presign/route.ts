@@ -47,6 +47,8 @@ export async function POST(req: Request) {
     "jpg", "jpeg", "png", "webp", "gif",
     "mp4", "mov", "webm",
     "mp3", "m4a", "wav",
+    // guide-file documents
+    "pdf", "doc", "docx", "zip",
   ]);
   if (!ALLOWED.has(ext.toLowerCase())) {
     return NextResponse.json(

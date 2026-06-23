@@ -6,7 +6,11 @@
  */
 
 export type SniffedType = {
-  ext: "jpg" | "png" | "webp" | "gif" | "mp4" | "mov" | "webm" | "mp3" | "m4a" | "wav";
+  ext:
+    | "jpg" | "png" | "webp" | "gif"
+    | "mp4" | "mov" | "webm"
+    | "mp3" | "m4a" | "wav"
+    | "pdf" | "docx" | "doc" | "zip";
   mime: string;
 };
 
@@ -21,6 +25,10 @@ const ALLOWED_MIMES_BY_EXT: Record<SniffedType["ext"], string> = {
   mp3: "audio/mpeg",
   m4a: "audio/mp4",
   wav: "audio/wav",
+  pdf: "application/pdf",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  doc: "application/msword",
+  zip: "application/zip",
 };
 
 function bytesAt(buf: Uint8Array, offset: number, expected: number[]): boolean {
@@ -100,6 +108,28 @@ export function sniffFileType(buf: Uint8Array): SniffedType | null {
   // WebM / Matroska: 0x1A 0x45 0xDF 0xA3 (EBML)
   if (bytesAt(buf, 0, [0x1a, 0x45, 0xdf, 0xa3])) {
     return { ext: "webm", mime: "video/webm" };
+  }
+
+  // ── Documents (guide-file uploads) ─────────────────
+  // PDF: "%PDF"
+  if (asciiAt(buf, 0, "%PDF")) {
+    return { ext: "pdf", mime: "application/pdf" };
+  }
+  // Legacy MS Office (OLE2 compound binary): D0 CF 11 E0 A1 B1 1A E1 → .doc
+  if (bytesAt(buf, 0, [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1])) {
+    return { ext: "doc", mime: "application/msword" };
+  }
+  // ZIP container: "PK\x03\x04". A .docx is a zip whose first entry is
+  // "[Content_Types].xml" (OOXML convention) — peek it to tell a Word doc
+  // from a plain .zip so the stored file keeps the right extension.
+  if (bytesAt(buf, 0, [0x50, 0x4b, 0x03, 0x04])) {
+    if (asciiAt(buf, 30, "[Content_Types].xml") || asciiAt(buf, 30, "word/")) {
+      return {
+        ext: "docx",
+        mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      };
+    }
+    return { ext: "zip", mime: "application/zip" };
   }
 
   return null;
