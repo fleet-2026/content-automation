@@ -8,7 +8,7 @@ import { CarouselTracker } from "./carousel-tracker";
 import { parseMediaUrls } from "@/lib/media-urls";
 
 export const metadata: Metadata = {
-  title: "Carousel — Creator OS",
+  title: "Carousel — Descon Fleet",
   description: "Create, schedule, and track carousel posts.",
   robots: { index: false, follow: false },
 };

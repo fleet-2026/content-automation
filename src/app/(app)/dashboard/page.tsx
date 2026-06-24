@@ -146,7 +146,7 @@ export default async function DashboardPage({
               <>
                 Your{" "}
                 <span className="font-italic-accent text-blush">
-                  creator OS.
+                  Descon Fleet.
                 </span>
               </>
             )}

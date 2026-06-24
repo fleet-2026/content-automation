@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { env } from "@/lib/env";
 
 export const metadata: Metadata = {
-  title: "Terms of Service — Creator OS",
+  title: "Terms of Service — Descon Fleet",
   description:
-    "Terms of Service for Creator OS. What you can and can't do with the dashboard, who's responsible for what, and the limits of our liability.",
+    "Terms of Service for Descon Fleet. What you can and can't do with the dashboard, who's responsible for what, and the limits of our liability.",
   robots: { index: true, follow: true },
 };
 
@@ -26,7 +26,7 @@ export default function TermsPage() {
 
       <h2 className="font-display text-xl mt-10 mb-3">1. What this is</h2>
       <p className="leading-relaxed">
-        Creator OS (&ldquo;the service&rdquo;, &ldquo;we&rdquo;,
+        Descon Fleet (&ldquo;the service&rdquo;, &ldquo;we&rdquo;,
         &ldquo;us&rdquo;) is a self-serve content dashboard for creators to
         compose, schedule, and publish short-form content to their own
         connected social-media accounts. By creating an account or using the
@@ -68,7 +68,7 @@ export default function TermsPage() {
       </ul>
 
       <h2 className="font-display text-xl mt-10 mb-3">4. Acceptable use</h2>
-      <p className="leading-relaxed">You agree NOT to use Creator OS to:</p>
+      <p className="leading-relaxed">You agree NOT to use Descon Fleet to:</p>
       <ul className="leading-relaxed list-disc pl-6 space-y-1.5">
         <li>Post content that violates the destination platform&apos;s rules (Instagram Community Guidelines, TikTok Community Guidelines, Facebook Community Standards).</li>
         <li>Publish hate speech, harassment, sexual content involving minors, terrorism-promoting material, or anything illegal in your jurisdiction.</li>
@@ -84,7 +84,7 @@ export default function TermsPage() {
 
       <h2 className="font-display text-xl mt-10 mb-3">5. Social platform terms</h2>
       <p className="leading-relaxed">
-        When you publish to Instagram, TikTok, or Facebook through Creator OS,
+        When you publish to Instagram, TikTok, or Facebook through Descon Fleet,
         you remain subject to each platform&apos;s own terms and community
         guidelines:
       </p>
@@ -138,7 +138,7 @@ export default function TermsPage() {
 
       <h2 className="font-display text-xl mt-10 mb-3">8. Limit of liability</h2>
       <p className="leading-relaxed">
-        To the maximum extent allowed by law, Creator OS is not liable for
+        To the maximum extent allowed by law, Descon Fleet is not liable for
         indirect, incidental, or consequential damages arising from your use
         of the service. Our total liability, if any, is limited to the amount
         you paid us in the past 12 months (currently zero for free-tier

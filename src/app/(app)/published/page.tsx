@@ -11,7 +11,7 @@ import { DraftCard, type DraftCardData } from "../drafts/draft-card";
 import { TikTokCaptionQr } from "@/components/tiktok-caption-qr";
 
 export const metadata: Metadata = {
-  title: "Published — Creator OS",
+  title: "Published — Descon Fleet",
   description: "Everything you've published, from every page, in one place.",
   robots: { index: false, follow: false },
 };

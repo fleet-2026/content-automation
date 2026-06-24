@@ -104,7 +104,7 @@ export function Nav() {
       <header className="lg:hidden sticky top-0 z-40 flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-bg)]">
         <Link href="/dashboard" className="flex items-center gap-2">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)]" />
-          <span className="font-semibold tracking-tight">Creator OS</span>
+          <span className="font-semibold tracking-tight">Descon Fleet</span>
         </Link>
         <button
           type="button"
@@ -143,7 +143,7 @@ export function Nav() {
         <div className="px-5 py-6 hidden lg:block">
           <Link href="/dashboard" className="flex items-center gap-2">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-[var(--color-accent)] to-[var(--color-accent-2)]" />
-            <span className="font-semibold tracking-tight">Creator OS</span>
+            <span className="font-semibold tracking-tight">Descon Fleet</span>
           </Link>
         </div>
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">

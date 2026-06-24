@@ -46,7 +46,7 @@ export default function GuidesLayout({ children }: { children: React.ReactNode }
       <footer className="border-t border-[var(--color-border)] mt-16">
         <div className="max-w-5xl mx-auto px-6 py-6 text-xs text-[var(--color-muted)] flex flex-col sm:flex-row gap-2 items-center justify-between">
           <span>
-            © {new Date().getFullYear()} Creator OS — daily AI guides.
+            © {new Date().getFullYear()} Descon Fleet — daily AI guides.
           </span>
           <Link href="/guides" className="hover:text-[var(--color-text)]">
             View all guides →

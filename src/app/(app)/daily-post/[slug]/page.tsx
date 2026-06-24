@@ -6,7 +6,7 @@ import { getPost } from "../data";
 import PostEditor from "./post-editor";
 
 export const metadata: Metadata = {
-  title: "Daily Post — Creator OS",
+  title: "Daily Post — Descon Fleet",
   robots: { index: false, follow: false },
 };
 

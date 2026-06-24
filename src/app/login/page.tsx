@@ -96,7 +96,7 @@ function LoginShell(props: ShellProps) {
         className="w-full max-w-sm bg-[var(--color-surface)] border rounded-2xl p-8 shadow-xl"
       >
         <div className="mb-6">
-          <h1 className="text-2xl font-semibold tracking-tight">Creator OS</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Descon Fleet</h1>
           <p className="text-sm text-[var(--color-muted)] mt-1">
             Sign in to your dashboard.
           </p>
