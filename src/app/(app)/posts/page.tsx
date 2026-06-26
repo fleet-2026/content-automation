@@ -28,6 +28,7 @@ export default async function PostsPage({
 
   let posts: Array<{
     id: string;
+    platformPostId?: string;
     platform: string;
     mediaType: string;
     publishedAt: Date;
@@ -69,6 +70,31 @@ export default async function PostsPage({
         }),
       [],
     )) as typeof posts;
+  }
+
+  // Map each sent post back to its editable source Draft so the user can open
+  // & fix it from here. A synced Post has no draftId, but the Draft's
+  // publishResults records the platform postId it produced — so we match on
+  // platform + platformPostId. Posts made directly in the platform app (not
+  // via Creator OS) won't have a match → no Edit link (nothing to edit here).
+  const editHrefByKey: Record<string, string> = {};
+  if (!DEMO && userId) {
+    const editableDrafts = await safe(
+      () =>
+        prisma.draft.findMany({
+          where: { userId, status: { in: ["PUBLISHED", "FAILED"] } },
+          select: { id: true, publishResults: true },
+        }),
+      [],
+    );
+    for (const d of editableDrafts) {
+      const results = Array.isArray(d.publishResults) ? d.publishResults : [];
+      for (const r of results as Array<{ platform?: string; postId?: string }>) {
+        if (r?.platform && r?.postId) {
+          editHrefByKey[`${r.platform}:${r.postId}`] = `/compose?draft=${d.id}`;
+        }
+      }
+    }
   }
 
   return (
@@ -119,7 +145,11 @@ export default async function PostsPage({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {posts.map((p) => (
+          {posts.map((p) => {
+            const editHref = p.platformPostId
+              ? editHrefByKey[`${p.platform}:${p.platformPostId}`]
+              : undefined;
+            return (
             <article
               key={p.id}
               className="border rounded-xl bg-[var(--color-surface)] overflow-hidden flex flex-col"
@@ -168,18 +198,32 @@ export default async function PostsPage({
                   />
                 </div>
                 <div className="mt-3 flex items-center justify-between gap-2 flex-wrap">
-                  {p.url ? (
-                    <a
-                      href={p.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-xs text-[var(--color-accent)] hover:underline"
-                    >
-                      Open ↗
-                    </a>
-                  ) : (
-                    <span />
-                  )}
+                  <div className="flex items-center gap-3">
+                    {p.url && (
+                      <a
+                        href={p.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-xs text-[var(--color-accent)] hover:underline"
+                      >
+                        Open ↗
+                      </a>
+                    )}
+                    {/* Edit: opens the source draft in the composer. Only shown
+                        when this sent post maps back to a Creator OS draft
+                        (posts made directly in-app on the platform won't).
+                        NOTE: editing fixes the draft — it does NOT change the
+                        already-live post on Instagram/Facebook. */}
+                    {editHref && (
+                      <Link
+                        href={editHref}
+                        className="text-xs text-[var(--color-accent)] hover:underline font-medium"
+                        title="Open this post in the composer to fix the caption / media. Note: won't change the already-live IG/FB post."
+                      >
+                        Edit ✎
+                      </Link>
+                    )}
+                  </div>
                   {/* Delete: works fully for Facebook (Graph API delete).
                       IG / TikTok / YouTube can't be deleted via API in
                       our scopes — button removes the local row and tells
@@ -188,7 +232,8 @@ export default async function PostsPage({
                 </div>
               </div>
             </article>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
