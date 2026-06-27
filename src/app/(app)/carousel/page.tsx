@@ -14,6 +14,9 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
+// Publishing a Reel waits on Instagram's video processing (up to ~2 min);
+// give the publish server action room so it isn't killed mid-publish.
+export const maxDuration = 150;
 
 export default async function CarouselPage({
   searchParams,

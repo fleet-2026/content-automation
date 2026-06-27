@@ -304,16 +304,20 @@ export async function igPublish(
   }
 
   // ─── Single-item branch (with outer retry + deadline) ───────
-  // Hard 53s budget — fits inside Vercel's 60s Hobby timeout with
-  // ~7s left for the server action overhead (DB writes, permalink
-  // lookup). Container status polling avoids wasting time on blind
-  // publish attempts, so the budget stretches further.
+  // Videos (Reels) can take 1–2 min for Instagram to transcode the source,
+  // so they get a much larger budget than images. The publish surfaces set
+  // maxDuration=150 (this project runs on a plan that allows long functions —
+  // see the studio routes at 300s), so a 120s video budget still leaves ~30s
+  // for the publish call, permalink lookup, and DB writes. A 53s budget used
+  // to time out on bigger videos with "0 publish attempts" — the container
+  // was still IN_PROGRESS when the clock ran out. Images publish near-instantly
+  // so they keep the tight 53s budget.
   //
   // Outer retry: if publish fails, create a BRAND NEW container and
   // retry with the remaining time. On the 2nd pass for images, skip
   // the weserv proxy in case it's the reason IG couldn't fetch media.
-  const deadline = Date.now() + 53_000;
   const isVideo = !!input.videoUrl;
+  const deadline = Date.now() + (isVideo ? 120_000 : 53_000);
   // Videos need the full budget — skip outer retry for them.
   const maxOuterAttempts = isVideo ? 1 : 2;
   let lastError: Error | null = null;

@@ -17,6 +17,9 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
+// Publishing a Reel waits on Instagram's video processing (up to ~2 min);
+// give the publish server action room so it isn't killed mid-publish.
+export const maxDuration = 150;
 
 /** Assemble caption + hashtags for the desktop "Copy caption" fallback. */
 function dailyCaption(p: DailyPost): string {
@@ -42,7 +45,11 @@ export default async function PublishedPage() {
             status: { in: [DraftStatus.PUBLISHED, DraftStatus.FAILED] },
           },
           orderBy: { updatedAt: "desc" },
-          take: 100,
+          // High ceiling so a prolific publisher never loses older posts off
+          // the bottom of /published. Was 100 — meant published posts silently
+          // dropped off once the queue grew past that. A single creator won't
+          // realistically exceed 1000 drafts; if they ever do, paginate.
+          take: 1000,
         }),
       [],
     ),
