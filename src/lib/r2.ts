@@ -25,6 +25,14 @@ export function r2(): S3Client {
     region: "auto",
     endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
     credentials: { accessKeyId, secretAccessKey },
+    // R2 (and other non-AWS S3 stores) reject the checksum headers the AWS SDK
+    // v3 (>= 3.729) now adds to PutObject by DEFAULT. On a presigned browser
+    // PUT the browser can't replay those signed headers, so the signature
+    // fails and the upload dies as a generic "Failed to fetch" — which the
+    // editor then mislabels as a CORS problem. Opt out: only compute checksums
+    // when the operation actually requires them (PutObject does not).
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
   });
   return _r2;
 }
