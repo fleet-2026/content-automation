@@ -11,8 +11,12 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
-// Allow up to 60s for Server Action uploads (video files need time)
-export const maxDuration = 60;
+// Allow up to 150s for Server Action publishes — video Reels need time for
+// IG container polling + multi-platform dispatch. Matches the other publish
+// surfaces (compose/drafts/published/carousel); 60s was timing out → the
+// action got killed mid-run and surfaced as "An unexpected response was
+// received from the server."
+export const maxDuration = 150;
 
 export default async function PostDetailPage({
   params,
