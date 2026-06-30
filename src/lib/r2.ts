@@ -64,7 +64,20 @@ let _corsConfigured = false;
 export async function ensureR2Cors(): Promise<void> {
   if (_corsConfigured) return;
   const bucket = env("R2_BUCKET") || "creator-os";
-  const appUrl = env("NEXT_PUBLIC_APP_URL") ?? "https://creator-os-delta.vercel.app";
+  // Always whitelist the production origin explicitly. NEXT_PUBLIC_APP_URL was
+  // misconfigured to http://localhost:3000 in prod, so this function was
+  // overwriting the bucket CORS with localhost-only on every cold start —
+  // silently re-breaking browser uploads minutes after any manual fix.
+  // Hardcoding prod here makes the CORS self-healing regardless of that env var.
+  const origins = Array.from(
+    new Set(
+      [
+        env("NEXT_PUBLIC_APP_URL"),
+        "https://creator-os-delta.vercel.app",
+        "http://localhost:3000",
+      ].filter((o): o is string => Boolean(o)),
+    ),
+  );
   try {
     await r2().send(
       new PutBucketCorsCommand({
@@ -72,7 +85,7 @@ export async function ensureR2Cors(): Promise<void> {
         CORSConfiguration: {
           CORSRules: [
             {
-              AllowedOrigins: [appUrl, "http://localhost:3000"],
+              AllowedOrigins: origins,
               AllowedMethods: ["PUT", "GET", "HEAD"],
               AllowedHeaders: ["*"],
               ExposeHeaders: ["ETag"],
